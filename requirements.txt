@@ -1,0 +1,13 @@
+# Framework web
+Django>=6.0.6
+
+# Lectura de variables de entorno desde .env
+python-dotenv>=1.0,<2.0
+python=>3.14.4
+
+# Conector para MySQL/MariaDB
+mysqlclient>=2.2.7,<3.0
+
+# Herramientas para pruebas automatizadas
+pytest>=8.3,<10.0
+pytest-django>=4.9,<5.0
