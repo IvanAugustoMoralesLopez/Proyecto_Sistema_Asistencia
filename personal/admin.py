@@ -33,7 +33,7 @@ class EspacioCurricularAdmin(admin.ModelAdmin):
 @admin.register(Designacion)
 class DesignacionAdmin(admin.ModelAdmin):
     list_display = ("persona", "cargo", "espacio_curricular", "desde", "hasta", "activo")
-    search_fields = ("Persona__dni", "persona__apellido_nombre", "cargo__descripcion", "espacio_curricular__nombre")
+    search_fields = ("persona__dni", "persona__apellido_nombre", "cargo__descripcion", "espacio_curricular__nombre")
     list_filter = ("cargo", "desde", "hasta", "activo")
     autocomplete_fields = ("persona", "cargo", "espacio_curricular")
     date_hierarchy = "desde"

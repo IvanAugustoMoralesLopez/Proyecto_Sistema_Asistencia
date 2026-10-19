@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h3 mb-4">{{ titulo }}</h1>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors }}
+                        </div>
+                    {% endif %}
+
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ field.id_for_label }}">
+                                {{ field.label }}
+                            </label>
+
+                            {{ field }}
+
+                            {% if field.help_text %}
+                                <div class="form-text">
+                                    {{ field.help_text }}
+                                </div>
+                            {% endif %}
+
+                            {% for error in field.errors %}
+                                <div class="text-danger small">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+
+                    {% if registro %}
+                        <div class="mb-3">
+                            <label class="form-label" for="id_motivo">
+                                Motivo del cambio
+                            </label>
+                            <textarea
+                                class="form-control"
+                                id="id_motivo"
+                                name="motivo"
+                                rows="3"
+                                maxlength="500"
+                            ></textarea>
+                            <div class="form-text">
+                                Explicá el motivo de la modificación.
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary" type="submit">
+                            Guardar
+                        </button>
+
+                        <a class="btn btn-outline-secondary"
+                           href="{% url 'asistencia:historial' %}">
+                            Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

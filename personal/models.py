@@ -95,7 +95,7 @@ class Designacion(models.Model):
          blank=True,
          null=True,
     )
-    sitacion_revista = models.Charfield(
+    sitacion_revista = models.CharField(
          max_length=30,
          blank=True,
     )

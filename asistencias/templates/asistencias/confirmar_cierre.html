@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Cerrar período mensual{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h3">Cerrar período mensual</h1>
+
+                <div class="alert alert-warning">
+                    El cierre impedirá modificar las asistencias del mes
+                    hasta que una persona autorizada lo reabra.
+                </div>
+
+                <p>
+                    Verificá que todos los registros del período estén
+                    revisados y validados antes de continuar.
+                </p>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label"
+                                   for="{{ field.id_for_label }}">
+                                {{ field.label }}
+                            </label>
+
+                            {{ field }}
+
+                            {% for error in field.errors %}
+                                <div class="text-danger small">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+
+                    <button class="btn btn-danger" type="submit">
+                        Confirmar cierre
+                    </button>
+
+                    <a class="btn btn-outline-secondary"
+                       href="{% url 'asistencia:lista_cierres' %}">
+                        Cancelar
+                    </a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
