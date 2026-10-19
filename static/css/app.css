@@ -1,0 +1,82 @@
+:root {
+    --color-fondo: #f4f6f9;
+    --color-texto: #212529;
+    --color-borde: #dee2e6;
+}
+
+body {
+    background: var(--color-fondo);
+    color: var(--color-texto);
+    min-height: 100vh;
+}
+
+.navbar-brand {
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+main.container {
+    max-width: 1440px;
+}
+
+.card {
+    border: 1px solid var(--color-borde);
+    border-radius: 0.75rem;
+}
+
+.card-body {
+    padding: 1.25rem;
+}
+
+.table {
+    background: #fff;
+    vertical-align: middle;
+}
+
+.table th {
+    white-space: nowrap;
+}
+
+.table td {
+    overflow-wrap: anywhere;
+}
+
+.form-control,
+.form-select {
+    min-height: 40px;
+}
+
+textarea.form-control {
+    min-height: 100px;
+}
+
+.btn {
+    border-radius: 0.4rem;
+}
+
+.alert {
+    border-radius: 0.5rem;
+}
+
+pre {
+    max-width: 350px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+    main.container {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
+    .navbar .container {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+}

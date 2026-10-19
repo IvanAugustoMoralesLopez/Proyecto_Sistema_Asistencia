@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Cierres mensuales{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3">Cierres mensuales</h1>
+
+    <a class="btn btn-primary"
+       href="{% url 'asistencia:confirmar_cierre' %}">
+        Nuevo cierre
+    </a>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>Período</th>
+                <th>Estado</th>
+                <th>Cerrado por</th>
+                <th>Fecha de cierre</th>
+                <th>Reabierto por</th>
+                <th>Motivo de reapertura</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cierre in cierres %}
+                <tr>
+                    <td>{{ cierre.anio }}-{{ cierre.mes|stringformat:"02d" }}</td>
+                    <td>{{ cierre.get_estado_display }}</td>
+                    <td>{{ cierre.cerrado_por|default:"—" }}</td>
+                    <td>
+                        {{ cierre.cerrado_en|date:"d/m/Y H:i"|default:"—" }}
+                    </td>
+                    <td>{{ cierre.reabierto_por|default:"—" }}</td>
+                    <td>{{ cierre.motivo_reapertura|default:"—" }}</td>
+                    <td>
+                        {% if cierre.estado == "CERRADO" %}
+                            {% if perms.asistencias.change_cierremensual %}
+                                <a class="btn btn-sm btn-outline-danger"
+                                   href="{% url 'asistencia:reapertura_mensual' cierre.anio cierre.mes %}">
+                                    Reabrir
+                                </a>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-secondary">Abierto</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-4">
+                        Todavía no hay cierres registrados.
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

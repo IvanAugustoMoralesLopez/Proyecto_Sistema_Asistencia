@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Sesión de edición no disponible{% endblock %}
+
+{% block content %}
+<div class="alert alert-warning">
+    <h1 class="h4">Sesión de edición no disponible</h1>
+    <p>{{ mensaje }}</p>
+    <a class="btn btn-primary"
+       href="{% url 'asistencia:registro_diario' %}">
+        Volver al registro diario
+    </a>
+</div>
+{% endblock %}

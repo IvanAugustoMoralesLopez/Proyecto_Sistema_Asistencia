@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Iniciar sesión{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5 col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h4 mb-3">Iniciar sesión</h1>
+                <p class="text-secondary">
+                    Ingresá con tu usuario institucional.
+                </p>
+
+                {% if form.errors %}
+                    <div class="alert alert-danger">
+                        Usuario o contraseña incorrectos.
+                    </div>
+                {% endif %}
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label class="form-label" for="id_username">
+                            Usuario
+                        </label>
+                        <input
+                            class="form-control"
+                            id="id_username"
+                            type="text"
+                            name="username"
+                            autocomplete="username"
+                            required
+                            autofocus
+                        >
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="id_password">
+                            Contraseña
+                        </label>
+                        <input
+                            class="form-control"
+                            id="id_password"
+                            type="password"
+                            name="password"
+                            autocomplete="current-password"
+                            required
+                        >
+                    </div>
+
+                    <input type="hidden" name="next" value="{{ next }}">
+
+                    <button class="btn btn-primary w-100" type="submit">
+                        Ingresar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
