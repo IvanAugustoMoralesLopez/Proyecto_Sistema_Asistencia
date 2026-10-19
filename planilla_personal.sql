@@ -31,15 +31,20 @@ CREATE TABLE personal (
     CONSTRAINT chk_personal_sexo CHECK (sexo IN ('F', 'M', 'X'))
 ) ENGINE=InnoDB;
 
--- CARGO: catálogo de códigos de cargo (columnas COD y DESCRIPCION)
--- Ej.: 166 = docente suplente, 155 = bedel
+-- CARGO: catálogo de cargos (columnas COD y DESCRIPCION de la planilla)
+-- En la planilla: 166 = «hs catedras» (titulares, interinos y suplentes),
+-- 165 = BEDEL, 155 / 150 = SECRETARIA, DR DE ESTUDIO, etc.
+-- Un mismo código puede aparecer con descripciones distintas, por eso la
+-- clave es un id y lo único es el par (cod, descripcion).
 -- es_docente = TRUE  -> el cargo se ejerce sobre un espacio curricular
 -- es_docente = FALSE -> cargo no docente (bedel, etc.), sin espacio curricular
 CREATE TABLE cargo (
+    id           INT UNSIGNED  NOT NULL AUTO_INCREMENT,
     cod          VARCHAR(10)   NOT NULL,
     descripcion  VARCHAR(120)  NOT NULL,
     es_docente   BOOLEAN       NOT NULL DEFAULT TRUE,
-    PRIMARY KEY (cod)
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_cargo (cod, descripcion)
 ) ENGINE=InnoDB;
 
 -- CARRERA: carrera con su plan de estudio
@@ -66,19 +71,25 @@ CREATE TABLE espacio_curricular (
 
 -- ---------------------------------------------------------------------
 -- 3. Catálogo de códigos y artículos de licencia (2.ª hoja de la planilla)
---    Cada artículo aplica a una situación de revista (Titular / Interino /
---    Suplente), por eso sit_rev forma parte de la clave única.
+--    Cada código de licencia (01.02.01, 2.13.3…) es único y pertenece a una
+--    situación de revista (Titular / Interino / Suplente). Un mismo artículo
+--    (p. ej. 309 B-2) puede tener varios códigos (con goce / con 50% de haberes).
+--    categoria_informe agrupa las licencias como en el informe mensual
+--    (columnas ENF COMUN / LARGO TRAT / OTROS).
 -- ---------------------------------------------------------------------
 CREATE TABLE licencia_articulo (
-    id             INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    articulo       VARCHAR(20)   NOT NULL,   -- código / n.º de artículo
-    tipo_licencia  VARCHAR(80)   NOT NULL,
-    sit_rev        VARCHAR(20)   NOT NULL,   -- Titular / Interino / Suplente
-    goce_haberes   VARCHAR(30)   NOT NULL,   -- Con goce de haberes / Con 50% de haberes
-    autoridad      VARCHAR(20)   NOT NULL,   -- Director / Ministro
-    plazo          VARCHAR(120)  NOT NULL,
+    id                 INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    cod_licencia       VARCHAR(12)   NOT NULL,   -- COD.LIC. (01.02.01, 2.13.3…)
+    articulo           VARCHAR(20)   NOT NULL,   -- ART. (309 B-2), 340 B)…)
+    tipo_licencia      VARCHAR(120)  NOT NULL,   -- ENFERMEDAD O LESION COMUN, etc.
+    categoria_informe  ENUM('Enfermedad común','Largo tratamiento','Otros')
+                       NOT NULL DEFAULT 'Otros',
+    sit_rev            VARCHAR(20)   NOT NULL,   -- Titular / Interino / Suplente
+    goce_haberes       VARCHAR(30)   NOT NULL,   -- Con goce / Sin goce / Con 50% de haberes
+    autoridad          VARCHAR(30)   NOT NULL,   -- Director, Ministro, Supervisor…
+    plazo              VARCHAR(200)  NOT NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_articulo_sit (articulo, sit_rev),
+    UNIQUE KEY uq_licencia_cod (cod_licencia),
     UNIQUE KEY uq_articulo_id_sit (id, sit_rev),
     CONSTRAINT chk_articulo_sit_rev
         CHECK (sit_rev IN ('Titular', 'Interino', 'Suplente'))
@@ -98,7 +109,7 @@ CREATE TABLE licencia_articulo (
 CREATE TABLE designacion (
     id                     INT UNSIGNED  NOT NULL AUTO_INCREMENT,
     dni                    INT UNSIGNED  NOT NULL,
-    cod                    VARCHAR(10)   NOT NULL,   -- COD (código del cargo)
+    cargo_id               INT UNSIGNED  NOT NULL,   -- COD + DESCRIPCION
     espacio_curricular_id  INT UNSIGNED  NULL,       -- solo cargos docentes
     suple_licencia_id      INT UNSIGNED  NULL,       -- licencia que cubre (solo suplentes)
     sit_rev                VARCHAR(20)   NOT NULL,   -- SIT.REV.
@@ -110,9 +121,10 @@ CREATE TABLE designacion (
     hasta                  DATE          NULL,
     pof                    VARCHAR(30)   NULL,
     anio_pof               SMALLINT      NULL,
+    novedad                VARCHAR(40)   NULL,       -- AFECTACION DOCENTE, LIC DE ASCENSO, SUMARIO…
     observaciones          TEXT          NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_designacion (dni, cod, espacio_curricular_id, desde),
+    UNIQUE KEY uq_designacion (dni, cargo_id, espacio_curricular_id, desde),
     UNIQUE KEY uq_designacion_id_sit (id, sit_rev),
     CONSTRAINT chk_designacion_sit_rev
         CHECK (sit_rev IN ('Titular', 'Interino', 'Suplente')),
@@ -122,7 +134,7 @@ CREATE TABLE designacion (
         FOREIGN KEY (dni) REFERENCES personal (dni)
         ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_designacion_cargo
-        FOREIGN KEY (cod) REFERENCES cargo (cod)
+        FOREIGN KEY (cargo_id) REFERENCES cargo (id)
         ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_designacion_espacio
         FOREIGN KEY (espacio_curricular_id) REFERENCES espacio_curricular (id)
@@ -138,8 +150,10 @@ CREATE TABLE licencia_otorgada (
     designacion_id  INT UNSIGNED  NOT NULL,   -- cargo de quien se ausenta
     articulo_id     INT UNSIGNED  NOT NULL,
     sit_rev         VARCHAR(20)   NOT NULL,
-    disp_numero     VARCHAR(20)   NULL,       -- DISP DE LICENCIA
-    disp_anio       SMALLINT      NULL,
+    disp_tipo       VARCHAR(20)   NULL,       -- INSTRUMENTO LEGAL: tipo (disposición, resolución)
+    disp_oficina    VARCHAR(10)   NULL,       -- INSTRUMENTO LEGAL: oficina
+    disp_numero     VARCHAR(20)   NULL,       -- INSTRUMENTO LEGAL: Nº (DISP DE LICENCIA)
+    disp_anio       SMALLINT      NULL,       -- INSTRUMENTO LEGAL: año
     desde           DATE          NOT NULL,
     hasta           DATE          NULL,
     observaciones   TEXT          NULL,
@@ -173,7 +187,7 @@ CREATE TABLE horario (
     id              INT UNSIGNED  NOT NULL AUTO_INCREMENT,
     designacion_id  INT UNSIGNED  NOT NULL,
     dia             ENUM('Lunes','Martes','Miércoles','Jueves','Viernes') NOT NULL,
-    horas_catedra   TINYINT UNSIGNED NOT NULL,
+    horas_catedra   TINYINT UNSIGNED NULL,   -- NULL = día marcado con X (cargo sin horas cátedra)
     hora_inicio     TIME          NULL,
     hora_fin        TIME          NULL,
     PRIMARY KEY (id),
@@ -241,7 +255,8 @@ CREATE TABLE personal_especialidad (
 
 -- =====================================================================
 -- 7. Datos de prueba FICTICIOS (podés borrar esta sección)
---    Los códigos 166 y 155 siguen la planilla; el resto es inventado.
+--    Los códigos y descripciones de cargo y los artículos de licencia siguen
+--    la planilla; las personas y el resto de los datos son inventados.
 -- =====================================================================
 INSERT INTO personal (dni, apellido_nombre, sexo) VALUES
     (10000001, 'Pérez, Ana',     'F'),
@@ -249,9 +264,9 @@ INSERT INTO personal (dni, apellido_nombre, sexo) VALUES
     (10000003, 'López, María',   'F');
 
 INSERT INTO cargo (cod, descripcion, es_docente) VALUES
-    ('101', 'Docente titular',  TRUE),
-    ('166', 'Docente suplente', TRUE),
-    ('155', 'Bedel',            FALSE);
+    ('166', 'hs catedras', TRUE),    -- id 1
+    ('165', 'BEDEL',       FALSE),   -- id 2
+    ('155', 'SECRETARIA',  FALSE);   -- id 3
 
 INSERT INTO carrera (nombre, plan_estudio, anio_plan) VALUES
     ('Tecnicatura en Desarrollo de Software', 'Plan 2020', 2020),
@@ -263,28 +278,33 @@ INSERT INTO espacio_curricular (nombre, carrera_id) VALUES
     ('Redes de Computadoras', 2);
 
 INSERT INTO licencia_articulo
-    (articulo, tipo_licencia, sit_rev, goce_haberes, autoridad, plazo) VALUES
-    ('Art. 10', 'Enfermedad o lesión común', 'Titular',  'Con goce de haberes', 'Director', '15 días por año'),
-    ('Art. 10', 'Enfermedad o lesión común', 'Suplente', 'Con goce de haberes', 'Director', '5 días por año');
+    (cod_licencia, articulo, tipo_licencia, categoria_informe, sit_rev, goce_haberes, autoridad, plazo) VALUES
+    ('01.02.01', '309 B-2)', 'ENFERMEDAD LARGO TRATAMIENTO, LESIÓN GRAVE O MOTIVO DE PROFILAXIS Y SEGURIDAD',
+        'Largo tratamiento', 'Titular',  'Con goce de haberes', 'Director', 'Dos (2) años'),
+    ('01.02.07', '340 B)',   'ENFERMEDAD LARGO TRATAMIENTO, LESIÓN GRAVE O MOTIVO DE PROFILAXIS Y SEGURIDAD',
+        'Largo tratamiento', 'Suplente', 'Con goce de haberes', 'Director', 'Dos (2) años'),
+    ('01.01.04', '340-A',    'ENFERMEDAD O LESION COMUN',
+        'Enfermedad común',  'Suplente', 'Con goce de haberes', 'Director',
+        '15 días por año, antig. > 4 meses; 5 días otros casos');
 
 INSERT INTO designacion
-    (dni, cod, espacio_curricular_id, sit_rev,
+    (dni, cargo_id, espacio_curricular_id, sit_rev,
      norma_tipo, norma_nro, norma_anio, org_emisor, desde, hasta, pof, anio_pof)
 VALUES
-    (10000001, '101', 1,    'Titular',  'Resolución', '123', 2024, 'Ministerio', '2024-03-01', NULL,         'POF-1', 2026),
-    (10000003, '155', NULL, 'Titular',  'Resolución', '789', 2023, 'Ministerio', '2023-03-01', NULL,         'POF-3', 2026);
+    (10000001, 1, 1,    'Titular',  'Resolución', '123', 2024, 'Ministerio', '2024-03-01', NULL,         'POF-1', 2026),
+    (10000003, 2, NULL, 'Titular',  'Resolución', '789', 2023, 'Ministerio', '2023-03-01', NULL,         'POF-3', 2026);
 
--- La titular (designación 1) presenta una licencia por enfermedad
+-- La titular (designación 1) presenta una licencia por largo tratamiento
 INSERT INTO licencia_otorgada
-    (designacion_id, articulo_id, sit_rev, disp_numero, disp_anio, desde, hasta) VALUES
-    (1, 1, 'Titular', '321', 2026, '2026-04-01', '2026-04-30');
+    (designacion_id, articulo_id, sit_rev, disp_tipo, disp_oficina, disp_numero, disp_anio, desde, hasta) VALUES
+    (1, 1, 'Titular', 'DISPOSICIÓN', '0001', '321', 2026, '2026-04-01', '2026-04-30');
 
 -- Su suplente se designa con resolución propia, inicio y fin
 INSERT INTO designacion
-    (dni, cod, espacio_curricular_id, suple_licencia_id, sit_rev,
+    (dni, cargo_id, espacio_curricular_id, suple_licencia_id, sit_rev,
      norma_tipo, norma_nro, norma_anio, org_emisor, desde, hasta, pof, anio_pof)
 VALUES
-    (10000002, '166', 1, 1, 'Suplente', 'Resolución', '456', 2026, 'Dirección', '2026-04-01', '2026-04-30', 'POF-2', 2026);
+    (10000002, 1, 1, 1, 'Suplente', 'Resolución', '456', 2026, 'Dirección', '2026-04-01', '2026-04-30', 'POF-2', 2026);
 
 INSERT INTO horario (designacion_id, dia, horas_catedra, hora_inicio, hora_fin) VALUES
     (1, 'Lunes',   3, '18:00', '20:15'),
@@ -295,7 +315,7 @@ INSERT INTO horario (designacion_id, dia, horas_catedra, hora_inicio, hora_fin) 
 
 INSERT INTO asistencia
     (designacion_id, fecha, estado, horas_inasistidas, licencia_otorgada_id, observaciones) VALUES
-    (1, '2026-04-06', 'Licencia', 3, 1,    'Licencia por enfermedad'),
+    (1, '2026-04-06', 'Licencia', 3, 1,    'Licencia por largo tratamiento'),
     (3, '2026-04-06', 'Presente', 0, NULL, NULL),
     (2, '2026-04-06', 'Ausente',  2, NULL, 'Retiro anticipado'),
     (3, '2026-04-09', 'Presente', 0, NULL, NULL);
@@ -324,7 +344,7 @@ SELECT p.apellido_nombre,
        h.horas_catedra
 FROM designacion g
 JOIN personal p                 ON p.dni  = g.dni
-JOIN cargo cg                   ON cg.cod = g.cod
+JOIN cargo cg                   ON cg.id  = g.cargo_id
 LEFT JOIN espacio_curricular e  ON e.id   = g.espacio_curricular_id
 LEFT JOIN carrera c             ON c.id   = e.carrera_id
 LEFT JOIN horario h             ON h.designacion_id = g.id
@@ -340,7 +360,7 @@ SELECT a.fecha,
 FROM asistencia a
 JOIN designacion g              ON g.id   = a.designacion_id
 JOIN personal p                 ON p.dni  = g.dni
-JOIN cargo cg                   ON cg.cod = g.cod
+JOIN cargo cg                   ON cg.id  = g.cargo_id
 LEFT JOIN espacio_curricular e  ON e.id   = g.espacio_curricular_id
 WHERE a.fecha = '2026-04-06'
 ORDER BY materia, p.apellido_nombre;
@@ -358,26 +378,28 @@ SELECT YEAR(a.fecha)  AS anio,
 FROM asistencia a
 JOIN designacion g              ON g.id   = a.designacion_id
 JOIN personal p                 ON p.dni  = g.dni
-JOIN cargo cg                   ON cg.cod = g.cod
+JOIN cargo cg                   ON cg.id  = g.cargo_id
 LEFT JOIN espacio_curricular e  ON e.id   = g.espacio_curricular_id
 WHERE a.fecha >= '2026-04-01' AND a.fecha < '2026-05-01'
 GROUP BY anio, mes, tipo_personal, materia, p.apellido_nombre
 ORDER BY tipo_personal, materia, p.apellido_nombre;
 
 -- 8.4 Informe MENSUAL de licencias por enfermedad, por cargo
+--     (categorías del informe: enfermedad común y largo tratamiento)
 SELECT cg.cod,
        cg.descripcion               AS cargo,
+       la.categoria_informe,
        COUNT(DISTINCT lo.id)        AS licencias,
        COUNT(a.id)                  AS dias_con_licencia,
        COALESCE(SUM(a.horas_inasistidas), 0) AS horas_inasistidas
 FROM licencia_otorgada lo
 JOIN licencia_articulo la ON la.id = lo.articulo_id
 JOIN designacion g        ON g.id  = lo.designacion_id
-JOIN cargo cg             ON cg.cod = g.cod
+JOIN cargo cg             ON cg.id = g.cargo_id
 LEFT JOIN asistencia a    ON a.licencia_otorgada_id = lo.id
                          AND a.fecha >= '2026-04-01' AND a.fecha < '2026-05-01'
-WHERE la.tipo_licencia LIKE 'Enfermedad%'
+WHERE la.categoria_informe IN ('Enfermedad común', 'Largo tratamiento')
   AND lo.desde < '2026-05-01'
   AND COALESCE(lo.hasta, '9999-12-31') >= '2026-04-01'
-GROUP BY cg.cod, cg.descripcion
-ORDER BY cg.cod;
+GROUP BY cg.id, cg.cod, cg.descripcion, la.categoria_informe
+ORDER BY cg.cod, la.categoria_informe;
