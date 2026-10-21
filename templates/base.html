@@ -5,67 +5,140 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <title>{% block title %}Sistema de Asistencia{% endblock %}</title>
+    <title>{% block title %}Sistema Asistencia{% endblock %}</title>
 
-    <link
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-        rel="stylesheet"
-    >
-
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    {% block extra_css %}{% endblock %}
 </head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a class="navbar-brand" href="{% url 'asistencia:registro_diario' %}">
-                Gestión de Asistencia
-            </a>
+<body data-seccion="{% block seccion %}{% endblock %}">
 
-            {% if user.is_authenticated %}
-                <div class="d-flex align-items-center gap-3">
-                    <a class="nav-link text-white"
-                       href="{% url 'asistencia:registro_diario' %}">
-                        Registro diario
-                    </a>
+    {# ───────── Barra superior ───────── #}
+    <header class="topbar">
+        <button class="topbar__menu" type="button" id="btnMenu" aria-label="Mostrar u ocultar el menú">
+            <i class="bi bi-list"></i>
+        </button>
 
-                    <a class="nav-link text-white"
-                       href="{% url 'asistencia:historial' %}">
-                        Historial
-                    </a>
+        <a class="topbar__marca" href="/">
+            <i class="bi bi-mortarboard-fill"></i>
+            <span>Sistema Asistencia</span>
+        </a>
 
-                    <a class="nav-link text-white"
-                       href="{% url 'asistencia:lista_cierres' %}">
-                        Cierres
-                    </a>
-
-                    <span class="text-white">
-                        {{ user.get_username }}
-                    </span>
-
-                    <form method="post" action="{% url 'logout' %}">
-                        {% csrf_token %}
-                        <button class="btn btn-outline-light btn-sm" type="submit">
-                            Cerrar sesión
-                        </button>
-                    </form>
-                </div>
-            {% endif %}
-        </div>
-    </nav>
-
-    <main class="container py-4">
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags|default:'info' }}"
-                     role="alert">
-                    {{ message }}
-                </div>
-            {% endfor %}
+        {% if user.is_authenticated %}
+            <div class="topbar__usuario">
+                <span><i class="bi bi-person-circle"></i> {{ user.get_username }}</span>
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-light btn-sm" type="submit">Cerrar sesión</button>
+                </form>
+            </div>
         {% endif %}
+    </header>
 
-        {% block content %}{% endblock %}
-    </main>
+    <div class="app-shell">
+
+        {# ───────── Menú lateral ───────── #}
+        {% block sidebar %}
+        <aside class="sidebar" id="sidebar">
+            <nav class="sidebar__nav">
+                <p class="sidebar__titulo">Planillas</p>
+
+                {# TODO: reemplazar href="#" por {% url %} cuando existan las vistas #}
+                <a class="sidebar__link" data-seccion="datos-personal" href="{% url 'pantalla_personal' %}">
+                    <i class="bi bi-person-vcard"></i><span>Datos de personal</span>
+                </a>
+                <a class="sidebar__link" data-seccion="codigos-licencia" href="{% url 'pantalla_licencias' %}">
+                    <i class="bi bi-journal-text"></i><span>Código y artículos de licencia</span>
+                </a>
+                <a class="sidebar__link" data-seccion="informe-licencias" href="{% url 'pantalla_informe' %}">
+                    <i class="bi bi-clipboard2-pulse"></i><span>Inf. men. de licencias por enfermedad</span>
+                </a>
+                <a class="sidebar__link" data-seccion="ingreso-egreso" href="{% url 'pantalla_ingreso_egreso' %}">
+                    <i class="bi bi-box-arrow-right"></i><span>Ingreso y egreso de los profesores</span>
+                </a>
+
+                <a class="sidebar__link sidebar__link--nueva" href="#">
+                    <i class="bi bi-plus-circle-fill"></i><span>Nueva tabla</span>
+                </a>
+
+                {# Planillas renovables (informe mensual e ingreso/egreso). #}
+                {# La vista puede pasar `planillas_recientes`; si no, se muestran de ejemplo. #}
+                <div class="sidebar__sub">
+                    {% for p in planillas_recientes %}
+                        <a class="sidebar__link sidebar__link--sub" href="{{ p.url }}">
+                            <i class="bi bi-table"></i><span>{{ p.nombre }}</span>
+                        </a>
+                    {% empty %}
+                        <a class="sidebar__link sidebar__link--sub" href="#">
+                            <i class="bi bi-table"></i><span>Registro Docente 16/10</span>
+                        </a>
+                        <a class="sidebar__link sidebar__link--sub" href="#">
+                            <i class="bi bi-table"></i><span>Registro Docente 16/09</span>
+                        </a>
+                    {% endfor %}
+                </div>
+
+                <p class="sidebar__titulo">Asistencia</p>
+                <a class="sidebar__link" data-seccion="asistencia-diaria" href="{% url 'asistencia:registro_diario' %}">
+                    <i class="bi bi-calendar-check"></i><span>Registro diario</span>
+                </a>
+                <a class="sidebar__link" data-seccion="asistencia-historial" href="{% url 'asistencia:historial' %}">
+                    <i class="bi bi-clock-history"></i><span>Historial</span>
+                </a>
+                <a class="sidebar__link" data-seccion="asistencia-cierres" href="{% url 'asistencia:lista_cierres' %}">
+                    <i class="bi bi-lock"></i><span>Cierres</span>
+                </a>
+            </nav>
+        </aside>
+        {% endblock %}
+
+        {# ───────── Contenido ───────── #}
+        <main class="app-content">
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    {# Panel lateral "Cargar Nuevos Datos" (lo define cada pantalla) #}
+    {% block panel %}{% endblock %}
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Menú lateral: colapsa en escritorio, se desliza en pantallas chicas
+        document.getElementById('btnMenu').addEventListener('click', function () {
+            var clase = window.innerWidth <= 768 ? 'menu-abierto' : 'menu-colapsado';
+            document.body.classList.toggle(clase);
+        });
+
+        // Marca como activo el link del menú que coincide con la pantalla actual
+        (function () {
+            var actual = document.body.dataset.seccion;
+            if (!actual) return;
+            document.querySelectorAll('.sidebar__link[data-seccion]').forEach(function (a) {
+                if (a.dataset.seccion === actual) a.classList.add('activo');
+            });
+        })();
+
+        // Selección de fila en las planillas (habilita el botón Modificar)
+        document.querySelectorAll('.tabla-planilla tbody tr').forEach(function (fila) {
+            fila.addEventListener('click', function () {
+                var yaActiva = fila.classList.contains('fila-seleccionada');
+                document.querySelectorAll('.tabla-planilla .fila-seleccionada')
+                    .forEach(function (f) { f.classList.remove('fila-seleccionada'); });
+                if (!yaActiva) fila.classList.add('fila-seleccionada');
+                var btn = document.getElementById('btnModificar');
+                if (btn) btn.disabled = yaActiva;
+            });
+        });
+    </script>
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

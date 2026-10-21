@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Códigos y artículos de licencia · Sistema Asistencia{% endblock %}
+{% block seccion %}codigos-licencia{% endblock %}
+
+{% block content %}
+{% include "includes/encabezado_planilla.html" with ruta="Administración / Licencias" titulo="Códigos y artículos de licencia" subtitulo="Consulta de categorías, haberes, autoridad de aplicación y plazos de licencia." panel_id="panelRegistro" %}
+
+<div class="planilla">
+    <table class="tabla-planilla">
+        <thead>
+            <tr>
+                <th>Categoría de licencia</th>
+                <th>Código</th>
+                <th>Artículo</th>
+                <th>Haberes</th>
+                <th>Autoridad</th>
+                <th>Plazo / condición</th>
+                <th>Observaciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {# Datos de ejemplo. Reemplazar por un {% for %} sobre el catálogo de artículos #}
+            <tr>
+                <td class="categoria">Enfermedad o lesión común</td>
+                <td>01.01.04</td><td>149-A</td><td>Con goce de haberes</td><td>Director</td>
+                <td>15 días por año, antig. &lt; 4 meses; 10 días [...]</td><td></td>
+            </tr>
+            <tr>
+                <td class="categoria">Enfermedad de largo tratamiento, lesiones graves o [...]</td>
+                <td>01.02.01</td><td>149 B [...]</td><td>Con goce de haberes</td><td>Director</td>
+                <td>Dos (2) años</td><td></td>
+            </tr>
+            <tr>
+                <td class="categoria"></td>
+                <td>01.02.02</td><td>149 B [...]</td><td>Con 50% de haberes</td><td>Director</td>
+                <td>Un (1) año</td><td></td>
+            </tr>
+            <tr>
+                <td class="categoria">Enfermedad ocupacional o accidente de trabajo</td>
+                <td>01.03.01</td><td>149 B [...]</td><td>Con goce de haberes</td><td>Ministro</td>
+                <td>Dos (2) años</td><td></td>
+            </tr>
+            <tr>
+                <td class="categoria"></td>
+                <td>01.04.01</td><td>149-C</td><td>Con goce de haberes</td><td>Director</td>
+                <td>180 días corridos</td><td></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block panel %}
+<div class="offcanvas offcanvas-end panel-registro" tabindex="-1" id="panelRegistro" aria-labelledby="panelRegistroTitulo">
+    <div class="offcanvas-header">
+        <h2 class="offcanvas-title h5" id="panelRegistroTitulo">Cargar Nuevos Datos</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+
+    <form method="post" class="d-flex flex-column flex-grow-1 overflow-hidden">
+        {% csrf_token %}
+        <div class="offcanvas-body">
+            <div class="mb-3">
+                <label class="form-label" for="l_categoria">Categoría de licencia</label>
+                <input class="form-control" id="l_categoria" name="categoria" required>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label" for="l_codigo">Código</label>
+                    <input class="form-control" id="l_codigo" name="cod_licencia" placeholder="01.02.01" required>
+                </div>
+                <div class="col-6">
+                    <label class="form-label" for="l_articulo">Artículo</label>
+                    <input class="form-control" id="l_articulo" name="articulo">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="l_haberes">Haberes</label>
+                <select class="form-select" id="l_haberes" name="goce_haberes">
+                    <option>Con goce de haberes</option>
+                    <option>Con 50% de haberes</option>
+                    <option>Sin goce de haberes</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="l_autoridad">Autoridad de aplicación</label>
+                <select class="form-select" id="l_autoridad" name="autoridad">
+                    <option>Director</option>
+                    <option>Ministro</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="l_plazo">Plazo / condición</label>
+                <input class="form-control" id="l_plazo" name="plazo">
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="l_obs">Observaciones</label>
+                <textarea class="form-control" id="l_obs" name="observaciones" rows="3"></textarea>
+            </div>
+        </div>
+        <div class="offcanvas-footer">
+            <button type="submit" class="btn btn-primario w-100">Cargar</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

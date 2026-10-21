@@ -2,9 +2,12 @@
 
 {% block title %}Iniciar sesión{% endblock %}
 
+{# El login no muestra el menú lateral #}
+{% block sidebar %}{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-5 col-lg-4">
+<div class="row justify-content-center pt-4">
+    <div class="col-md-6 col-lg-4">
         <div class="card shadow-sm">
             <div class="card-body p-4">
                 <h1 class="h4 mb-3">Iniciar sesión</h1>
@@ -22,39 +25,20 @@
                     {% csrf_token %}
 
                     <div class="mb-3">
-                        <label class="form-label" for="id_username">
-                            Usuario
-                        </label>
-                        <input
-                            class="form-control"
-                            id="id_username"
-                            type="text"
-                            name="username"
-                            autocomplete="username"
-                            required
-                            autofocus
-                        >
+                        <label class="form-label" for="id_username">Usuario</label>
+                        <input class="form-control" id="id_username" type="text" name="username"
+                               autocomplete="username" required autofocus>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label" for="id_password">
-                            Contraseña
-                        </label>
-                        <input
-                            class="form-control"
-                            id="id_password"
-                            type="password"
-                            name="password"
-                            autocomplete="current-password"
-                            required
-                        >
+                        <label class="form-label" for="id_password">Contraseña</label>
+                        <input class="form-control" id="id_password" type="password" name="password"
+                               autocomplete="current-password" required>
                     </div>
 
                     <input type="hidden" name="next" value="{{ next }}">
 
-                    <button class="btn btn-primary w-100" type="submit">
-                        Ingresar
-                    </button>
+                    <button class="btn btn-primary w-100" type="submit">Ingresar</button>
                 </form>
             </div>
         </div>

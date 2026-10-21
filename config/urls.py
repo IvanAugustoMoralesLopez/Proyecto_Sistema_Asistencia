@@ -17,8 +17,17 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from django.views.generic import TemplateView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("accounts/", include("django.contrib.auth.urls")),
     path("asistencia/", include("asistencias.urls")),
+
+    # Pantallas de prueba (después las reemplaza backend con sus vistas)
+    path("pantallas/personal/", TemplateView.as_view(template_name="pantallas/datos_personal.html"), name="pantalla_personal"),
+    path("pantallas/licencias/", TemplateView.as_view(template_name="pantallas/codigos_licencia.html"), name="pantalla_licencias"),
+    path("pantallas/informe/", TemplateView.as_view(template_name="pantallas/informe_licencias.html"), name="pantalla_informe"),
+    path("pantallas/ingreso-egreso/", TemplateView.as_view(template_name="pantallas/ingreso_egreso.html"), name="pantalla_ingreso_egreso"),
+    path("", TemplateView.as_view(template_name="pantallas/datos_personal.html")),
 ]

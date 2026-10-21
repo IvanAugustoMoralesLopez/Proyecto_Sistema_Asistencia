@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Datos de personal · Sistema Asistencia{% endblock %}
+{% block seccion %}datos-personal{% endblock %}
+
+{% block content %}
+{% include "includes/encabezado_planilla.html" with ruta="Administración / Personal docente" titulo="Registro de designaciones docentes" subtitulo="Consulta y edición de cargos, espacios curriculares y situación de revista." panel_id="panelRegistro" %}
+
+<div class="planilla">
+    <table class="tabla-planilla">
+        <thead>
+            <tr>
+                <th>D.N.I</th>
+                <th>Nombre, apellido</th>
+                <th class="centro">Sexo</th>
+                <th class="centro">Sit. rev.</th>
+                <th class="centro">Cód.</th>
+                <th>Descripción</th>
+                <th class="centro">Lunes</th>
+                <th class="centro">Martes</th>
+                <th class="centro">Miércoles</th>
+                <th class="centro">Jueves</th>
+                <th class="centro">Viernes</th>
+                <th>Tipo</th>
+                <th class="centro">N°</th>
+                <th class="centro">Año</th>
+                <th>Org. emisor</th>
+                <th>Espacio curricular</th>
+            </tr>
+        </thead>
+        <tbody>
+            {# Datos de ejemplo. Reemplazar por: {% for d in designaciones %} ... {% endfor %} #}
+            <tr>
+                <td>11.111.111</td><td>ACOSTA, FELICIANO</td><td class="centro">F</td>
+                <td class="centro"><span class="sit-rev">SUP</span></td><td class="centro">165</td><td>BEDEL</td>
+                <td class="centro">X</td><td class="centro">X</td><td class="centro">X</td><td class="centro">X</td><td class="centro">X</td>
+                <td>DISPOSICIÓN</td><td class="centro"></td><td class="centro">2025</td><td>M.E.C.C.Y.T.</td>
+                <td class="enlace">BEDEL</td>
+            </tr>
+            <tr>
+                <td>11.111.111</td><td>ACOSTA, FELICIANO</td><td class="centro">M</td>
+                <td class="centro"><span class="sit-rev">INT</span></td><td class="centro">166</td><td>hs cátedras</td>
+                <td class="centro"></td><td class="centro">4</td><td class="centro"></td><td class="centro"></td><td class="centro"></td>
+                <td>DISPOSICIÓN</td><td class="centro">20</td><td class="centro">2025</td><td>M.E.C.C.Y.T.</td>
+                <td class="enlace">ENSEÑANZA MEDIADA POR ENTORNOS VIRTUALES</td>
+            </tr>
+            <tr>
+                <td>11.111.111</td><td>ACOSTA, FELICIANO</td><td class="centro">M</td>
+                <td class="centro"><span class="sit-rev">TIT</span></td><td class="centro">166</td><td>hs cátedras</td>
+                <td class="centro">3</td><td class="centro"></td><td class="centro"></td><td class="centro"></td><td class="centro"></td>
+                <td>RESOLUCIÓN</td><td class="centro">2090</td><td class="centro">2025</td><td>M.E.C.C.Y.T.</td>
+                <td class="enlace">SISTEMAS TECNOLÓGICOS</td>
+            </tr>
+            <tr>
+                <td>11.111.111</td><td>ACOSTA, FELICIANO</td><td class="centro">F</td>
+                <td class="centro"><span class="sit-rev">TIT</span></td><td class="centro">166</td><td>hs cátedras</td>
+                <td class="centro"></td><td class="centro"></td><td class="centro"></td><td class="centro"></td><td class="centro">6</td>
+                <td>RESOLUCIÓN</td><td class="centro">5084</td><td class="centro">2025</td><td>M.E.C.C.Y.T.</td>
+                <td class="enlace">DISCIPLINA EN SISTEMAS</td>
+            </tr>
+            <tr>
+                <td>11.111.111</td><td>ACOSTA, FELICIANO</td><td class="centro">M</td>
+                <td class="centro"><span class="sit-rev">TIT</span></td><td class="centro">166</td><td>hs cátedras</td>
+                <td class="centro">4</td><td class="centro"></td><td class="centro"></td><td class="centro">4</td><td class="centro"></td>
+                <td>RESOLUCIÓN</td><td class="centro">2090</td><td class="centro">2025</td><td>M.E.C.C.Y.T.</td>
+                <td class="enlace">ÁLGEBRA LINEAL</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block panel %}
+<div class="offcanvas offcanvas-end panel-registro" tabindex="-1" id="panelRegistro" aria-labelledby="panelRegistroTitulo">
+    <div class="offcanvas-header">
+        <h2 class="offcanvas-title h5" id="panelRegistroTitulo">Cargar Nuevos Datos</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+
+    <form method="post" class="d-flex flex-column flex-grow-1 overflow-hidden">
+        {% csrf_token %}
+        <div class="offcanvas-body">
+            <div class="mb-3">
+                <label class="form-label" for="p_dni">D.N.I</label>
+                <input class="form-control" id="p_dni" name="dni" maxlength="8" inputmode="numeric" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="p_nombre">Apellido y nombre</label>
+                <input class="form-control" id="p_nombre" name="apellido_nombre" required>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label" for="p_sexo">Sexo</label>
+                    <select class="form-select" id="p_sexo" name="sexo">
+                        <option value="M">Masculino</option>
+                        <option value="F">Femenino</option>
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label" for="p_sitrev">Situación de revista</label>
+                    <select class="form-select" id="p_sitrev" name="situacion_revista">
+                        <option value="TIT">Titular</option>
+                        <option value="INT">Interino</option>
+                        <option value="SUP">Suplente</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-4">
+                    <label class="form-label" for="p_cod">Cód.</label>
+                    <input class="form-control" id="p_cod" name="cargo_codigo">
+                </div>
+                <div class="col-8">
+                    <label class="form-label" for="p_desc">Descripción</label>
+                    <input class="form-control" id="p_desc" name="cargo_descripcion">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="p_espacio">Espacio curricular</label>
+                <input class="form-control" id="p_espacio" name="espacio_curricular">
+            </div>
+
+            <p class="form-label">Horas por día</p>
+            <div class="row g-2 mb-3 text-center">
+                {% for dia in "LMXJV" %}
+                <div class="col">
+                    <label class="form-label small" for="p_dia_{{ forloop.counter }}">{{ dia }}</label>
+                    <input class="form-control px-1 text-center" id="p_dia_{{ forloop.counter }}" name="horas_{{ forloop.counter }}" type="number" min="0">
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label" for="p_tipo">Tipo de norma</label>
+                    <select class="form-select" id="p_tipo" name="norma_tipo">
+                        <option>Resolución</option>
+                        <option>Disposición</option>
+                    </select>
+                </div>
+                <div class="col-3">
+                    <label class="form-label" for="p_nro">N°</label>
+                    <input class="form-control px-2" id="p_nro" name="norma_numero">
+                </div>
+                <div class="col-3">
+                    <label class="form-label" for="p_anio">Año</label>
+                    <input class="form-control px-2" id="p_anio" name="norma_anio" inputmode="numeric" maxlength="4">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="p_org">Org. emisor</label>
+                <input class="form-control" id="p_org" name="organismo_emisor">
+            </div>
+        </div>
+        <div class="offcanvas-footer">
+            <button type="submit" class="btn btn-primario w-100">Cargar</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
