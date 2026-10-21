@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de legajos docentes{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <div>
+        <h1 class="h3 mb-1">Gestión de legajos docentes</h1>
+        <p class="text-secondary mb-0">
+            Administración de datos personales, cargos, materias y situación de revista por docente.
+        </p>
+    </div>
+    <button type="button" class="btn btn-primary" id="agregarAsignacion">
+        + Nueva asignación
+    </button>
+</div>
+
+<form method="get" class="card card-body shadow-sm border-0 mb-4">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+            {{ filtro.dni.label_tag }}
+            {{ filtro.dni }}
+        </div>
+        <div class="col-md-3">
+            {{ filtro.cargo.label_tag }}
+            {{ filtro.cargo }}
+        </div>
+        <div class="col-md-3">
+            {{ filtro.espacio_curricular.label_tag }}
+            {{ filtro.espacio_curricular }}
+        </div>
+        <div class="col-md-2 d-grid">
+            <button type="submit" class="btn btn-secondary">Buscar</button>
+        </div>
+    </div>
+</form>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <span>Legajo docente</span>
+        <span class="badge text-bg-light text-dark">RF-005 / RF-006 / RF-011 / RF-012 / RF-018</span>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 mb-3">
+            <div class="col-md-3">
+                {{ docente_form.dni.label_tag }}
+                {{ docente_form.dni }}
+            </div>
+            <div class="col-md-5">
+                {{ docente_form.nombre_docente.label_tag }}
+                {{ docente_form.nombre_docente }}
+            </div>
+            <div class="col-md-2">
+                {{ docente_form.sexo.label_tag }}
+                {{ docente_form.sexo }}
+            </div>
+            <div class="col-md-2">
+                {{ docente_form.situacion_revista.label_tag }}
+                {{ docente_form.situacion_revista }}
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <label class="form-label">Antigüedad</label>
+                <input class="form-control" type="text" value="12 años / 3 meses" readonly>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Cómputo general</label>
+                <input class="form-control" type="text" value="1980-2024" readonly>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Estado</label>
+                <input class="form-control" type="text" value="Activo" readonly>
+            </div>
+        </div>
+
+        <div class="border rounded p-3 mb-3">
+            <h2 class="h5 mb-3">Panel dinámico de asignaciones</h2>
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 18%;">Cargo</th>
+                            <th style="width: 24%;">Espacio curricular</th>
+                            <th style="width: 18%;">Situación revista</th>
+                            <th style="width: 18%;">Desde</th>
+                            <th style="width: 18%;">Hasta</th>
+                            <th style="width: 4%;">&nbsp;</th>
+                        </tr>
+                    </thead>
+                    <tbody id="asignacionesBody">
+                        <tr>
+                            <td>
+                                <select class="form-select">
+                                    <option value="">Seleccionar</option>
+                                    {% for cargo in cargos %}
+                                        <option value="{{ cargo.codigo }}">{{ cargo.descripcion }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-select">
+                                    <option value="">Seleccionar</option>
+                                    {% for espacio in espacios %}
+                                        <option value="{{ espacio.pk }}">{{ espacio.carrera.nombre }} - {{ espacio.nombre }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-select">
+                                    <option value="">Seleccionar</option>
+                                    <option>Titular</option>
+                                    <option>Interino</option>
+                                    <option>Suplente</option>
+                                </select>
+                            </td>
+                            <td><input type="date" class="form-control"></td>
+                            <td><input type="date" class="form-control"></td>
+                            <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove-row">✕</button></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-12">
+                <h2 class="h5 mb-3">Carga horaria</h2>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Cód.</th>
+                                <th>Descripción</th>
+                                <th>Lunes</th>
+                                <th>Martes</th>
+                                <th>Miércoles</th>
+                                <th>Jueves</th>
+                                <th>Viernes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>MAT-101</td>
+                                <td>Matemática I</td>
+                                <td>4</td>
+                                <td>4</td>
+                                <td>4</td>
+                                <td>0</td>
+                                <td>0</td>
+                            </tr>
+                            <tr>
+                                <td>FIS-203</td>
+                                <td>Física General</td>
+                                <td>0</td>
+                                <td>3</td>
+                                <td>3</td>
+                                <td>3</td>
+                                <td>0</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <h2 class="h5 mb-3">Normativa</h2>
+                <div class="row g-2">
+                    <div class="col-md-4">
+                        <label class="form-label">Tipo</label>
+                        <select class="form-select">
+                            <option>Resolución</option>
+                            <option>Disposición</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">N°</label>
+                        <input class="form-control" type="text" value="145/24">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Año</label>
+                        <input class="form-control" type="number" value="2024">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Org. emisor</label>
+                        <input class="form-control" type="text" value="Ministerio de Educación">
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <h2 class="h5 mb-3">Académico</h2>
+                <div class="row g-2">
+                    <div class="col-12">
+                        <label class="form-label">Espacio curricular</label>
+                        <input class="form-control" type="text" value="Matemática I">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Carrera</label>
+                        <input class="form-control" type="text" value="Licenciatura en Sistemas">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Plan de estudio</label>
+                        <input class="form-control" type="text" value="Plan 2019">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Año del plan</label>
+                        <input class="form-control" type="number" value="2019">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">POF</label>
+                        <input class="form-control" type="text" value="POF 2023">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Año del POF</label>
+                        <input class="form-control" type="number" value="2023">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <label class="form-label">Desde</label>
+                <input class="form-control" type="date" value="2024-03-01">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Hasta</label>
+                <input class="form-control" type="date">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Vigencia</label>
+                <input class="form-control" type="text" value="Vigente" readonly>
+            </div>
+            <div class="col-12">
+                <label class="form-label">Observaciones</label>
+                <textarea class="form-control" rows="3">Docente con dedicación completa, asignación docente y supervisión académica.</textarea>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <span>Resultado de búsquedas</span>
+        <span class="text-secondary small">{{ resultados|length }} registros</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>DNI</th>
+                    <th>Docente</th>
+                    <th>Cargo</th>
+                    <th>Espacio curricular</th>
+                    <th>Sit. revista</th>
+                    <th>Desde</th>
+                    <th>Hasta</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for resultado in resultados %}
+                    <tr>
+                        <td>{{ resultado.persona.dni }}</td>
+                        <td>{{ resultado.persona.apellido_nombre }}</td>
+                        <td>{{ resultado.cargo.descripcion }}</td>
+                        <td>{{ resultado.espacio_curricular|default:"—" }}</td>
+                        <td>{{ resultado.sitacion_revista|default:"—" }}</td>
+                        <td>{{ resultado.desde|date:"d/m/Y" }}</td>
+                        <td>{{ resultado.hasta|date:"d/m/Y"|default:"Actual" }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-secondary">
+                            No se encontraron docentes con los filtros aplicados.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const tbody = document.getElementById('asignacionesBody');
+        const addButton = document.getElementById('agregarAsignacion');
+
+        if (addButton) {
+            addButton.addEventListener('click', function () {
+                const firstRow = tbody.querySelector('tr');
+                const clone = firstRow.cloneNode(true);
+                clone.querySelectorAll('input, select').forEach((element) => {
+                    element.value = '';
+                });
+                tbody.appendChild(clone);
+            });
+        }
+
+        tbody.addEventListener('click', function (event) {
+            const button = event.target.closest('.remove-row');
+            if (!button) return;
+            const row = button.closest('tr');
+            if (tbody.rows.length > 1) {
+                row.remove();
+            }
+        });
+    });
+</script>
+{% endblock %}
