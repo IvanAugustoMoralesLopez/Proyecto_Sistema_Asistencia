@@ -1,652 +1,846 @@
--- =====================================================================
---  Base de datos: planilla_personal   (VERSIÓN AMPLIADA)
---  Modelo a partir de la planilla estadística del personal 2026
---  (nivel superior): docentes y personal no docente (p. ej. bedeles),
---  con licencias por artículo y asistencia diaria / mensual.
+-- =============================================================================
+-- planilla_personal — versión consolidada v4
+-- Sistema de registro de asistencia, legajo y licencias del personal del IESETyFP
+-- (Oficina 1452). Reúne la v3, los cambios de la revisión y las reglas del ERS v2.0.
 --
---  Ampliación: ahora también contempla los formularios de la Provincia
---  del Chaco:
---    · Formulario Nº 1  - Ingreso de Datos del Agente
---    · Formulario DP-01 - Disposición de alta de interinos y suplentes /
---                         comunicación de ingreso definitivo de titulares
---    · Formulario DL-01 - Disposición de licencia / permiso / inasistencia
+-- Motor: MySQL 8.0.16+ o MariaDB 10.2+ (usa CHECK, JSON, triggers y procedimientos).
+-- Charset utf8mb4. Crea todo desde cero.
 --
---  Motor: MySQL 8.0.16+ (o MariaDB 10.2+) por los CHECK
--- =====================================================================
-
--- ---------------------------------------------------------------------
--- 1. Creación de la base de datos
--- ---------------------------------------------------------------------
-DROP DATABASE IF EXISTS planilla_personal;
-
-CREATE DATABASE planilla_personal
-    CHARACTER SET utf8mb4
-    COLLATE utf8mb4_unicode_ci;
-
+-- ÍNDICE
+--   1. Seguridad: rol, permiso, rol_permiso, usuario
+--   2. Catálogos y configuración
+--   3. Legajo del personal: personal, designacion, horario
+--   4. Licencias y asistencia: disposicion, licencia_otorgada, asistencia
+--   5. Control: cierre_periodo, importacion_log, auditoria
+--   6. Funciones y reglas de negocio (RN-06, RN-09, RN-10, sin superposición)
+--   7. Auditoría automática por triggers (RF-20)
+--   8. Vistas: v_inasistencia_mensual, v_licencia_acumulada, v_alerta_topes
+--   9. Procedimientos: sp_propagar_licencia, sp_asignar_disposiciones
+--  10. Datos iniciales
+--
+-- CÓMO LO USA LA APLICACIÓN
+--   * Al abrir cada conexión: SET @usuario_id = <id del usuario>;  (para la auditoría)
+--   * Cargar una licencia: INSERT en licencia_otorgada y luego CALL sp_propagar_licencia(id);
+--   * Cerrar un día: INSERT en cierre_periodo (tipo 'DIA'). Para corregir, pasar a 'REABIERTO'.
+--   * Fin de mes: CALL sp_asignar_disposiciones(2026, 10, '1452');
+-- =============================================================================
+CREATE DATABASE IF NOT EXISTS planilla_personal
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE planilla_personal;
 
--- ---------------------------------------------------------------------
--- 2. Entidades principales
--- ---------------------------------------------------------------------
-
--- PERSONAL: la persona, sea docente o no docente.
---   Planilla: D.N.I, DOCENTE, SEXO.
---   Formulario Nº 1: apellido, nombres, documento (número y tipo), sexo,
---   fecha de nacimiento, estado civil, nacionalidad, Nº de inscripción
---   D.G.I. y D.G.R., domicilio y teléfono.
---   Nota: en los formularios, si es mujer el apellido es el de SOLTERA;
---   se guarda en `apellido`.
---   apellido_nombre es una columna calculada, para que las consultas de
---   la versión anterior sigan funcionando.
-CREATE TABLE personal (
-    dni              INT UNSIGNED  NOT NULL,           -- Documento de identidad: Número
-    tipo_documento   VARCHAR(10)   NOT NULL DEFAULT 'DNI',  -- Documento de identidad: Tipo
-    apellido         VARCHAR(80)   NOT NULL,
-    nombres          VARCHAR(80)   NOT NULL,
-    apellido_nombre  VARCHAR(165)
-        GENERATED ALWAYS AS (CONCAT(apellido, ', ', nombres)) STORED,
-    sexo             CHAR(1)       NULL,
-    fecha_nacimiento DATE          NULL,               -- Día / Mes / Año
-    estado_civil     VARCHAR(20)   NULL,
-    nacionalidad     VARCHAR(40)   NULL,
-    nro_dgi          VARCHAR(20)   NULL,               -- Nº de inscripción D.G.I.
-    nro_dgr          VARCHAR(20)   NULL,               -- Nº de inscripción D.G.R.
-    -- Datos del domicilio
-    domicilio_calle  VARCHAR(120)  NULL,               -- Calle y número o nomenclatura del barrio
-    barrio           VARCHAR(80)   NULL,               -- Nombre del barrio
-    localidad        VARCHAR(80)   NULL,
-    codigo_postal    VARCHAR(10)   NULL,
-    provincia        VARCHAR(60)   NULL,
-    telefono         VARCHAR(30)   NULL,
-    PRIMARY KEY (dni),
-    CONSTRAINT chk_personal_sexo CHECK (sexo IN ('F', 'M', 'X'))
+-- =============================================================================
+-- 1. SEGURIDAD: roles, permisos y usuarios (RF-19)
+-- =============================================================================
+CREATE TABLE rol (
+  id      INT AUTO_INCREMENT PRIMARY KEY,
+  codigo  VARCHAR(20) NOT NULL UNIQUE,
+  nombre  VARCHAR(60) NOT NULL
 ) ENGINE=InnoDB;
 
--- INGRESO_AGENTE: el Formulario Nº 1 como trámite (presentación, recepción
--- y sectores reservados). Una persona puede tener más de un trámite
--- (p. ej. una actualización de datos).
-CREATE TABLE ingreso_agente (
-    id                       INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    dni                      INT UNSIGNED  NOT NULL,
-    documentacion_adjunta    VARCHAR(255)  NULL,   -- "Adjunto la siguiente documentación"
-    lugar_presentacion       VARCHAR(80)   NULL,   -- Lugar y fecha de presentación
-    fecha_presentacion       DATE          NULL,
-    -- A cumplimentar por el encargado de personal de la unidad administrativa
-    lugar_recepcion          VARCHAR(80)   NULL,   -- Lugar y fecha de recepción
-    fecha_recepcion          DATE          NULL,
-    responsable_recepcion    VARCHAR(120)  NULL,   -- Firma y sello responsable
-    jurisdiccion             VARCHAR(40)   NULL,
-    escalafon                VARCHAR(40)   NULL,
-    item_nivel               VARCHAR(40)   NULL,   -- Ítem/Nivel
-    modalidad                VARCHAR(40)   NULL,
-    oficina                  VARCHAR(40)   NULL,
-    -- Reservado para el encargado de verificación y control del S.A.G.P.
-    sagp_fecha_ingreso_bd    DATE          NULL,   -- Fecha de ingreso a bases de datos
-    sagp_cargo               VARCHAR(80)   NULL,   -- "Cargó" (quién cargó los datos)
-    -- Reservado para la D.G.P.
-    dgp_fecha_recibido       DATE          NULL,   -- Recibido en D.G.P.
-    dgp_recibio              VARCHAR(80)   NULL,   -- "Recibió"
-    PRIMARY KEY (id),
-    CONSTRAINT fk_ingreso_personal
-        FOREIGN KEY (dni) REFERENCES personal (dni)
-        ON UPDATE CASCADE ON DELETE CASCADE
+CREATE TABLE permiso (
+  codigo       VARCHAR(40)  NOT NULL PRIMARY KEY,
+  descripcion  VARCHAR(160) NOT NULL
 ) ENGINE=InnoDB;
 
--- UNIDAD_EDUCATIVA: establecimiento donde se ejerce el cargo
--- (campos de encabezado de DP-01 y DL-01).
--- Supuesto: código de oficina, código de anexo, nivel/modalidad, categoría,
--- zona y localidad o paraje son datos del establecimiento.
+CREATE TABLE rol_permiso (
+  rol_id          INT         NOT NULL,
+  permiso_codigo  VARCHAR(40) NOT NULL,
+  PRIMARY KEY (rol_id, permiso_codigo),
+  CONSTRAINT fk_rp_rol     FOREIGN KEY (rol_id) REFERENCES rol(id),
+  CONSTRAINT fk_rp_permiso FOREIGN KEY (permiso_codigo) REFERENCES permiso(codigo)
+) ENGINE=InnoDB;
+
+CREATE TABLE usuario (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  rol_id         INT NOT NULL,
+  username       VARCHAR(40)  NOT NULL UNIQUE,
+  password_hash  VARCHAR(255) NOT NULL,          -- hash generado por la aplicación
+  apellido       VARCHAR(80)  NOT NULL,
+  nombres        VARCHAR(80)  NOT NULL,
+  email          VARCHAR(120),
+  activo         BOOLEAN NOT NULL DEFAULT TRUE,
+  ultimo_acceso  DATETIME NULL,
+  CONSTRAINT fk_usuario_rol FOREIGN KEY (rol_id) REFERENCES rol(id)
+) ENGINE=InnoDB;
+
+-- =============================================================================
+-- 2. CATÁLOGOS (RF-05) y CONFIGURACIÓN (RF-10, RF-21)
+-- =============================================================================
+CREATE TABLE situacion_revista (
+  codigo       VARCHAR(20) NOT NULL PRIMARY KEY,
+  descripcion  VARCHAR(80) NOT NULL
+) ENGINE=InnoDB;
+
 CREATE TABLE unidad_educativa (
-    id               INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    numero           VARCHAR(20)   NOT NULL,   -- Número de la unidad educativa
-    descripcion      VARCHAR(120)  NOT NULL,   -- Descripción de la unidad educativa
-    codigo_oficina   VARCHAR(10)   NULL,       -- Código de oficina
-    codigo_anexo     VARCHAR(10)   NULL,       -- Código de anexo
-    nivel_modalidad  VARCHAR(60)   NULL,       -- Nivel/Modalidad
-    categoria        VARCHAR(20)   NULL,       -- Categoría
-    zona             VARCHAR(30)   NULL,       -- Zona
-    localidad_paraje VARCHAR(80)   NULL,       -- Localidad o paraje
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_unidad (numero, codigo_anexo)
+  id                INT AUTO_INCREMENT PRIMARY KEY,
+  numero            VARCHAR(20),
+  descripcion       VARCHAR(120),
+  codigo_oficina    VARCHAR(10),
+  codigo_anexo      VARCHAR(10),
+  nivel_modalidad   VARCHAR(60),
+  categoria         VARCHAR(20),
+  zona              VARCHAR(30),
+  localidad_paraje  VARCHAR(80)
 ) ENGINE=InnoDB;
 
--- CARGO: catálogo de cargos (columnas COD y DESCRIPCION de la planilla)
--- En la planilla: 166 = «hs catedras» (titulares, interinos y suplentes),
--- 165 = BEDEL, 155 / 150 = SECRETARIA, DR DE ESTUDIO, etc.
--- Un mismo código puede aparecer con descripciones distintas, por eso la
--- clave es un id y lo único es el par (cod, descripcion).
--- es_docente = TRUE  -> el cargo se ejerce sobre un espacio curricular
--- es_docente = FALSE -> cargo no docente (bedel, etc.), sin espacio curricular
 CREATE TABLE cargo (
-    id           INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    cod          VARCHAR(10)   NOT NULL,
-    descripcion  VARCHAR(120)  NOT NULL,
-    es_docente   BOOLEAN       NOT NULL DEFAULT TRUE,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_cargo (cod, descripcion)
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  cod         VARCHAR(10)  NOT NULL UNIQUE,
+  descripcion VARCHAR(120) NOT NULL,
+  es_docente  BOOLEAN NOT NULL DEFAULT TRUE
 ) ENGINE=InnoDB;
 
--- CARRERA: carrera con su plan de estudio (campo "Plan de estudio" de DP-01)
+CREATE TABLE motivo (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  codigo      CHAR(5)      NOT NULL UNIQUE,
+  descripcion VARCHAR(200) NOT NULL
+) ENGINE=InnoDB;
+
 CREATE TABLE carrera (
-    id            INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    nombre        VARCHAR(120)  NOT NULL,
-    plan_estudio  VARCHAR(60)   NOT NULL,
-    anio_plan     SMALLINT      NOT NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_carrera (nombre, plan_estudio, anio_plan)
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  nombre        VARCHAR(120) NOT NULL,
+  plan_estudio  VARCHAR(60),
+  anio_plan     SMALLINT
 ) ENGINE=InnoDB;
 
--- ESPACIO_CURRICULAR: cada materia pertenece a una carrera (1:N)
--- (campo "Asignatura" de DP-01 y DL-01)
 CREATE TABLE espacio_curricular (
-    id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    nombre      VARCHAR(120)  NOT NULL,
-    carrera_id  INT UNSIGNED  NOT NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_espacio_carrera (carrera_id, nombre),
-    CONSTRAINT fk_espacio_carrera
-        FOREIGN KEY (carrera_id) REFERENCES carrera (id)
-        ON UPDATE CASCADE ON DELETE RESTRICT
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  nombre      VARCHAR(120) NOT NULL,
+  carrera_id  INT NOT NULL,
+  UNIQUE KEY uq_espacio_carrera (carrera_id, nombre),
+  CONSTRAINT fk_espacio_carrera FOREIGN KEY (carrera_id) REFERENCES carrera(id)
 ) ENGINE=InnoDB;
 
--- ESPECIALIDAD: títulos / especialidades.
---   · N:M con personal (título que posee la persona).
---   · 1:N con designacion (campo "Especialidad" del bloque de cargo de DP-01).
 CREATE TABLE especialidad (
-    id      INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    titulo  VARCHAR(120)  NOT NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_especialidad_titulo (titulo)
+  id      INT AUTO_INCREMENT PRIMARY KEY,
+  titulo  VARCHAR(120) NOT NULL
+) ENGINE=InnoDB;
+
+-- Catálogo de licencias por artículo. Los topes están en campos numéricos (RF-18, RN-08);
+-- "plazo" conserva el texto original del catálogo como referencia.
+CREATE TABLE licencia_articulo (
+  id                       INT AUTO_INCREMENT PRIMARY KEY,
+  cod_licencia             VARCHAR(12) NOT NULL,
+  articulo                 VARCHAR(20),
+  clase                    ENUM('SALUD','ADMINISTRATIVA') NOT NULL,
+  tipo_licencia            VARCHAR(120),
+  categoria_informe        ENUM('IL-01','IL-02') NOT NULL,      -- RN-04 / RN-05
+  es_largo_tratamiento     BOOLEAN NOT NULL DEFAULT FALSE,      -- marca LT en la asistencia
+  sit_rev                  VARCHAR(20),
+  goce_haberes             VARCHAR(30),
+  autoridad                VARCHAR(30),
+  plazo                    VARCHAR(200),
+  tope_cantidad            INT UNSIGNED NULL,
+  tope_unidad              ENUM('DIAS','ANIOS') NULL,
+  tope_periodo             ENUM('POR_VEZ','POR_ANIO','POR_DECENIO') NULL,
+  tope_dias_corridos       BOOLEAN NULL,
+  antiguedad_min_meses     SMALLINT UNSIGNED NULL,
+  tope_cantidad_sin_antig  INT UNSIGNED NULL,
+  activo                   BOOLEAN NOT NULL DEFAULT TRUE,
+  KEY idx_licart_cod (cod_licencia)
+) ENGINE=InnoDB;
+
+CREATE TABLE calendario_escolar (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  fecha          DATE NOT NULL UNIQUE,
+  tipo           ENUM('FERIADO','ASUETO','INHABIL','INSTITUCIONAL') NOT NULL,
+  descripcion    VARCHAR(120) NOT NULL,
+  ciclo_lectivo  SMALLINT NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE parametro (
+  clave        VARCHAR(40)  NOT NULL PRIMARY KEY,
+  valor        VARCHAR(200) NOT NULL,
+  descripcion  VARCHAR(200) NULL
+) ENGINE=InnoDB;
+
+-- =============================================================================
+-- 3. LEGAJO DEL PERSONAL (RF-01 a RF-04)
+-- =============================================================================
+CREATE TABLE personal (
+  dni               VARCHAR(10) NOT NULL PRIMARY KEY,           -- RF-01: DNI en formato texto
+  tipo_documento    VARCHAR(10) NOT NULL DEFAULT 'DNI',
+  apellido          VARCHAR(80) NOT NULL,
+  nombres           VARCHAR(80) NOT NULL,
+  apellido_nombre   VARCHAR(165) GENERATED ALWAYS AS (CONCAT(apellido, ', ', nombres)) STORED,
+  sexo              CHAR(1),
+  fecha_nacimiento  DATE,
+  estado_civil      VARCHAR(20),
+  nacionalidad      VARCHAR(40),
+  nro_dgi           VARCHAR(20),
+  nro_dgr           VARCHAR(20),
+  domicilio_calle   VARCHAR(120),
+  barrio            VARCHAR(80),
+  localidad         VARCHAR(80),
+  codigo_postal     VARCHAR(10),
+  provincia         VARCHAR(60),
+  telefono          VARCHAR(30),
+  email             VARCHAR(120),
+  KEY idx_personal_apellido (apellido, nombres)
 ) ENGINE=InnoDB;
 
 CREATE TABLE personal_especialidad (
-    dni              INT UNSIGNED  NOT NULL,
-    especialidad_id  INT UNSIGNED  NOT NULL,
-    PRIMARY KEY (dni, especialidad_id),
-    CONSTRAINT fk_pe_personal
-        FOREIGN KEY (dni) REFERENCES personal (dni)
-        ON UPDATE CASCADE ON DELETE CASCADE,
-    CONSTRAINT fk_pe_especialidad
-        FOREIGN KEY (especialidad_id) REFERENCES especialidad (id)
-        ON UPDATE CASCADE ON DELETE CASCADE
+  dni              VARCHAR(10) NOT NULL,
+  especialidad_id  INT NOT NULL,
+  PRIMARY KEY (dni, especialidad_id),
+  CONSTRAINT fk_pe_personal     FOREIGN KEY (dni) REFERENCES personal(dni) ON UPDATE CASCADE,
+  CONSTRAINT fk_pe_especialidad FOREIGN KEY (especialidad_id) REFERENCES especialidad(id)
 ) ENGINE=InnoDB;
 
--- MOTIVO: catálogo de "Código de motivo" (5 dígitos) de DP-01.
---   · Titulares e interinos: motivo del alta.
---   · Suplentes: motivo por el que se reemplaza a otra persona.
--- Los códigos reales hay que cargarlos desde el instructivo del formulario.
-CREATE TABLE motivo (
-    id           INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    codigo       CHAR(5)       NOT NULL,
-    descripcion  VARCHAR(200)  NOT NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_motivo_codigo (codigo),
-    CONSTRAINT chk_motivo_codigo CHECK (codigo REGEXP '^[0-9]{5}$')
+CREATE TABLE ingreso_agente (
+  id                     INT AUTO_INCREMENT PRIMARY KEY,
+  dni                    VARCHAR(10) NOT NULL,
+  documentacion_adjunta  VARCHAR(255),
+  lugar_presentacion     VARCHAR(80),
+  fecha_presentacion     DATE,
+  lugar_recepcion        VARCHAR(80),
+  fecha_recepcion        DATE,
+  responsable_recepcion  VARCHAR(120),
+  jurisdiccion           VARCHAR(40),
+  escalafon              VARCHAR(40),
+  item_nivel             VARCHAR(40),
+  modalidad              VARCHAR(40),
+  oficina                VARCHAR(40),
+  sagp_fecha_ingreso_bd  DATE,
+  sagp_cargo             VARCHAR(80),
+  dgp_fecha_recibido     DATE,
+  dgp_recibio            VARCHAR(120),
+  CONSTRAINT fk_ingreso_personal FOREIGN KEY (dni) REFERENCES personal(dni) ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
--- ---------------------------------------------------------------------
--- 3. Catálogo de códigos y artículos de licencia (2.ª hoja de la planilla)
---    Cada código de licencia (01.02.01, 2.13.3…) es único y pertenece a una
---    situación de revista (Titular / Interino / Suplente). Un mismo artículo
---    (p. ej. 309 B-2) puede tener varios códigos (con goce / con 50% de haberes).
---    categoria_informe agrupa las licencias como en el informe mensual
---    (columnas ENF COMUN / LARGO TRAT / OTROS).
---
---    NUEVO: `clase` distingue si el código es de LICENCIA, PERMISO o
---    INASISTENCIA, que son los tres códigos que pide el DL-01
---    ("Código de licencia / permiso / inasistencia", con su artículo y
---    descripción). La forma de pago del DL-01 (con goce / sin goce /
---    con 50 % de haberes) es `goce_haberes`.
--- ---------------------------------------------------------------------
-CREATE TABLE licencia_articulo (
-    id                 INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    cod_licencia       VARCHAR(12)   NOT NULL,   -- COD.LIC. (01.02.01, 2.13.3…)
-    articulo           VARCHAR(20)   NOT NULL,   -- ART. (309 B-2), 340 B)…)
-    clase              ENUM('Licencia','Permiso','Inasistencia')
-                       NOT NULL DEFAULT 'Licencia',
-    tipo_licencia      VARCHAR(120)  NOT NULL,   -- ENFERMEDAD O LESION COMUN, etc. (Descripción)
-    categoria_informe  ENUM('Enfermedad común','Largo tratamiento','Otros')
-                       NOT NULL DEFAULT 'Otros',
-    sit_rev            VARCHAR(20)   NOT NULL,   -- Titular / Interino / Suplente
-    goce_haberes       VARCHAR(30)   NOT NULL,   -- Con goce / Sin goce / Con 50% de haberes
-    autoridad          VARCHAR(30)   NOT NULL,   -- Director, Ministro, Supervisor…
-    plazo              VARCHAR(200)  NOT NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_licencia_cod (cod_licencia),
-    UNIQUE KEY uq_articulo_id_sit (id, sit_rev),
-    CONSTRAINT chk_articulo_sit_rev
-        CHECK (sit_rev IN ('Titular', 'Interino', 'Suplente'))
-) ENGINE=InnoDB;
-
--- ---------------------------------------------------------------------
--- 4. Tabla intermedia: DESIGNACION (personal <-> cargo <-> espacio curricular)
---    Cada fila = un cargo que ejerce una persona (un bloque de cargo del
---    DP-01 / DL-01).
---    - Docentes: espacio_curricular_id completo.
---    - Bedeles y otro personal no docente: espacio_curricular_id NULL.
---    - Suplentes: suple_licencia_id apunta a la licencia que cubren y
---      reemplazado_designacion_id al cargo de la persona reemplazada
---      ("Datos del reemplazado" del DP-01: DNI, sexo, apellido, nombres
---      salen de personal vía esa designación).
---      Sus norma_* / desde / hasta son la resolución del suplente y el
---      inicio y fin de la suplencia.
---    Regla a validar en la aplicación: si cargo.es_docente = TRUE,
---    espacio_curricular_id no debería ser NULL; y solo los suplentes
---    llevan suple_licencia_id / reemplazado_designacion_id.
---    Fecha de alta (DP-01 "Desde / Hasta") = desde / hasta.
--- ---------------------------------------------------------------------
+-- desde NULL = "SIN INICIO"; hasta NULL = "SIN TERMINO" (la aplicación muestra esos textos).
 CREATE TABLE designacion (
-    id                        INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    dni                       INT UNSIGNED  NOT NULL,
-    cargo_id                  INT UNSIGNED  NOT NULL,   -- Código de cargo/Hs + Descripción
-    espacio_curricular_id     INT UNSIGNED  NULL,       -- Asignatura (y plan de estudio vía carrera)
-    unidad_educativa_id       INT UNSIGNED  NOT NULL,   -- Unidad educativa (oficina, anexo, nivel, zona…)
-    especialidad_id           INT UNSIGNED  NULL,       -- Especialidad del cargo (DP-01)
-    suple_licencia_id         INT UNSIGNED  NULL,       -- licencia que cubre (solo suplentes)
-    reemplazado_designacion_id INT UNSIGNED NULL,       -- cargo de la persona reemplazada (solo suplentes)
-    sit_rev                   VARCHAR(20)   NOT NULL,   -- SIT.REV. (Titular / Interino / Suplente)
-    -- Datos del cargo en la unidad educativa
-    anio_curso                VARCHAR(10)   NULL,       -- "Año"
-    division_seccion          VARCHAR(20)   NULL,       -- División o sección
-    turno                     VARCHAR(20)   NULL,
-    hs_catedra                TINYINT UNSIGNED NULL,    -- Hs. cátedra (total del cargo)
-    jornada                   VARCHAR(30)   NULL,       -- Jornada (DP-01)
-    -- Disposición de alta (DP-01)
-    disp_alta_nro             VARCHAR(20)   NULL,       -- Disposición de alta Nº (no se consigna para titulares)
-    sello_regional_as         VARCHAR(30)   NULL,       -- Sello regional (A.S. Nº A)
-    motivo_id                 INT UNSIGNED  NULL,       -- Código de motivo + descripción
-    motivo_instrumento_legal  VARCHAR(40)   NULL,       -- Instrumento legal Nº del motivo
-    -- Norma de la designación (planilla)
-    norma_tipo                VARCHAR(30)   NULL,       -- Tipo (resolución, etc.)
-    norma_nro                 VARCHAR(20)   NULL,       -- Nº
-    norma_anio                SMALLINT      NULL,       -- Año
-    org_emisor                VARCHAR(60)   NULL,       -- Org. Emisor
-    desde                     DATE          NOT NULL,
-    hasta                     DATE          NULL,
-    pof                       VARCHAR(30)   NULL,
-    anio_pof                  SMALLINT      NULL,
-    novedad                   VARCHAR(40)   NULL,       -- AFECTACION DOCENTE, LIC DE ASCENSO, SUMARIO…
-    observaciones             TEXT          NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_designacion (dni, cargo_id, espacio_curricular_id, desde),
-    UNIQUE KEY uq_designacion_id_sit (id, sit_rev),
-    CONSTRAINT chk_designacion_sit_rev
-        CHECK (sit_rev IN ('Titular', 'Interino', 'Suplente')),
-    CONSTRAINT chk_designacion_fechas
-        CHECK (hasta IS NULL OR hasta >= desde),
-    CONSTRAINT fk_designacion_personal
-        FOREIGN KEY (dni) REFERENCES personal (dni)
-        ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_designacion_cargo
-        FOREIGN KEY (cargo_id) REFERENCES cargo (id)
-        ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_designacion_espacio
-        FOREIGN KEY (espacio_curricular_id) REFERENCES espacio_curricular (id)
-        ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_designacion_unidad
-        FOREIGN KEY (unidad_educativa_id) REFERENCES unidad_educativa (id)
-        ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_designacion_especialidad
-        FOREIGN KEY (especialidad_id) REFERENCES especialidad (id)
-        ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_designacion_motivo
-        FOREIGN KEY (motivo_id) REFERENCES motivo (id)
-        ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_designacion_reemplazado
-        FOREIGN KEY (reemplazado_designacion_id) REFERENCES designacion (id)
-        ON UPDATE CASCADE ON DELETE RESTRICT
+  id                          INT AUTO_INCREMENT PRIMARY KEY,
+  dni                         VARCHAR(10) NOT NULL,
+  cargo_id                    INT NOT NULL,
+  espacio_curricular_id       INT NULL,
+  unidad_educativa_id         INT NOT NULL,
+  especialidad_id             INT NULL,
+  suple_licencia_id           INT NULL,        -- FK a licencia_otorgada (se agrega más abajo)
+  reemplazado_designacion_id  INT NULL,
+  sit_rev                     VARCHAR(20) NULL,
+  anio_curso                  VARCHAR(10),
+  division_seccion            VARCHAR(20),
+  turno                       VARCHAR(20),
+  hs_catedra                  TINYINT UNSIGNED,
+  jornada                     VARCHAR(30),
+  disp_alta_nro               VARCHAR(20),
+  sello_regional_as           VARCHAR(30),
+  motivo_id                   INT NULL,
+  motivo_instrumento_legal    VARCHAR(40),
+  norma_tipo                  VARCHAR(30),
+  norma_nro                   VARCHAR(20),
+  norma_anio                  SMALLINT,
+  org_emisor                  VARCHAR(60),
+  desde                       DATE NULL,
+  hasta                       DATE NULL,
+  pof                         VARCHAR(30),
+  anio_pof                    SMALLINT,
+  novedad                     VARCHAR(40),
+  observaciones               TEXT,
+  KEY idx_desig_dni (dni),
+  KEY idx_desig_vigencia (desde, hasta),
+  CONSTRAINT fk_desig_personal  FOREIGN KEY (dni) REFERENCES personal(dni) ON UPDATE CASCADE,
+  CONSTRAINT fk_desig_cargo     FOREIGN KEY (cargo_id) REFERENCES cargo(id),
+  CONSTRAINT fk_desig_espacio   FOREIGN KEY (espacio_curricular_id) REFERENCES espacio_curricular(id),
+  CONSTRAINT fk_desig_unidad    FOREIGN KEY (unidad_educativa_id) REFERENCES unidad_educativa(id),
+  CONSTRAINT fk_desig_espec     FOREIGN KEY (especialidad_id) REFERENCES especialidad(id),
+  CONSTRAINT fk_desig_reemplaza FOREIGN KEY (reemplazado_designacion_id) REFERENCES designacion(id),
+  CONSTRAINT fk_desig_motivo    FOREIGN KEY (motivo_id) REFERENCES motivo(id),
+  CONSTRAINT fk_desig_sitrev    FOREIGN KEY (sit_rev) REFERENCES situacion_revista(codigo) ON UPDATE CASCADE,
+  CONSTRAINT ck_desig_fechas    CHECK (desde IS NULL OR hasta IS NULL OR hasta >= desde)
 ) ENGINE=InnoDB;
 
--- LICENCIA_OTORGADA: cada vez que una persona (p. ej. un titular) presenta
--- una licencia, permiso o inasistencia (un bloque del DL-01).
--- Guarda el artículo, la disposición y el inicio y fin.
--- sit_rev se repite a propósito: las claves compuestas obligan a que el
--- artículo elegido corresponda a la situación de revista del cargo.
--- El tipo (licencia / permiso / inasistencia) lo da licencia_articulo.clase.
--- Un DL-01 con varios bloques = varias filas con la misma disposición.
-CREATE TABLE licencia_otorgada (
-    id                INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    designacion_id    INT UNSIGNED  NOT NULL,   -- cargo de quien se ausenta
-    articulo_id       INT UNSIGNED  NOT NULL,
-    sit_rev           VARCHAR(20)   NOT NULL,
-    disp_tipo         VARCHAR(20)   NULL,       -- INSTRUMENTO LEGAL: tipo (disposición, resolución)
-    disp_oficina      VARCHAR(10)   NULL,       -- INSTRUMENTO LEGAL: oficina
-    disp_numero       VARCHAR(20)   NULL,       -- Disposición de licencia/permiso/inasistencia Nº
-    disp_anio         SMALLINT      NULL,       -- INSTRUMENTO LEGAL: año
-    sello_regional_as VARCHAR(30)   NULL,       -- Sello regional (A.S. Nº A) del DL-01
-    justifica         BOOLEAN       NULL,       -- "Justifica: Sí / No" (para inasistencias)
-    desde             DATE          NOT NULL,   -- Período de licencia: desde
-    hasta             DATE          NULL,       -- Período de licencia: hasta
-    observaciones     TEXT          NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_licencia_id_designacion (id, designacion_id),
-    CONSTRAINT chk_licencia_fechas
-        CHECK (hasta IS NULL OR hasta >= desde),
-    CONSTRAINT fk_licencia_designacion
-        FOREIGN KEY (designacion_id, sit_rev)
-        REFERENCES designacion (id, sit_rev)
-        ON UPDATE RESTRICT ON DELETE RESTRICT,
-    CONSTRAINT fk_licencia_articulo
-        FOREIGN KEY (articulo_id, sit_rev)
-        REFERENCES licencia_articulo (id, sit_rev)
-        ON UPDATE RESTRICT ON DELETE RESTRICT
-) ENGINE=InnoDB;
-
--- La designación del suplente apunta a la licencia que cubre
--- (se agrega acá porque licencia_otorgada se crea después de designacion)
-ALTER TABLE designacion
-    ADD CONSTRAINT fk_designacion_suple_licencia
-        FOREIGN KEY (suple_licencia_id) REFERENCES licencia_otorgada (id)
-        ON UPDATE CASCADE ON DELETE SET NULL;
-
--- ---------------------------------------------------------------------
--- 5. Horario y asistencia
--- ---------------------------------------------------------------------
-
--- HORARIO: una fila por día de cada designación (en vez de columnas lunes..viernes)
+-- Horario semanal de cada designación. El personal no docente (ej. bedel) se carga con
+-- horas_catedra = 0 y hora_inicio / hora_fin: así también se le genera la asistencia diaria.
 CREATE TABLE horario (
-    id              INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    designacion_id  INT UNSIGNED  NOT NULL,
-    dia             ENUM('Lunes','Martes','Miércoles','Jueves','Viernes') NOT NULL,
-    horas_catedra   TINYINT UNSIGNED NULL,   -- NULL = día marcado con X (cargo sin horas cátedra)
-    hora_inicio     TIME          NULL,
-    hora_fin        TIME          NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_horario (designacion_id, dia),
-    CONSTRAINT chk_horario_horas
-        CHECK (hora_inicio IS NULL OR hora_fin IS NULL OR hora_fin > hora_inicio),
-    CONSTRAINT fk_horario_designacion
-        FOREIGN KEY (designacion_id) REFERENCES designacion (id)
-        ON UPDATE CASCADE ON DELETE CASCADE
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  designacion_id  INT NOT NULL,
+  dia             ENUM('LUN','MAR','MIE','JUE','VIE') NOT NULL,
+  horas_catedra   TINYINT UNSIGNED NOT NULL,
+  hora_inicio     TIME,
+  hora_fin        TIME,
+  KEY idx_horario_desig (designacion_id, dia),
+  CONSTRAINT fk_horario_desig FOREIGN KEY (designacion_id) REFERENCES designacion(id),
+  CONSTRAINT ck_horario_horas CHECK (hora_inicio IS NULL OR hora_fin IS NULL OR hora_fin > hora_inicio)
 ) ENGINE=InnoDB;
 
--- ASISTENCIA: una fila por designación y día (carga diaria).
--- El informe mensual se obtiene agrupando estas filas (ver sección 8).
---   Presente -> 0 horas de inasistencia, sin licencia
---   Ausente  -> horas_inasistidas > 0 (todas o algunas), sin licencia
---   Licencia -> horas_inasistidas > 0 y licencia_otorgada_id obligatorio
--- La clave compuesta (licencia_otorgada_id, designacion_id) obliga a que
--- la licencia sea del mismo cargo al que se le carga la asistencia.
+-- =============================================================================
+-- 4. LICENCIAS Y ASISTENCIA (RF-07 a RF-16)
+-- =============================================================================
+-- Disposición interna (numeración correlativa) o resolución externa. Una disposición
+-- puede amparar varias licencias.
+CREATE TABLE disposicion (
+  id                INT AUTO_INCREMENT PRIMARY KEY,
+  tipo              ENUM('INTERNA','EXTERNA') NOT NULL,
+  dni_beneficiario  VARCHAR(10) NULL,
+  oficina_codigo    VARCHAR(10) NOT NULL,
+  anio              SMALLINT NOT NULL,
+  numero            INT UNSIGNED NOT NULL,
+  org_emisor        VARCHAR(60) NULL,
+  fecha_emision     DATE NULL,
+  periodo_mes       TINYINT UNSIGNED NULL,
+  anulada           BOOLEAN NOT NULL DEFAULT FALSE,
+  observaciones     TEXT NULL,
+  UNIQUE KEY uq_disposicion (tipo, oficina_codigo, anio, numero),
+  CONSTRAINT fk_disp_personal FOREIGN KEY (dni_beneficiario) REFERENCES personal(dni) ON UPDATE CASCADE,
+  CONSTRAINT ck_disp_mes      CHECK (periodo_mes IS NULL OR periodo_mes BETWEEN 1 AND 12)
+) ENGINE=InnoDB;
+
+-- sit_rev es una foto de la situación de revista al momento de la licencia: no tiene FK
+-- (así se puede cambiar la situación de revista de la designación sin trabas).
+CREATE TABLE licencia_otorgada (
+  id                          INT AUTO_INCREMENT PRIMARY KEY,
+  designacion_id              INT NOT NULL,
+  articulo_id                 INT NOT NULL,
+  sit_rev                     VARCHAR(20),
+  disposicion_interna_id      INT NULL,
+  resolucion_externa_id       INT NULL,
+  nro_formulario_papel        VARCHAR(20) NULL,
+  fecha_recepcion_formulario  DATE NULL,
+  sello_regional_as           VARCHAR(30),
+  justifica                   BOOLEAN NOT NULL DEFAULT FALSE,
+  desde                       DATE NOT NULL,
+  hasta                       DATE NULL,
+  anulada                     BOOLEAN NOT NULL DEFAULT FALSE,
+  observaciones               TEXT,
+  KEY idx_lic_desig (designacion_id, desde),
+  CONSTRAINT fk_lic_desig    FOREIGN KEY (designacion_id) REFERENCES designacion(id),
+  CONSTRAINT fk_lic_articulo FOREIGN KEY (articulo_id) REFERENCES licencia_articulo(id),
+  CONSTRAINT fk_lic_disp     FOREIGN KEY (disposicion_interna_id) REFERENCES disposicion(id),
+  CONSTRAINT fk_lic_res      FOREIGN KEY (resolucion_externa_id) REFERENCES disposicion(id),
+  CONSTRAINT ck_lic_fechas   CHECK (hasta IS NULL OR hasta >= desde),
+  CONSTRAINT ck_lic_papel    CHECK (disposicion_interna_id IS NULL OR nro_formulario_papel IS NOT NULL)  -- RN-10
+) ENGINE=InnoDB;
+
+ALTER TABLE designacion
+  ADD CONSTRAINT fk_desig_suple_lic FOREIGN KEY (suple_licencia_id) REFERENCES licencia_otorgada(id);
+
+-- Un registro por designación y día (el docente puede faltar a una materia y dictar otra).
 CREATE TABLE asistencia (
-    id                    INT UNSIGNED  NOT NULL AUTO_INCREMENT,
-    designacion_id        INT UNSIGNED  NOT NULL,
-    fecha                 DATE          NOT NULL,
-    estado                ENUM('Presente','Ausente','Licencia') NOT NULL,
-    horas_inasistidas     TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    licencia_otorgada_id  INT UNSIGNED  NULL,
-    observaciones         TEXT          NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_asistencia (designacion_id, fecha),
-    CONSTRAINT chk_asistencia_estado CHECK (
-           (estado = 'Presente' AND horas_inasistidas = 0 AND licencia_otorgada_id IS NULL)
-        OR (estado = 'Ausente'  AND horas_inasistidas > 0 AND licencia_otorgada_id IS NULL)
-        OR (estado = 'Licencia' AND horas_inasistidas > 0 AND licencia_otorgada_id IS NOT NULL)
-    ),
-    CONSTRAINT fk_asistencia_designacion
-        FOREIGN KEY (designacion_id) REFERENCES designacion (id)
-        ON UPDATE CASCADE ON DELETE CASCADE,
-    CONSTRAINT fk_asistencia_licencia
-        FOREIGN KEY (licencia_otorgada_id, designacion_id)
-        REFERENCES licencia_otorgada (id, designacion_id)
-        ON UPDATE RESTRICT ON DELETE RESTRICT
+  id                    INT AUTO_INCREMENT PRIMARY KEY,
+  designacion_id        INT NOT NULL,
+  fecha                 DATE NOT NULL,
+  estado                ENUM('P','I','LIC','LT','PR') NOT NULL,                       -- RF-08
+  horas_inasistidas     TINYINT UNSIGNED NOT NULL DEFAULT 0,                          -- RF-13
+  licencia_otorgada_id  INT NULL,
+  estado_justificacion  ENUM('INJUSTIFICADA','EN_TRAMITE','JUSTIFICADA') NULL,        -- RF-09
+  nro_formulario_papel  VARCHAR(20) NULL,
+  observaciones         TEXT,
+  UNIQUE KEY uq_asistencia (designacion_id, fecha),
+  KEY idx_asist_fecha (fecha),
+  KEY idx_asist_lic (licencia_otorgada_id),
+  CONSTRAINT fk_asist_desig FOREIGN KEY (designacion_id) REFERENCES designacion(id),
+  CONSTRAINT fk_asist_lic   FOREIGN KEY (licencia_otorgada_id) REFERENCES licencia_otorgada(id),
+  CONSTRAINT ck_asist_lic   CHECK (estado NOT IN ('LIC','LT') OR licencia_otorgada_id IS NOT NULL),
+  CONSTRAINT ck_asist_pres  CHECK (estado <> 'P' OR horas_inasistidas = 0),
+  CONSTRAINT ck_asist_just  CHECK (estado_justificacion IS NULL OR estado = 'I')
 ) ENGINE=InnoDB;
 
--- =====================================================================
--- 7. Datos de prueba FICTICIOS (podés borrar esta sección)
---    Los códigos y descripciones de cargo y los artículos de licencia siguen
---    la planilla; las personas, unidades, motivos y el resto de los datos
---    son inventados.
--- =====================================================================
-INSERT INTO personal
-    (dni, tipo_documento, apellido, nombres, sexo, fecha_nacimiento, estado_civil,
-     nacionalidad, nro_dgi, nro_dgr, domicilio_calle, barrio, localidad,
-     codigo_postal, provincia, telefono) VALUES
-    (10000001, 'DNI', 'Pérez',  'Ana',    'F', '1980-05-12', 'Casada',  'Argentina',
-        '27-10000001-4', '1000001', 'Calle 1 Nº 100', 'Centro',     'Resistencia', '3500', 'Chaco', '3624-000001'),
-    (10000002, 'DNI', 'Gómez',  'Carlos', 'M', '1985-09-30', 'Soltero', 'Argentina',
-        '20-10000002-5', '1000002', 'Calle 2 Nº 200', 'Villa Sur',  'Resistencia', '3500', 'Chaco', '3624-000002'),
-    (10000003, 'DNI', 'López',  'María',  'F', '1990-01-20', 'Soltera', 'Argentina',
-        '27-10000003-6', '1000003', 'Calle 3 Nº 300', 'Norte',      'Barranqueras','3503', 'Chaco', '3624-000003');
+-- =============================================================================
+-- 5. CONTROL: cierres, importación y auditoría (RN-06, RF-06, RF-20)
+-- =============================================================================
+CREATE TABLE cierre_periodo (
+  id                 INT AUTO_INCREMENT PRIMARY KEY,
+  tipo               ENUM('DIA','MES') NOT NULL,
+  periodo            DATE NOT NULL COMMENT 'La fecha (DIA) o el primer día del mes (MES)',
+  estado             ENUM('CERRADO','REABIERTO') NOT NULL DEFAULT 'CERRADO',
+  cerrado_por        INT NOT NULL,
+  cerrado_en         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  reabierto_por      INT NULL,
+  reabierto_en       DATETIME NULL,
+  motivo_reapertura  VARCHAR(255) NULL,
+  UNIQUE KEY uq_cierre (tipo, periodo),
+  CONSTRAINT fk_cierre_cerro   FOREIGN KEY (cerrado_por)   REFERENCES usuario(id),
+  CONSTRAINT fk_cierre_reabrio FOREIGN KEY (reabierto_por) REFERENCES usuario(id)
+) ENGINE=InnoDB;
 
-INSERT INTO ingreso_agente
-    (dni, documentacion_adjunta, lugar_presentacion, fecha_presentacion,
-     lugar_recepcion, fecha_recepcion, jurisdiccion, escalafon, item_nivel,
-     modalidad, oficina, sagp_fecha_ingreso_bd, sagp_cargo, dgp_fecha_recibido, dgp_recibio) VALUES
-    (10000001, 'Copia de DNI y título', 'Resistencia', '2024-02-20',
-     'Resistencia', '2024-02-21', 'Educación', 'Docente', 'Nivel 1',
-     'Superior', '0001', '2024-02-28', 'Empleado SAGP', '2024-03-01', 'Empleado DGP');
+CREATE TABLE importacion_log (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  fecha_hora     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  usuario_id     INT NULL,
+  archivo        VARCHAR(120) NOT NULL,
+  nro_fila       INT NOT NULL,
+  dni_texto      VARCHAR(20) NULL,
+  motivo_error   VARCHAR(255) NOT NULL,
+  fila_original  TEXT NULL,
+  CONSTRAINT fk_implog_usuario FOREIGN KEY (usuario_id) REFERENCES usuario(id)
+) ENGINE=InnoDB;
 
-INSERT INTO unidad_educativa
-    (numero, descripcion, codigo_oficina, codigo_anexo, nivel_modalidad, categoria, zona, localidad_paraje) VALUES
-    ('101', 'Instituto Superior de Formación Técnica (ficticio)', '0001', '00', 'Superior', '1ra', 'Urbana', 'Resistencia');
+CREATE TABLE auditoria (
+  id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+  fecha_hora      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  usuario_id      INT NOT NULL,
+  accion          ENUM('ALTA','MODIFICACION','ANULACION','BAJA') NOT NULL,
+  tabla           VARCHAR(60) NOT NULL,
+  registro_id     VARCHAR(40) NOT NULL,
+  dni_afectado    VARCHAR(10) NULL,
+  valor_anterior  JSON NULL,
+  valor_nuevo     JSON NULL,
+  ip              VARCHAR(45) NULL,
+  KEY idx_aud_fecha (fecha_hora),
+  KEY idx_aud_tabla_reg (tabla, registro_id),
+  KEY idx_aud_dni (dni_afectado),
+  CONSTRAINT fk_aud_usuario FOREIGN KEY (usuario_id) REFERENCES usuario(id)
+) ENGINE=InnoDB;
+-- =============================================================================
+-- 6. FUNCIONES Y REGLAS DE NEGOCIO (triggers)
+-- Requieren MySQL 8.0.16+ / MariaDB 10.2+. Si el servidor tiene el log binario activo y el
+-- usuario no es SUPER, hace falta: SET GLOBAL log_bin_trust_function_creators = 1;
+-- =============================================================================
+DELIMITER $$
 
-INSERT INTO cargo (cod, descripcion, es_docente) VALUES
-    ('166', 'hs catedras', TRUE),    -- id 1
-    ('165', 'BEDEL',       FALSE),   -- id 2
-    ('155', 'SECRETARIA',  FALSE);   -- id 3
+-- Usuario que realiza la operación. La aplicación debe ejecutar, al abrir cada conexión
+-- o request:  SET @usuario_id = <id del usuario>;   Si no lo hace, se registra a 'sistema'.
+CREATE FUNCTION fn_usuario_actual() RETURNS INT
+READS SQL DATA
+BEGIN
+  RETURN COALESCE(@usuario_id, (SELECT id FROM usuario WHERE username = 'sistema'));
+END$$
 
-INSERT INTO carrera (nombre, plan_estudio, anio_plan) VALUES
-    ('Tecnicatura en Desarrollo de Software', 'Plan 2020', 2020),
-    ('Tecnicatura en Redes',                  'Plan 2019', 2019);
+-- 1 si la fecha está en un día o mes cerrado (RN-06). Un período REABIERTO permite editar.
+CREATE FUNCTION fn_periodo_cerrado(p_fecha DATE) RETURNS TINYINT(1)
+READS SQL DATA
+BEGIN
+  RETURN EXISTS (SELECT 1 FROM cierre_periodo
+                  WHERE estado = 'CERRADO'
+                    AND ((tipo = 'DIA' AND periodo = p_fecha)
+                      OR (tipo = 'MES' AND periodo = DATE_FORMAT(p_fecha, '%Y-%m-01'))));
+END$$
 
-INSERT INTO espacio_curricular (nombre, carrera_id) VALUES
-    ('Programación III',      1),
-    ('Base de Datos',         1),
-    ('Redes de Computadoras', 2);
+-- 1 si la fecha cae dentro de la vigencia de la designación (RN-09).
+CREATE FUNCTION fn_vigente_en(p_designacion INT, p_fecha DATE) RETURNS TINYINT(1)
+READS SQL DATA
+BEGIN
+  DECLARE v_n INT; DECLARE v_desde DATE; DECLARE v_hasta DATE;
+  SELECT COUNT(*), MIN(desde), MIN(hasta) INTO v_n, v_desde, v_hasta
+    FROM designacion WHERE id = p_designacion;
+  IF v_n = 0 THEN RETURN 0; END IF;
+  RETURN (v_desde IS NULL OR p_fecha >= v_desde) AND (v_hasta IS NULL OR p_fecha <= v_hasta);
+END$$
 
-INSERT INTO especialidad (titulo) VALUES
-    ('Analista de Sistemas'),      -- id 1
-    ('Técnico en Redes');          -- id 2
+-- ---------------------------------------------------------------------------
+-- Asistencia: vigencia de la designación (RN-09) y cierre de períodos (RN-06)
+-- ---------------------------------------------------------------------------
+CREATE TRIGGER trg_asistencia_bi BEFORE INSERT ON asistencia
+FOR EACH ROW
+BEGIN
+  IF NEW.estado = 'I' AND NEW.estado_justificacion IS NULL THEN
+    SET NEW.estado_justificacion = 'INJUSTIFICADA';
+  END IF;
+  IF NOT fn_vigente_en(NEW.designacion_id, NEW.fecha) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'RN-09: la fecha esta fuera de la vigencia de la designacion';
+  END IF;
+  IF fn_periodo_cerrado(NEW.fecha) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'RN-06: el dia o el mes esta cerrado; hay que reabrirlo para modificar';
+  END IF;
+END$$
 
-INSERT INTO personal_especialidad (dni, especialidad_id) VALUES
-    (10000001, 1),
-    (10000002, 1),
-    (10000002, 2);
+CREATE TRIGGER trg_asistencia_bu BEFORE UPDATE ON asistencia
+FOR EACH ROW
+BEGIN
+  IF NEW.designacion_id <> OLD.designacion_id OR NEW.fecha <> OLD.fecha THEN
+    IF NOT fn_vigente_en(NEW.designacion_id, NEW.fecha) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'RN-09: la fecha esta fuera de la vigencia de la designacion';
+    END IF;
+  END IF;
+  IF fn_periodo_cerrado(OLD.fecha) OR fn_periodo_cerrado(NEW.fecha) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'RN-06: el dia o el mes esta cerrado; hay que reabrirlo para modificar';
+  END IF;
+END$$
 
--- Códigos de motivo FICTICIOS (los reales están en el instructivo)
-INSERT INTO motivo (codigo, descripcion) VALUES
-    ('00001', 'Vacante (ficticio)'),
-    ('00002', 'Licencia del titular (ficticio)');
+CREATE TRIGGER trg_asistencia_bd BEFORE DELETE ON asistencia
+FOR EACH ROW
+BEGIN
+  IF fn_periodo_cerrado(OLD.fecha) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'RN-06: el dia o el mes esta cerrado; hay que reabrirlo para modificar';
+  END IF;
+END$$
 
-INSERT INTO licencia_articulo
-    (cod_licencia, articulo, clase, tipo_licencia, categoria_informe, sit_rev, goce_haberes, autoridad, plazo) VALUES
-    ('01.02.01', '309 B-2)', 'Licencia', 'ENFERMEDAD LARGO TRATAMIENTO, LESIÓN GRAVE O MOTIVO DE PROFILAXIS Y SEGURIDAD',
-        'Largo tratamiento', 'Titular',  'Con goce de haberes', 'Director', 'Dos (2) años'),
-    ('01.02.07', '340 B)',   'Licencia', 'ENFERMEDAD LARGO TRATAMIENTO, LESIÓN GRAVE O MOTIVO DE PROFILAXIS Y SEGURIDAD',
-        'Largo tratamiento', 'Suplente', 'Con goce de haberes', 'Director', 'Dos (2) años'),
-    ('01.01.04', '340-A',    'Licencia', 'ENFERMEDAD O LESION COMUN',
-        'Enfermedad común',  'Suplente', 'Con goce de haberes', 'Director',
-        '15 días por año, antig. > 4 meses; 5 días otros casos');
--- Los códigos de PERMISO e INASISTENCIA se cargan igual, con clase = 'Permiso'
--- o 'Inasistencia' (hay que tomarlos de la tabla de códigos oficial).
+-- ---------------------------------------------------------------------------
+-- Licencias: vigencia (RN-09), sin superposición y tipo correcto de disposición
+-- ---------------------------------------------------------------------------
+CREATE PROCEDURE sp_validar_licencia(IN p_id INT, IN p_designacion INT, IN p_desde DATE,
+                                     IN p_hasta DATE, IN p_anulada TINYINT,
+                                     IN p_interna INT, IN p_externa INT)
+BEGIN
+  DECLARE v_tipo VARCHAR(10);
+  IF NOT fn_vigente_en(p_designacion, p_desde) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'RN-09: la licencia empieza fuera de la vigencia de la designacion';
+  END IF;
+  IF p_anulada = 0 AND EXISTS (
+       SELECT 1 FROM licencia_otorgada
+        WHERE designacion_id = p_designacion AND anulada = 0 AND id <> COALESCE(p_id, 0)
+          AND desde <= COALESCE(p_hasta, '9999-12-31')
+          AND COALESCE(hasta, '9999-12-31') >= p_desde) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La designacion ya tiene una licencia que se superpone con ese periodo';
+  END IF;
+  IF p_interna IS NOT NULL THEN
+    SELECT tipo INTO v_tipo FROM disposicion WHERE id = p_interna;
+    IF v_tipo IS NULL OR v_tipo <> 'INTERNA' THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'disposicion_interna_id debe apuntar a una disposicion INTERNA';
+    END IF;
+  END IF;
+  IF p_externa IS NOT NULL THEN
+    SELECT tipo INTO v_tipo FROM disposicion WHERE id = p_externa;
+    IF v_tipo IS NULL OR v_tipo <> 'EXTERNA' THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'resolucion_externa_id debe apuntar a una resolucion EXTERNA';
+    END IF;
+  END IF;
+END$$
 
-INSERT INTO designacion
-    (dni, cargo_id, espacio_curricular_id, unidad_educativa_id, especialidad_id,
-     sit_rev, anio_curso, division_seccion, turno, hs_catedra, jornada,
-     motivo_id, motivo_instrumento_legal,
-     norma_tipo, norma_nro, norma_anio, org_emisor, desde, hasta, pof, anio_pof)
-VALUES
-    (10000001, 1, 1,    1, 1,    'Titular', '2do', 'A', 'Noche', 6, 'Simple',
-        1, 'Res. 10/2024',
-        'Resolución', '123', 2024, 'Ministerio', '2024-03-01', NULL, 'POF-1', 2026),
-    (10000003, 2, NULL, 1, NULL, 'Titular', NULL,  NULL, 'Noche', NULL, 'Simple',
-        1, 'Res. 11/2023',
-        'Resolución', '789', 2023, 'Ministerio', '2023-03-01', NULL, 'POF-3', 2026);
+CREATE TRIGGER trg_licencia_bi BEFORE INSERT ON licencia_otorgada
+FOR EACH ROW
+BEGIN
+  CALL sp_validar_licencia(NULL, NEW.designacion_id, NEW.desde, NEW.hasta, NEW.anulada,
+                           NEW.disposicion_interna_id, NEW.resolucion_externa_id);
+END$$
 
--- La titular (designación 1) presenta una licencia por largo tratamiento
-INSERT INTO licencia_otorgada
-    (designacion_id, articulo_id, sit_rev, disp_tipo, disp_oficina, disp_numero, disp_anio,
-     sello_regional_as, justifica, desde, hasta) VALUES
-    (1, 1, 'Titular', 'DISPOSICIÓN', '0001', '321', 2026, 'A.S. 55 A', NULL, '2026-04-01', '2026-04-30');
+CREATE TRIGGER trg_licencia_bu BEFORE UPDATE ON licencia_otorgada
+FOR EACH ROW
+BEGIN
+  CALL sp_validar_licencia(NEW.id, NEW.designacion_id, NEW.desde, NEW.hasta, NEW.anulada,
+                           NEW.disposicion_interna_id, NEW.resolucion_externa_id);
+END$$
 
--- Su suplente se designa con resolución propia, inicio y fin
--- (reemplaza a la designación 1 por la licencia 1: DP-01, "Datos del reemplazado")
-INSERT INTO designacion
-    (dni, cargo_id, espacio_curricular_id, unidad_educativa_id, especialidad_id,
-     suple_licencia_id, reemplazado_designacion_id, sit_rev,
-     anio_curso, division_seccion, turno, hs_catedra, jornada,
-     disp_alta_nro, sello_regional_as, motivo_id, motivo_instrumento_legal,
-     norma_tipo, norma_nro, norma_anio, org_emisor, desde, hasta, pof, anio_pof)
-VALUES
-    (10000002, 1, 1, 1, 1,
-     1, 1, 'Suplente',
-     '2do', 'A', 'Noche', 6, 'Simple',
-     '77', 'A.S. 55 A', 2, 'Disp. 321/2026',
-     'Resolución', '456', 2026, 'Dirección', '2026-04-01', '2026-04-30', 'POF-2', 2026);
+-- ---------------------------------------------------------------------------
+-- La bitácora es inalterable (RF-20): ni UPDATE ni DELETE.
+-- ---------------------------------------------------------------------------
+CREATE TRIGGER trg_auditoria_no_update BEFORE UPDATE ON auditoria
+FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'auditoria es inalterable: UPDATE no permitido';
+END$$
 
-INSERT INTO horario (designacion_id, dia, horas_catedra, hora_inicio, hora_fin) VALUES
-    (1, 'Lunes',   3, '18:00', '20:15'),
-    (1, 'Jueves',  3, '18:00', '20:15'),
-    (2, 'Lunes',   6, '18:00', '23:00'),
-    (3, 'Lunes',   3, '18:00', '20:15'),
-    (3, 'Jueves',  3, '18:00', '20:15');
+CREATE TRIGGER trg_auditoria_no_delete BEFORE DELETE ON auditoria
+FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'auditoria es inalterable: DELETE no permitido';
+END$$
 
-INSERT INTO asistencia
-    (designacion_id, fecha, estado, horas_inasistidas, licencia_otorgada_id, observaciones) VALUES
-    (1, '2026-04-06', 'Licencia', 3, 1,    'Licencia por largo tratamiento'),
-    (3, '2026-04-06', 'Presente', 0, NULL, NULL),
-    (2, '2026-04-06', 'Ausente',  2, NULL, 'Retiro anticipado'),
-    (3, '2026-04-09', 'Presente', 0, NULL, NULL);
+DELIMITER ;
+-- =============================================================================
+-- 7. AUDITORÍA AUTOMÁTICA (RF-20)
+-- Cada alta, modificación, anulación y baja de las tablas principales queda en `auditoria`
+-- con usuario (@usuario_id), fecha/hora y los valores anterior y nuevo en JSON.
+-- Las cargas masivas sin @usuario_id se registran a nombre del usuario 'sistema'.
+-- =============================================================================
+DELIMITER $$
 
--- =====================================================================
--- 8. Consultas de ejemplo para los informes
--- =====================================================================
+CREATE TRIGGER trg_aud_personal_ai AFTER INSERT ON personal
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'ALTA', 'personal', NEW.dni, NEW.dni, NULL, JSON_OBJECT('dni', NEW.dni, 'tipo_documento', NEW.tipo_documento, 'apellido', NEW.apellido, 'nombres', NEW.nombres, 'sexo', NEW.sexo, 'fecha_nacimiento', NEW.fecha_nacimiento, 'estado_civil', NEW.estado_civil, 'nacionalidad', NEW.nacionalidad, 'nro_dgi', NEW.nro_dgi, 'nro_dgr', NEW.nro_dgr, 'domicilio_calle', NEW.domicilio_calle, 'barrio', NEW.barrio, 'localidad', NEW.localidad, 'codigo_postal', NEW.codigo_postal, 'provincia', NEW.provincia, 'telefono', NEW.telefono, 'email', NEW.email));
+END$$
 
--- 8.1 Quién ejerce qué cargo, en qué materia/carrera y cuándo
---     (los bedeles aparecen sin materia ni carrera)
-SELECT p.apellido_nombre,
-       cg.descripcion  AS cargo,
-       c.nombre        AS carrera,
-       e.nombre        AS materia,
-       g.sit_rev,
-       h.dia,
-       h.horas_catedra
-FROM designacion g
-JOIN personal p                 ON p.dni  = g.dni
-JOIN cargo cg                   ON cg.id  = g.cargo_id
-LEFT JOIN espacio_curricular e  ON e.id   = g.espacio_curricular_id
-LEFT JOIN carrera c             ON c.id   = e.carrera_id
-LEFT JOIN horario h             ON h.designacion_id = g.id
-ORDER BY p.apellido_nombre, h.dia;
+CREATE TRIGGER trg_aud_personal_au AFTER UPDATE ON personal
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'MODIFICACION', 'personal', NEW.dni, NEW.dni, JSON_OBJECT('dni', OLD.dni, 'tipo_documento', OLD.tipo_documento, 'apellido', OLD.apellido, 'nombres', OLD.nombres, 'sexo', OLD.sexo, 'fecha_nacimiento', OLD.fecha_nacimiento, 'estado_civil', OLD.estado_civil, 'nacionalidad', OLD.nacionalidad, 'nro_dgi', OLD.nro_dgi, 'nro_dgr', OLD.nro_dgr, 'domicilio_calle', OLD.domicilio_calle, 'barrio', OLD.barrio, 'localidad', OLD.localidad, 'codigo_postal', OLD.codigo_postal, 'provincia', OLD.provincia, 'telefono', OLD.telefono, 'email', OLD.email), JSON_OBJECT('dni', NEW.dni, 'tipo_documento', NEW.tipo_documento, 'apellido', NEW.apellido, 'nombres', NEW.nombres, 'sexo', NEW.sexo, 'fecha_nacimiento', NEW.fecha_nacimiento, 'estado_civil', NEW.estado_civil, 'nacionalidad', NEW.nacionalidad, 'nro_dgi', NEW.nro_dgi, 'nro_dgr', NEW.nro_dgr, 'domicilio_calle', NEW.domicilio_calle, 'barrio', NEW.barrio, 'localidad', NEW.localidad, 'codigo_postal', NEW.codigo_postal, 'provincia', NEW.provincia, 'telefono', NEW.telefono, 'email', NEW.email));
+END$$
 
--- 8.2 Informe de asistencia DIARIA por materia (docentes y no docentes)
-SELECT a.fecha,
-       p.apellido_nombre,
-       cg.descripcion               AS cargo,
-       COALESCE(e.nombre, '(sin materia)') AS materia,
-       a.estado,
-       a.horas_inasistidas
-FROM asistencia a
-JOIN designacion g              ON g.id   = a.designacion_id
-JOIN personal p                 ON p.dni  = g.dni
-JOIN cargo cg                   ON cg.id  = g.cargo_id
-LEFT JOIN espacio_curricular e  ON e.id   = g.espacio_curricular_id
-WHERE a.fecha = '2026-04-06'
-ORDER BY materia, p.apellido_nombre;
+CREATE TRIGGER trg_aud_personal_ad AFTER DELETE ON personal
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'BAJA', 'personal', OLD.dni, OLD.dni, JSON_OBJECT('dni', OLD.dni, 'tipo_documento', OLD.tipo_documento, 'apellido', OLD.apellido, 'nombres', OLD.nombres, 'sexo', OLD.sexo, 'fecha_nacimiento', OLD.fecha_nacimiento, 'estado_civil', OLD.estado_civil, 'nacionalidad', OLD.nacionalidad, 'nro_dgi', OLD.nro_dgi, 'nro_dgr', OLD.nro_dgr, 'domicilio_calle', OLD.domicilio_calle, 'barrio', OLD.barrio, 'localidad', OLD.localidad, 'codigo_postal', OLD.codigo_postal, 'provincia', OLD.provincia, 'telefono', OLD.telefono, 'email', OLD.email), NULL);
+END$$
 
--- 8.3 Informe de asistencia MENSUAL por materia (docentes y no docentes)
-SELECT YEAR(a.fecha)  AS anio,
-       MONTH(a.fecha) AS mes,
-       IF(cg.es_docente, 'Docente', 'No docente') AS tipo_personal,
-       COALESCE(e.nombre, '(sin materia)')        AS materia,
-       p.apellido_nombre,
-       SUM(a.estado = 'Presente')                 AS dias_presente,
-       SUM(a.estado = 'Ausente')                  AS dias_ausente,
-       SUM(a.estado = 'Licencia')                 AS dias_licencia,
-       SUM(a.horas_inasistidas)                   AS horas_inasistidas
-FROM asistencia a
-JOIN designacion g              ON g.id   = a.designacion_id
-JOIN personal p                 ON p.dni  = g.dni
-JOIN cargo cg                   ON cg.id  = g.cargo_id
-LEFT JOIN espacio_curricular e  ON e.id   = g.espacio_curricular_id
-WHERE a.fecha >= '2026-04-01' AND a.fecha < '2026-05-01'
-GROUP BY anio, mes, tipo_personal, materia, p.apellido_nombre
-ORDER BY tipo_personal, materia, p.apellido_nombre;
+CREATE TRIGGER trg_aud_designacion_ai AFTER INSERT ON designacion
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'ALTA', 'designacion', NEW.id, NEW.dni, NULL, JSON_OBJECT('id', NEW.id, 'dni', NEW.dni, 'cargo_id', NEW.cargo_id, 'espacio_curricular_id', NEW.espacio_curricular_id, 'unidad_educativa_id', NEW.unidad_educativa_id, 'especialidad_id', NEW.especialidad_id, 'suple_licencia_id', NEW.suple_licencia_id, 'reemplazado_designacion_id', NEW.reemplazado_designacion_id, 'sit_rev', NEW.sit_rev, 'anio_curso', NEW.anio_curso, 'division_seccion', NEW.division_seccion, 'turno', NEW.turno, 'hs_catedra', NEW.hs_catedra, 'jornada', NEW.jornada, 'disp_alta_nro', NEW.disp_alta_nro, 'sello_regional_as', NEW.sello_regional_as, 'motivo_id', NEW.motivo_id, 'motivo_instrumento_legal', NEW.motivo_instrumento_legal, 'norma_tipo', NEW.norma_tipo, 'norma_nro', NEW.norma_nro, 'norma_anio', NEW.norma_anio, 'org_emisor', NEW.org_emisor, 'desde', NEW.desde, 'hasta', NEW.hasta, 'pof', NEW.pof, 'anio_pof', NEW.anio_pof, 'novedad', NEW.novedad, 'observaciones', NEW.observaciones));
+END$$
 
--- 8.4 Informe MENSUAL de licencias por enfermedad, por cargo
---     (categorías del informe: enfermedad común y largo tratamiento)
-SELECT cg.cod,
-       cg.descripcion               AS cargo,
-       la.categoria_informe,
-       COUNT(DISTINCT lo.id)        AS licencias,
-       COUNT(a.id)                  AS dias_con_licencia,
-       COALESCE(SUM(a.horas_inasistidas), 0) AS horas_inasistidas
-FROM licencia_otorgada lo
-JOIN licencia_articulo la ON la.id = lo.articulo_id
-JOIN designacion g        ON g.id  = lo.designacion_id
-JOIN cargo cg             ON cg.id = g.cargo_id
-LEFT JOIN asistencia a    ON a.licencia_otorgada_id = lo.id
-                         AND a.fecha >= '2026-04-01' AND a.fecha < '2026-05-01'
-WHERE la.categoria_informe IN ('Enfermedad común', 'Largo tratamiento')
-  AND lo.desde < '2026-05-01'
-  AND COALESCE(lo.hasta, '9999-12-31') >= '2026-04-01'
-GROUP BY cg.id, cg.cod, cg.descripcion, la.categoria_informe
-ORDER BY cg.cod, la.categoria_informe;
+CREATE TRIGGER trg_aud_designacion_au AFTER UPDATE ON designacion
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'MODIFICACION', 'designacion', NEW.id, NEW.dni, JSON_OBJECT('id', OLD.id, 'dni', OLD.dni, 'cargo_id', OLD.cargo_id, 'espacio_curricular_id', OLD.espacio_curricular_id, 'unidad_educativa_id', OLD.unidad_educativa_id, 'especialidad_id', OLD.especialidad_id, 'suple_licencia_id', OLD.suple_licencia_id, 'reemplazado_designacion_id', OLD.reemplazado_designacion_id, 'sit_rev', OLD.sit_rev, 'anio_curso', OLD.anio_curso, 'division_seccion', OLD.division_seccion, 'turno', OLD.turno, 'hs_catedra', OLD.hs_catedra, 'jornada', OLD.jornada, 'disp_alta_nro', OLD.disp_alta_nro, 'sello_regional_as', OLD.sello_regional_as, 'motivo_id', OLD.motivo_id, 'motivo_instrumento_legal', OLD.motivo_instrumento_legal, 'norma_tipo', OLD.norma_tipo, 'norma_nro', OLD.norma_nro, 'norma_anio', OLD.norma_anio, 'org_emisor', OLD.org_emisor, 'desde', OLD.desde, 'hasta', OLD.hasta, 'pof', OLD.pof, 'anio_pof', OLD.anio_pof, 'novedad', OLD.novedad, 'observaciones', OLD.observaciones), JSON_OBJECT('id', NEW.id, 'dni', NEW.dni, 'cargo_id', NEW.cargo_id, 'espacio_curricular_id', NEW.espacio_curricular_id, 'unidad_educativa_id', NEW.unidad_educativa_id, 'especialidad_id', NEW.especialidad_id, 'suple_licencia_id', NEW.suple_licencia_id, 'reemplazado_designacion_id', NEW.reemplazado_designacion_id, 'sit_rev', NEW.sit_rev, 'anio_curso', NEW.anio_curso, 'division_seccion', NEW.division_seccion, 'turno', NEW.turno, 'hs_catedra', NEW.hs_catedra, 'jornada', NEW.jornada, 'disp_alta_nro', NEW.disp_alta_nro, 'sello_regional_as', NEW.sello_regional_as, 'motivo_id', NEW.motivo_id, 'motivo_instrumento_legal', NEW.motivo_instrumento_legal, 'norma_tipo', NEW.norma_tipo, 'norma_nro', NEW.norma_nro, 'norma_anio', NEW.norma_anio, 'org_emisor', NEW.org_emisor, 'desde', NEW.desde, 'hasta', NEW.hasta, 'pof', NEW.pof, 'anio_pof', NEW.anio_pof, 'novedad', NEW.novedad, 'observaciones', NEW.observaciones));
+END$$
 
--- 8.5 Formulario Nº 1: datos del agente + trámite de ingreso
-SELECT p.apellido, p.nombres, p.dni, p.tipo_documento, p.sexo,
-       DAY(p.fecha_nacimiento)   AS dia,
-       MONTH(p.fecha_nacimiento) AS mes,
-       YEAR(p.fecha_nacimiento)  AS anio,
-       p.estado_civil, p.nacionalidad, p.nro_dgi, p.nro_dgr,
-       p.domicilio_calle, p.barrio, p.localidad, p.codigo_postal,
-       p.provincia, p.telefono,
-       i.documentacion_adjunta, i.lugar_presentacion, i.fecha_presentacion,
-       i.lugar_recepcion, i.fecha_recepcion,
-       i.jurisdiccion, i.escalafon, i.item_nivel, i.modalidad, i.oficina,
-       i.sagp_fecha_ingreso_bd, i.sagp_cargo,
-       i.dgp_fecha_recibido, i.dgp_recibio
-FROM personal p
-LEFT JOIN ingreso_agente i ON i.dni = p.dni
-WHERE p.dni = 10000001;
+CREATE TRIGGER trg_aud_designacion_ad AFTER DELETE ON designacion
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'BAJA', 'designacion', OLD.id, OLD.dni, JSON_OBJECT('id', OLD.id, 'dni', OLD.dni, 'cargo_id', OLD.cargo_id, 'espacio_curricular_id', OLD.espacio_curricular_id, 'unidad_educativa_id', OLD.unidad_educativa_id, 'especialidad_id', OLD.especialidad_id, 'suple_licencia_id', OLD.suple_licencia_id, 'reemplazado_designacion_id', OLD.reemplazado_designacion_id, 'sit_rev', OLD.sit_rev, 'anio_curso', OLD.anio_curso, 'division_seccion', OLD.division_seccion, 'turno', OLD.turno, 'hs_catedra', OLD.hs_catedra, 'jornada', OLD.jornada, 'disp_alta_nro', OLD.disp_alta_nro, 'sello_regional_as', OLD.sello_regional_as, 'motivo_id', OLD.motivo_id, 'motivo_instrumento_legal', OLD.motivo_instrumento_legal, 'norma_tipo', OLD.norma_tipo, 'norma_nro', OLD.norma_nro, 'norma_anio', OLD.norma_anio, 'org_emisor', OLD.org_emisor, 'desde', OLD.desde, 'hasta', OLD.hasta, 'pof', OLD.pof, 'anio_pof', OLD.anio_pof, 'novedad', OLD.novedad, 'observaciones', OLD.observaciones), NULL);
+END$$
 
--- 8.6 Formulario DP-01: disposición de alta (con datos del reemplazado si es suplente)
-SELECT g.sit_rev                     AS tipo,          -- Interino / Suplente / Titular
-       g.disp_alta_nro, g.sello_regional_as,
-       g.desde AS alta_desde, g.hasta AS alta_hasta,
-       p.apellido, p.nombres, p.dni, p.sexo,
-       u.codigo_oficina, u.codigo_anexo,
-       u.numero AS unidad_numero, u.descripcion AS unidad_descripcion,
-       u.nivel_modalidad, u.categoria, u.zona, g.jornada, u.localidad_paraje,
-       cg.cod AS cod_cargo, cg.descripcion AS cargo,
-       g.anio_curso, g.division_seccion, g.turno, g.hs_catedra,
-       es.titulo AS especialidad, ca.plan_estudio, e.nombre AS asignatura,
-       m.codigo AS cod_motivo, m.descripcion AS motivo, g.motivo_instrumento_legal,
-       rp.dni AS reemplazado_dni, rp.sexo AS reemplazado_sexo,
-       rp.apellido AS reemplazado_apellido, rp.nombres AS reemplazado_nombres
-FROM designacion g
-JOIN personal p                 ON p.dni = g.dni
-JOIN unidad_educativa u         ON u.id  = g.unidad_educativa_id
-JOIN cargo cg                   ON cg.id = g.cargo_id
-LEFT JOIN especialidad es       ON es.id = g.especialidad_id
-LEFT JOIN espacio_curricular e  ON e.id  = g.espacio_curricular_id
-LEFT JOIN carrera ca            ON ca.id = e.carrera_id
-LEFT JOIN motivo m              ON m.id  = g.motivo_id
-LEFT JOIN designacion gr        ON gr.id = g.reemplazado_designacion_id
-LEFT JOIN personal rp           ON rp.dni = gr.dni
-WHERE g.sit_rev IN ('Interino', 'Suplente')
-ORDER BY g.desde;
+CREATE TRIGGER trg_aud_licencia_otorgada_ai AFTER INSERT ON licencia_otorgada
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'ALTA', 'licencia_otorgada', NEW.id, (SELECT dni FROM designacion WHERE id = NEW.designacion_id), NULL, JSON_OBJECT('id', NEW.id, 'designacion_id', NEW.designacion_id, 'articulo_id', NEW.articulo_id, 'sit_rev', NEW.sit_rev, 'disposicion_interna_id', NEW.disposicion_interna_id, 'resolucion_externa_id', NEW.resolucion_externa_id, 'nro_formulario_papel', NEW.nro_formulario_papel, 'fecha_recepcion_formulario', NEW.fecha_recepcion_formulario, 'sello_regional_as', NEW.sello_regional_as, 'justifica', NEW.justifica, 'desde', NEW.desde, 'hasta', NEW.hasta, 'anulada', NEW.anulada, 'observaciones', NEW.observaciones));
+END$$
 
--- 8.7 Formulario DL-01: disposición de licencia / permiso / inasistencia
-SELECT lo.disp_numero, lo.disp_anio, lo.sello_regional_as,
-       p.apellido, p.nombres, p.dni, p.sexo,
-       u.codigo_oficina, u.codigo_anexo,
-       u.numero AS unidad_numero, u.descripcion AS unidad_descripcion,
-       u.nivel_modalidad,
-       cg.cod AS cod_cargo, cg.descripcion AS cargo,
-       g.anio_curso, g.division_seccion, g.turno, g.hs_catedra,
-       e.nombre AS asignatura,
-       g.sit_rev,                                  -- Titular / Interino / Suplente
-       la.clase,                                   -- Licencia / Permiso / Inasistencia
-       la.cod_licencia, la.articulo, la.tipo_licencia AS descripcion,
-       lo.justifica,
-       la.goce_haberes AS forma_de_pago,
-       lo.desde, lo.hasta
-FROM licencia_otorgada lo
-JOIN licencia_articulo la       ON la.id = lo.articulo_id
-JOIN designacion g              ON g.id  = lo.designacion_id
-JOIN personal p                 ON p.dni = g.dni
-JOIN unidad_educativa u         ON u.id  = g.unidad_educativa_id
-JOIN cargo cg                   ON cg.id = g.cargo_id
-LEFT JOIN espacio_curricular e  ON e.id  = g.espacio_curricular_id
-ORDER BY lo.disp_anio, lo.disp_numero, lo.id;
+CREATE TRIGGER trg_aud_licencia_otorgada_au AFTER UPDATE ON licencia_otorgada
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), IF(NEW.anulada = 1 AND OLD.anulada = 0, 'ANULACION', 'MODIFICACION'), 'licencia_otorgada', NEW.id, (SELECT dni FROM designacion WHERE id = NEW.designacion_id), JSON_OBJECT('id', OLD.id, 'designacion_id', OLD.designacion_id, 'articulo_id', OLD.articulo_id, 'sit_rev', OLD.sit_rev, 'disposicion_interna_id', OLD.disposicion_interna_id, 'resolucion_externa_id', OLD.resolucion_externa_id, 'nro_formulario_papel', OLD.nro_formulario_papel, 'fecha_recepcion_formulario', OLD.fecha_recepcion_formulario, 'sello_regional_as', OLD.sello_regional_as, 'justifica', OLD.justifica, 'desde', OLD.desde, 'hasta', OLD.hasta, 'anulada', OLD.anulada, 'observaciones', OLD.observaciones), JSON_OBJECT('id', NEW.id, 'designacion_id', NEW.designacion_id, 'articulo_id', NEW.articulo_id, 'sit_rev', NEW.sit_rev, 'disposicion_interna_id', NEW.disposicion_interna_id, 'resolucion_externa_id', NEW.resolucion_externa_id, 'nro_formulario_papel', NEW.nro_formulario_papel, 'fecha_recepcion_formulario', NEW.fecha_recepcion_formulario, 'sello_regional_as', NEW.sello_regional_as, 'justifica', NEW.justifica, 'desde', NEW.desde, 'hasta', NEW.hasta, 'anulada', NEW.anulada, 'observaciones', NEW.observaciones));
+END$$
+
+CREATE TRIGGER trg_aud_licencia_otorgada_ad AFTER DELETE ON licencia_otorgada
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'BAJA', 'licencia_otorgada', OLD.id, (SELECT dni FROM designacion WHERE id = OLD.designacion_id), JSON_OBJECT('id', OLD.id, 'designacion_id', OLD.designacion_id, 'articulo_id', OLD.articulo_id, 'sit_rev', OLD.sit_rev, 'disposicion_interna_id', OLD.disposicion_interna_id, 'resolucion_externa_id', OLD.resolucion_externa_id, 'nro_formulario_papel', OLD.nro_formulario_papel, 'fecha_recepcion_formulario', OLD.fecha_recepcion_formulario, 'sello_regional_as', OLD.sello_regional_as, 'justifica', OLD.justifica, 'desde', OLD.desde, 'hasta', OLD.hasta, 'anulada', OLD.anulada, 'observaciones', OLD.observaciones), NULL);
+END$$
+
+CREATE TRIGGER trg_aud_asistencia_ai AFTER INSERT ON asistencia
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'ALTA', 'asistencia', NEW.id, (SELECT dni FROM designacion WHERE id = NEW.designacion_id), NULL, JSON_OBJECT('id', NEW.id, 'designacion_id', NEW.designacion_id, 'fecha', NEW.fecha, 'estado', NEW.estado, 'horas_inasistidas', NEW.horas_inasistidas, 'licencia_otorgada_id', NEW.licencia_otorgada_id, 'estado_justificacion', NEW.estado_justificacion, 'nro_formulario_papel', NEW.nro_formulario_papel, 'observaciones', NEW.observaciones));
+END$$
+
+CREATE TRIGGER trg_aud_asistencia_au AFTER UPDATE ON asistencia
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'MODIFICACION', 'asistencia', NEW.id, (SELECT dni FROM designacion WHERE id = NEW.designacion_id), JSON_OBJECT('id', OLD.id, 'designacion_id', OLD.designacion_id, 'fecha', OLD.fecha, 'estado', OLD.estado, 'horas_inasistidas', OLD.horas_inasistidas, 'licencia_otorgada_id', OLD.licencia_otorgada_id, 'estado_justificacion', OLD.estado_justificacion, 'nro_formulario_papel', OLD.nro_formulario_papel, 'observaciones', OLD.observaciones), JSON_OBJECT('id', NEW.id, 'designacion_id', NEW.designacion_id, 'fecha', NEW.fecha, 'estado', NEW.estado, 'horas_inasistidas', NEW.horas_inasistidas, 'licencia_otorgada_id', NEW.licencia_otorgada_id, 'estado_justificacion', NEW.estado_justificacion, 'nro_formulario_papel', NEW.nro_formulario_papel, 'observaciones', NEW.observaciones));
+END$$
+
+CREATE TRIGGER trg_aud_asistencia_ad AFTER DELETE ON asistencia
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'BAJA', 'asistencia', OLD.id, (SELECT dni FROM designacion WHERE id = OLD.designacion_id), JSON_OBJECT('id', OLD.id, 'designacion_id', OLD.designacion_id, 'fecha', OLD.fecha, 'estado', OLD.estado, 'horas_inasistidas', OLD.horas_inasistidas, 'licencia_otorgada_id', OLD.licencia_otorgada_id, 'estado_justificacion', OLD.estado_justificacion, 'nro_formulario_papel', OLD.nro_formulario_papel, 'observaciones', OLD.observaciones), NULL);
+END$$
+
+CREATE TRIGGER trg_aud_disposicion_ai AFTER INSERT ON disposicion
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'ALTA', 'disposicion', NEW.id, NEW.dni_beneficiario, NULL, JSON_OBJECT('id', NEW.id, 'tipo', NEW.tipo, 'dni_beneficiario', NEW.dni_beneficiario, 'oficina_codigo', NEW.oficina_codigo, 'anio', NEW.anio, 'numero', NEW.numero, 'org_emisor', NEW.org_emisor, 'fecha_emision', NEW.fecha_emision, 'periodo_mes', NEW.periodo_mes, 'anulada', NEW.anulada, 'observaciones', NEW.observaciones));
+END$$
+
+CREATE TRIGGER trg_aud_disposicion_au AFTER UPDATE ON disposicion
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), IF(NEW.anulada = 1 AND OLD.anulada = 0, 'ANULACION', 'MODIFICACION'), 'disposicion', NEW.id, NEW.dni_beneficiario, JSON_OBJECT('id', OLD.id, 'tipo', OLD.tipo, 'dni_beneficiario', OLD.dni_beneficiario, 'oficina_codigo', OLD.oficina_codigo, 'anio', OLD.anio, 'numero', OLD.numero, 'org_emisor', OLD.org_emisor, 'fecha_emision', OLD.fecha_emision, 'periodo_mes', OLD.periodo_mes, 'anulada', OLD.anulada, 'observaciones', OLD.observaciones), JSON_OBJECT('id', NEW.id, 'tipo', NEW.tipo, 'dni_beneficiario', NEW.dni_beneficiario, 'oficina_codigo', NEW.oficina_codigo, 'anio', NEW.anio, 'numero', NEW.numero, 'org_emisor', NEW.org_emisor, 'fecha_emision', NEW.fecha_emision, 'periodo_mes', NEW.periodo_mes, 'anulada', NEW.anulada, 'observaciones', NEW.observaciones));
+END$$
+
+CREATE TRIGGER trg_aud_disposicion_ad AFTER DELETE ON disposicion
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'BAJA', 'disposicion', OLD.id, OLD.dni_beneficiario, JSON_OBJECT('id', OLD.id, 'tipo', OLD.tipo, 'dni_beneficiario', OLD.dni_beneficiario, 'oficina_codigo', OLD.oficina_codigo, 'anio', OLD.anio, 'numero', OLD.numero, 'org_emisor', OLD.org_emisor, 'fecha_emision', OLD.fecha_emision, 'periodo_mes', OLD.periodo_mes, 'anulada', OLD.anulada, 'observaciones', OLD.observaciones), NULL);
+END$$
+
+CREATE TRIGGER trg_aud_cierre_periodo_ai AFTER INSERT ON cierre_periodo
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'ALTA', 'cierre_periodo', NEW.id, NULL, NULL, JSON_OBJECT('id', NEW.id, 'tipo', NEW.tipo, 'periodo', NEW.periodo, 'estado', NEW.estado, 'cerrado_por', NEW.cerrado_por, 'cerrado_en', NEW.cerrado_en, 'reabierto_por', NEW.reabierto_por, 'reabierto_en', NEW.reabierto_en, 'motivo_reapertura', NEW.motivo_reapertura));
+END$$
+
+CREATE TRIGGER trg_aud_cierre_periodo_au AFTER UPDATE ON cierre_periodo
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'MODIFICACION', 'cierre_periodo', NEW.id, NULL, JSON_OBJECT('id', OLD.id, 'tipo', OLD.tipo, 'periodo', OLD.periodo, 'estado', OLD.estado, 'cerrado_por', OLD.cerrado_por, 'cerrado_en', OLD.cerrado_en, 'reabierto_por', OLD.reabierto_por, 'reabierto_en', OLD.reabierto_en, 'motivo_reapertura', OLD.motivo_reapertura), JSON_OBJECT('id', NEW.id, 'tipo', NEW.tipo, 'periodo', NEW.periodo, 'estado', NEW.estado, 'cerrado_por', NEW.cerrado_por, 'cerrado_en', NEW.cerrado_en, 'reabierto_por', NEW.reabierto_por, 'reabierto_en', NEW.reabierto_en, 'motivo_reapertura', NEW.motivo_reapertura));
+END$$
+
+CREATE TRIGGER trg_aud_cierre_periodo_ad AFTER DELETE ON cierre_periodo
+FOR EACH ROW
+BEGIN
+  INSERT INTO auditoria (usuario_id, accion, tabla, registro_id, dni_afectado, valor_anterior, valor_nuevo)
+  VALUES (fn_usuario_actual(), 'BAJA', 'cierre_periodo', OLD.id, NULL, JSON_OBJECT('id', OLD.id, 'tipo', OLD.tipo, 'periodo', OLD.periodo, 'estado', OLD.estado, 'cerrado_por', OLD.cerrado_por, 'cerrado_en', OLD.cerrado_en, 'reabierto_por', OLD.reabierto_por, 'reabierto_en', OLD.reabierto_en, 'motivo_reapertura', OLD.motivo_reapertura), NULL);
+END$$
+
+DELIMITER ;
+-- =============================================================================
+-- 8. VISTAS DE CONSULTA (RF-12, RF-13, RF-17, RF-18)
+-- =============================================================================
+-- Desglose mensual por materia / cargo: días y horas afectadas.
+CREATE VIEW v_inasistencia_mensual AS
+SELECT p.dni, p.apellido_nombre, d.id AS designacion_id, c.descripcion AS cargo,
+       ec.nombre AS espacio_curricular, YEAR(a.fecha) AS anio, MONTH(a.fecha) AS mes,
+       SUM(a.estado = 'I')   AS dias_inasistencia,
+       SUM(a.estado = 'LIC') AS dias_licencia,
+       SUM(a.estado = 'LT')  AS dias_largo_tratamiento,
+       SUM(a.estado = 'PR')  AS dias_presente_retirado,
+       SUM(a.horas_inasistidas) AS horas_afectadas
+  FROM asistencia a
+  JOIN designacion d ON d.id = a.designacion_id
+  JOIN personal p    ON p.dni = d.dni
+  JOIN cargo c       ON c.id = d.cargo_id
+  LEFT JOIN espacio_curricular ec ON ec.id = d.espacio_curricular_id
+ WHERE a.estado <> 'P'
+ GROUP BY p.dni, p.apellido_nombre, d.id, c.descripcion, ec.nombre, YEAR(a.fecha), MONTH(a.fecha);
+
+-- Días de licencia usados por agente, artículo y año, frente al tope anual (RN-08).
+-- Cuenta una sola vez cada fecha aunque el docente tenga varias designaciones.
+-- Limitación: solo topes en DIAS "POR_ANIO"; no evalúa antigüedad ni topes por vez.
+CREATE VIEW v_licencia_acumulada AS
+SELECT d.dni, lo.articulo_id, la.cod_licencia, la.tipo_licencia, la.categoria_informe,
+       YEAR(a.fecha) AS anio,
+       COUNT(DISTINCT a.fecha) AS dias_usados,
+       la.tope_cantidad AS tope_anual,
+       CASE WHEN la.tope_unidad = 'DIAS' AND la.tope_periodo = 'POR_ANIO' AND la.tope_cantidad > 0
+            THEN ROUND(100 * COUNT(DISTINCT a.fecha) / la.tope_cantidad, 1) END AS porcentaje_tope
+  FROM asistencia a
+  JOIN licencia_otorgada lo ON lo.id = a.licencia_otorgada_id AND lo.anulada = 0
+  JOIN designacion d        ON d.id = lo.designacion_id
+  JOIN licencia_articulo la ON la.id = lo.articulo_id
+ WHERE a.estado IN ('LIC','LT')
+ GROUP BY d.dni, lo.articulo_id, la.cod_licencia, la.tipo_licencia, la.categoria_informe,
+          YEAR(a.fecha), la.tope_cantidad, la.tope_unidad, la.tope_periodo;
+
+-- Alertas preventivas (RF-18): agentes que alcanzaron el umbral configurado en parametro.
+CREATE VIEW v_alerta_topes AS
+SELECT v.*, p.apellido_nombre
+  FROM v_licencia_acumulada v
+  JOIN personal p ON p.dni = v.dni
+ WHERE v.porcentaje_tope IS NOT NULL
+   AND v.porcentaje_tope >= (SELECT CAST(valor AS DECIMAL(5,2)) FROM parametro WHERE clave = 'umbral_alerta_pct');
+
+-- =============================================================================
+-- 9. PROCEDIMIENTOS
+-- =============================================================================
+DELIMITER $$
+
+-- Propaga una licencia (RN-07, RF-14): marca LIC o LT en cada día hábil del período en que
+-- la designación tiene clase según su horario, con las horas afectadas (RF-13). Omite fines
+-- de semana, el calendario escolar (RF-10) y días fuera de la vigencia de la designación.
+-- Atención: usa una transacción propia (confirma la transacción abierta del llamador).
+CREATE PROCEDURE sp_propagar_licencia(IN p_licencia_id INT)
+BEGIN
+  DECLARE v_desig INT; DECLARE v_desde DATE; DECLARE v_hasta DATE; DECLARE v_anulada TINYINT;
+  DECLARE v_estado VARCHAR(3); DECLARE v_f DATE; DECLARE v_total INT DEFAULT 0;
+  DECLARE v_dia VARCHAR(3);
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN ROLLBACK; RESIGNAL; END;
+
+  SELECT lo.designacion_id, lo.desde, lo.hasta, lo.anulada,
+         IF(la.es_largo_tratamiento, 'LT', 'LIC')
+    INTO v_desig, v_desde, v_hasta, v_anulada, v_estado
+    FROM licencia_otorgada lo JOIN licencia_articulo la ON la.id = lo.articulo_id
+   WHERE lo.id = p_licencia_id;
+  IF v_desig IS NULL THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La licencia no existe';
+  END IF;
+  IF v_anulada = 1 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La licencia esta anulada';
+  END IF;
+  IF v_hasta IS NULL THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La licencia no tiene fecha hasta: no se puede propagar';
+  END IF;
+
+  START TRANSACTION;
+  SET v_f = v_desde;
+  WHILE v_f <= v_hasta DO
+    SET v_dia = ELT(WEEKDAY(v_f) + 1, 'LUN','MAR','MIE','JUE','VIE','SAB','DOM');
+    IF fn_vigente_en(v_desig, v_f)
+       AND NOT EXISTS (SELECT 1 FROM calendario_escolar WHERE fecha = v_f) THEN
+      INSERT INTO asistencia (designacion_id, fecha, estado, horas_inasistidas, licencia_otorgada_id)
+      SELECT v_desig, v_f, v_estado, SUM(h.horas_catedra), p_licencia_id
+        FROM horario h
+       WHERE h.designacion_id = v_desig AND h.dia = v_dia
+      HAVING COUNT(*) > 0
+      ON DUPLICATE KEY UPDATE estado = VALUES(estado), horas_inasistidas = VALUES(horas_inasistidas),
+                              licencia_otorgada_id = VALUES(licencia_otorgada_id),
+                              estado_justificacion = NULL;
+      SET v_total = v_total + ROW_COUNT();
+    END IF;
+    SET v_f = v_f + INTERVAL 1 DAY;
+  END WHILE;
+  COMMIT;
+  SELECT v_total AS filas_afectadas;
+END$$
+
+-- Numeración correlativa de disposiciones internas (RF-16, RN-11): una disposición por agente
+-- con licencias del mes sin disposición y con formulario en papel (RN-10), ordenadas
+-- alfabéticamente por apellido y nombre; la numeración continúa la del año y la oficina.
+-- Criterio propuesto (una disposición por agente y mes): confirmar con el cliente.
+CREATE PROCEDURE sp_asignar_disposiciones(IN p_anio SMALLINT, IN p_mes TINYINT, IN p_oficina VARCHAR(10))
+BEGIN
+  DECLARE v_done INT DEFAULT 0; DECLARE v_dni VARCHAR(10); DECLARE v_num INT; DECLARE v_id INT;
+  DECLARE v_ini DATE; DECLARE v_fin DATE;
+  DECLARE cur CURSOR FOR
+    SELECT p.dni FROM personal p
+     WHERE EXISTS (SELECT 1 FROM licencia_otorgada lo JOIN designacion d ON d.id = lo.designacion_id
+                    WHERE d.dni = p.dni AND lo.anulada = 0 AND lo.disposicion_interna_id IS NULL
+                      AND lo.nro_formulario_papel IS NOT NULL
+                      AND lo.desde <= v_fin AND COALESCE(lo.hasta, lo.desde) >= v_ini)
+     ORDER BY p.apellido, p.nombres, p.dni;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_done = 1;
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN ROLLBACK; RESIGNAL; END;
+
+  SET v_ini = STR_TO_DATE(CONCAT(p_anio, '-', p_mes, '-01'), '%Y-%m-%d');
+  SET v_fin = LAST_DAY(v_ini);
+  START TRANSACTION;
+  SELECT COALESCE(MAX(numero), 0) INTO v_num FROM disposicion
+   WHERE tipo = 'INTERNA' AND oficina_codigo = p_oficina AND anio = p_anio FOR UPDATE;
+
+  OPEN cur;
+  lp: LOOP
+    FETCH cur INTO v_dni;
+    IF v_done THEN LEAVE lp; END IF;
+    SET v_num = v_num + 1;
+    INSERT INTO disposicion (tipo, dni_beneficiario, oficina_codigo, anio, numero, fecha_emision, periodo_mes)
+    VALUES ('INTERNA', v_dni, p_oficina, p_anio, v_num, CURRENT_DATE, p_mes);
+    SET v_id = LAST_INSERT_ID();
+    UPDATE licencia_otorgada lo JOIN designacion d ON d.id = lo.designacion_id
+       SET lo.disposicion_interna_id = v_id
+     WHERE d.dni = v_dni AND lo.anulada = 0 AND lo.disposicion_interna_id IS NULL
+       AND lo.nro_formulario_papel IS NOT NULL
+       AND lo.desde <= v_fin AND COALESCE(lo.hasta, lo.desde) >= v_ini;
+  END LOOP;
+  CLOSE cur;
+  COMMIT;
+  SELECT COUNT(*) AS disposiciones_emitidas FROM disposicion
+   WHERE tipo = 'INTERNA' AND oficina_codigo = p_oficina AND anio = p_anio AND periodo_mes = p_mes;
+END$$
+
+DELIMITER ;
+
+-- =============================================================================
+-- 10. DATOS INICIALES (a confirmar con el cliente)
+-- =============================================================================
+INSERT INTO rol (codigo, nombre) VALUES
+  ('BEDEL',         'Bedel'),
+  ('SECRETARIA',    'Secretaría'),
+  ('SUBSECRETARIA', 'Subsecretaría'),
+  ('RECTOR',        'Rector'),
+  ('SUBRECTOR',     'Subrector'),
+  ('DESARROLLADOR', 'Desarrollador (temporal)');
+
+INSERT INTO permiso (codigo, descripcion) VALUES
+  ('ASISTENCIA_CARGAR',      'Cargar asistencia diaria y corregir el día abierto'),
+  ('FORMULARIO_RECEPCIONAR', 'Registrar la recepción de formularios en papel'),
+  ('LICENCIA_CARGAR',        'Cargar y editar licencias'),
+  ('CIERRE_REABRIR',         'Corregir tras el cierre diario o mensual y reabrir (RN-06)'),
+  ('DISPOSICION_EMITIR',     'Emitir disposiciones y cerrar el mes'),
+  ('CATALOGOS_ADMIN',        'Administrar catálogos, importar CSV y calendario'),
+  ('CONSULTAR',              'Consultas y alertas'),
+  ('AUDITORIA_VER',          'Ver la bitácora de auditoría'),
+  ('USUARIOS_ADMIN',         'Administrar usuarios y parámetros');
+
+-- Rector y Subrector: solo consulta y auditoría hasta que el cliente indique qué necesitan.
+INSERT INTO rol_permiso (rol_id, permiso_codigo)
+SELECT r.id, p.codigo FROM rol r JOIN permiso p ON
+     (r.codigo = 'BEDEL' AND p.codigo IN ('ASISTENCIA_CARGAR','FORMULARIO_RECEPCIONAR','CONSULTAR'))
+  OR (r.codigo IN ('SECRETARIA','SUBSECRETARIA') AND p.codigo <> 'USUARIOS_ADMIN')
+  OR (r.codigo IN ('RECTOR','SUBRECTOR') AND p.codigo IN ('CONSULTAR','AUDITORIA_VER'))
+  OR (r.codigo = 'DESARROLLADOR');
+
+-- Usuario técnico para operaciones sin usuario identificado (cargas masivas, pruebas).
+INSERT INTO usuario (rol_id, username, password_hash, apellido, nombres, activo)
+SELECT id, 'sistema', '!', 'Sistema', 'Automático', FALSE FROM rol WHERE codigo = 'DESARROLLADOR';
+
+INSERT INTO situacion_revista (codigo, descripcion) VALUES
+  ('TITULAR',  'Titular'),
+  ('INTERINO', 'Interino'),
+  ('SUPLENTE', 'Suplente');
+
+INSERT INTO parametro (clave, valor, descripcion) VALUES
+  ('nombre_institucion', 'IESETyFP', 'Nombre de la institución'),
+  ('oficina_codigo',     '1452',     'Código de oficina por defecto (IESETyFP)'),
+  ('oficina_anexo',      '0',        'Código de anexo'),
+  ('ciclo_lectivo',      '2026',     'Año operativo en curso'),
+  ('umbral_alerta_pct',  '80',       'Porcentaje del tope a partir del cual se emite alerta (RF-18) - A CONFIRMAR');
