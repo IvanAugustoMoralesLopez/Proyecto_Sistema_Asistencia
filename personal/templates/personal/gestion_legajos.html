@@ -1,33 +1,28 @@
 {% extends "base.html" %}
 
-{% block title %}Gestión de legajos docentes{% endblock %}
+{% block title %}Legajo docente{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
     <div>
-        <h1 class="h3 mb-1">Gestión de legajos docentes</h1>
+        <h1 class="h3 mb-1">Legajos del personal docente</h1>
         <p class="text-secondary mb-0">
-            Administración de datos personales, cargos, materias y situación de revista por docente.
+            Datos personales centralizados, designaciones vigentes e historial administrativo.
         </p>
     </div>
-    <button type="button" class="btn btn-primary" id="agregarAsignacion">
-        + Nueva asignación
-    </button>
+    <a class="btn btn-outline-primary" href="#importacion">Importar CSV</a>
 </div>
 
 <form method="get" class="card card-body shadow-sm border-0 mb-4">
     <div class="row g-3 align-items-end">
         <div class="col-md-4">
-            {{ filtro.dni.label_tag }}
-            {{ filtro.dni }}
+            {{ filtro.dni.label_tag }}{{ filtro.dni }}
         </div>
         <div class="col-md-3">
-            {{ filtro.cargo.label_tag }}
-            {{ filtro.cargo }}
+            {{ filtro.cargo.label_tag }}{{ filtro.cargo }}
         </div>
         <div class="col-md-3">
-            {{ filtro.espacio_curricular.label_tag }}
-            {{ filtro.espacio_curricular }}
+            {{ filtro.espacio_curricular.label_tag }}{{ filtro.espacio_curricular }}
         </div>
         <div class="col-md-2 d-grid">
             <button type="submit" class="btn btn-secondary">Buscar</button>
@@ -36,229 +31,211 @@
 </form>
 
 <div class="card shadow-sm border-0 mb-4">
-    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-        <span>Legajo docente</span>
-        <span class="badge text-bg-light text-dark">RF-005 / RF-006 / RF-011 / RF-012 / RF-018</span>
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Datos centralizados del agente</h2>
     </div>
     <div class="card-body">
-        <div class="row g-3 mb-3">
-            <div class="col-md-3">
-                {{ docente_form.dni.label_tag }}
-                {{ docente_form.dni }}
-            </div>
-            <div class="col-md-5">
-                {{ docente_form.nombre_docente.label_tag }}
-                {{ docente_form.nombre_docente }}
-            </div>
-            <div class="col-md-2">
-                {{ docente_form.sexo.label_tag }}
-                {{ docente_form.sexo }}
-            </div>
-            <div class="col-md-2">
-                {{ docente_form.situacion_revista.label_tag }}
-                {{ docente_form.situacion_revista }}
-            </div>
-        </div>
-
-        <div class="row g-3 mb-3">
-            <div class="col-md-4">
-                <label class="form-label">Antigüedad</label>
-                <input class="form-control" type="text" value="12 años / 3 meses" readonly>
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Cómputo general</label>
-                <input class="form-control" type="text" value="1980-2024" readonly>
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Estado</label>
-                <input class="form-control" type="text" value="Activo" readonly>
-            </div>
-        </div>
-
-        <div class="border rounded p-3 mb-3">
-            <h2 class="h5 mb-3">Panel dinámico de asignaciones</h2>
-            <div class="table-responsive">
-                <table class="table table-bordered align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th style="width: 18%;">Cargo</th>
-                            <th style="width: 24%;">Espacio curricular</th>
-                            <th style="width: 18%;">Situación revista</th>
-                            <th style="width: 18%;">Desde</th>
-                            <th style="width: 18%;">Hasta</th>
-                            <th style="width: 4%;">&nbsp;</th>
-                        </tr>
-                    </thead>
-                    <tbody id="asignacionesBody">
-                        <tr>
-                            <td>
-                                <select class="form-select">
-                                    <option value="">Seleccionar</option>
-                                    {% for cargo in cargos %}
-                                        <option value="{{ cargo.codigo }}">{{ cargo.descripcion }}</option>
-                                    {% endfor %}
-                                </select>
-                            </td>
-                            <td>
-                                <select class="form-select">
-                                    <option value="">Seleccionar</option>
-                                    {% for espacio in espacios %}
-                                        <option value="{{ espacio.pk }}">{{ espacio.carrera.nombre }} - {{ espacio.nombre }}</option>
-                                    {% endfor %}
-                                </select>
-                            </td>
-                            <td>
-                                <select class="form-select">
-                                    <option value="">Seleccionar</option>
-                                    <option>Titular</option>
-                                    <option>Interino</option>
-                                    <option>Suplente</option>
-                                </select>
-                            </td>
-                            <td><input type="date" class="form-control"></td>
-                            <td><input type="date" class="form-control"></td>
-                            <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove-row">✕</button></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="row g-3 mb-3">
-            <div class="col-12">
-                <h2 class="h5 mb-3">Carga horaria</h2>
-                <div class="table-responsive">
-                    <table class="table table-striped table-hover align-middle mb-0">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>Cód.</th>
-                                <th>Descripción</th>
-                                <th>Lunes</th>
-                                <th>Martes</th>
-                                <th>Miércoles</th>
-                                <th>Jueves</th>
-                                <th>Viernes</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>MAT-101</td>
-                                <td>Matemática I</td>
-                                <td>4</td>
-                                <td>4</td>
-                                <td>4</td>
-                                <td>0</td>
-                                <td>0</td>
-                            </tr>
-                            <tr>
-                                <td>FIS-203</td>
-                                <td>Física General</td>
-                                <td>0</td>
-                                <td>3</td>
-                                <td>3</td>
-                                <td>3</td>
-                                <td>0</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="row g-3 mb-3">
-            <div class="col-md-6">
-                <h2 class="h5 mb-3">Normativa</h2>
-                <div class="row g-2">
-                    <div class="col-md-4">
-                        <label class="form-label">Tipo</label>
-                        <select class="form-select">
-                            <option>Resolución</option>
-                            <option>Disposición</option>
-                        </select>
+        <form method="post" action="/personal/legajos/">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="guardar_persona">
+            {% if persona %}<input type="hidden" name="dni" value="{{ persona.dni }}">{% endif %}
+            <div class="row g-3">
+                {% for field in persona_form %}
+                    <div class="{% if field.name == 'apellido_nombre' %}col-md-6{% elif field.name == 'domicilio_calle' %}col-md-6{% elif field.name == 'dni' or field.name == 'sexo' or field.name == 'fecha_nacimiento' or field.name == 'estado_civil' or field.name == 'nacionalidad' or field.name == 'nro_dgi' or field.name == 'nro_dgr' or field.name == 'barrio' or field.name == 'localidad' or field.name == 'codigo_postal' or field.name == 'provincia' or field.name == 'telefono' or field.name == 'email' %}col-md-3{% else %}col-12{% endif %}">
+                        {% if field.name == "activa" %}
+                            <div class="form-check mt-4">
+                                {{ field }}{{ field.label_tag }}
+                            </div>
+                        {% else %}
+                            {{ field.label_tag }}
+                            {{ field }}
+                        {% endif %}
+                        {% for error in field.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                        {% if field.help_text %}
+                            <div class="form-text">{{ field.help_text }}</div>
+                        {% endif %}
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">N°</label>
-                        <input class="form-control" type="text" value="145/24">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Año</label>
-                        <input class="form-control" type="number" value="2024">
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">Org. emisor</label>
-                        <input class="form-control" type="text" value="Ministerio de Educación">
-                    </div>
-                </div>
+                {% endfor %}
             </div>
-
-            <div class="col-md-6">
-                <h2 class="h5 mb-3">Académico</h2>
-                <div class="row g-2">
-                    <div class="col-12">
-                        <label class="form-label">Espacio curricular</label>
-                        <input class="form-control" type="text" value="Matemática I">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Carrera</label>
-                        <input class="form-control" type="text" value="Licenciatura en Sistemas">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Plan de estudio</label>
-                        <input class="form-control" type="text" value="Plan 2019">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Año del plan</label>
-                        <input class="form-control" type="number" value="2019">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">POF</label>
-                        <input class="form-control" type="text" value="POF 2023">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Año del POF</label>
-                        <input class="form-control" type="number" value="2023">
-                    </div>
-                </div>
+            {% if persona_form.non_field_errors %}
+                <div class="alert alert-danger mt-3">{{ persona_form.non_field_errors }}</div>
+            {% endif %}
+            <div class="mt-3">
+                <button type="submit" class="btn btn-primary">Guardar legajo</button>
+                {% if persona %}
+                    <a class="btn btn-outline-secondary" href="/personal/legajos/?dni={{ persona.dni }}">Cancelar edición</a>
+                {% endif %}
             </div>
-        </div>
-
-        <div class="row g-3 mb-3">
-            <div class="col-md-4">
-                <label class="form-label">Desde</label>
-                <input class="form-control" type="date" value="2024-03-01">
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Hasta</label>
-                <input class="form-control" type="date">
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Vigencia</label>
-                <input class="form-control" type="text" value="Vigente" readonly>
-            </div>
-            <div class="col-12">
-                <label class="form-label">Observaciones</label>
-                <textarea class="form-control" rows="3">Docente con dedicación completa, asignación docente y supervisión académica.</textarea>
-            </div>
-        </div>
+        </form>
     </div>
 </div>
 
-<div class="card shadow-sm border-0">
-    <div class="card-header bg-light d-flex justify-content-between align-items-center">
-        <span>Resultado de búsquedas</span>
-        <span class="text-secondary small">{{ resultados|length }} registros</span>
+{% if persona %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h2 class="h5 mb-0">Designaciones de {{ persona.apellido_nombre }}</h2>
+        <a class="btn btn-sm btn-light" href="/personal/legajos/?dni={{ persona.dni }}">Nueva designación</a>
+    </div>
+    <div class="card-body">
+        <form method="post" action="/personal/legajos/">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="guardar_designacion">
+            <input type="hidden" name="dni" value="{{ persona.dni }}">
+            {% if designacion_seleccionada %}
+                <input type="hidden" name="designacion_id" value="{{ designacion_seleccionada.pk }}">
+                <h3 class="h6 mb-3">Modificar designación</h3>
+            {% else %}
+                <h3 class="h6 mb-3">Agregar designación</h3>
+            {% endif %}
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-3">{{ designacion_form.cargo.label_tag }}{{ designacion_form.cargo }}</div>
+                <div class="col-md-3">{{ designacion_form.espacio_curricular.label_tag }}{{ designacion_form.espacio_curricular }}</div>
+                <div class="col-md-3">{{ designacion_form.unidad_educativa.label_tag }}{{ designacion_form.unidad_educativa }}</div>
+                <div class="col-md-3">{{ designacion_form.situacion_revista.label_tag }}{{ designacion_form.situacion_revista }}</div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-2">{{ designacion_form.anio_curso.label_tag }}{{ designacion_form.anio_curso }}</div>
+                <div class="col-md-2">{{ designacion_form.division_seccion.label_tag }}{{ designacion_form.division_seccion }}</div>
+                <div class="col-md-2">{{ designacion_form.turno.label_tag }}{{ designacion_form.turno }}</div>
+                <div class="col-md-3">{{ designacion_form.hs_catedra.label_tag }}{{ designacion_form.hs_catedra }}</div>
+                <div class="col-md-3">{{ designacion_form.jornada.label_tag }}{{ designacion_form.jornada }}</div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-2">{{ designacion_form.horas_lun.label_tag }}{{ designacion_form.horas_lun }}</div>
+                <div class="col-md-2">{{ designacion_form.horas_mar.label_tag }}{{ designacion_form.horas_mar }}</div>
+                <div class="col-md-2">{{ designacion_form.horas_mie.label_tag }}{{ designacion_form.horas_mie }}</div>
+                <div class="col-md-2">{{ designacion_form.horas_jue.label_tag }}{{ designacion_form.horas_jue }}</div>
+                <div class="col-md-2">{{ designacion_form.horas_vie.label_tag }}{{ designacion_form.horas_vie }}</div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">{{ designacion_form.especialidad.label_tag }}{{ designacion_form.especialidad }}</div>
+                <div class="col-md-6">{{ designacion_form.motivo.label_tag }}{{ designacion_form.motivo }}</div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-3">{{ designacion_form.norma_tipo.label_tag }}{{ designacion_form.norma_tipo }}</div>
+                <div class="col-md-3">{{ designacion_form.norma_numero.label_tag }}{{ designacion_form.norma_numero }}</div>
+                <div class="col-md-3">{{ designacion_form.norma_anio.label_tag }}{{ designacion_form.norma_anio }}</div>
+                <div class="col-md-3">{{ designacion_form.organismo_emisor.label_tag }}{{ designacion_form.organismo_emisor }}</div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-3">{{ designacion_form.desde.label_tag }}{{ designacion_form.desde }}</div>
+                <div class="col-md-3">{{ designacion_form.hasta.label_tag }}{{ designacion_form.hasta }}</div>
+                <div class="col-md-3">{{ designacion_form.pof.label_tag }}{{ designacion_form.pof }}</div>
+                <div class="col-md-3">{{ designacion_form.anio_pof.label_tag }}{{ designacion_form.anio_pof }}</div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">{{ designacion_form.disp_alta_nro.label_tag }}{{ designacion_form.disp_alta_nro }}</div>
+                <div class="col-md-4">{{ designacion_form.sello_regional_as.label_tag }}{{ designacion_form.sello_regional_as }}</div>
+                <div class="col-md-4">{{ designacion_form.novedad.label_tag }}{{ designacion_form.novedad }}</div>
+            </div>
+            <div class="mb-3">{{ designacion_form.observaciones.label_tag }}{{ designacion_form.observaciones }}</div>
+            {% for field in designacion_form %}
+                {% for error in field.errors %}
+                    <div class="text-danger small">{{ field.label }}: {{ error }}</div>
+                {% endfor %}
+            {% endfor %}
+            {% if designacion_form.non_field_errors %}
+                <div class="alert alert-danger">{{ designacion_form.non_field_errors }}</div>
+            {% endif %}
+            <button type="submit" class="btn btn-primary">Guardar designación</button>
+            {% if designacion_seleccionada %}
+                <a class="btn btn-outline-secondary" href="/personal/legajos/?dni={{ persona.dni }}">Cancelar</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-light">
+        <h2 class="h5 mb-0">Cargos, espacios y vigencia</h2>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle mb-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>Código</th>
+                    <th>Cargo</th>
+                    <th>Espacio / carrera</th>
+                    <th>Revista</th>
+                    <th>Horas semanales</th>
+                    <th>Vigencia</th>
+                    <th>Estado</th>
+                    <th>Historial</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for designacion in designaciones %}
+                    <tr>
+                        <td>{{ designacion.cargo.codigo }}</td>
+                        <td>{{ designacion.cargo.descripcion }}</td>
+                        <td>
+                            {% if designacion.espacio_curricular %}
+                                {{ designacion.espacio_curricular.nombre }}<br>
+                                <span class="small text-secondary">{{ designacion.espacio_curricular.carrera.nombre }}</span>
+                            {% else %}—{% endif %}
+                        </td>
+                        <td>{{ designacion.get_situacion_revista_display|default:"—" }}</td>
+                        <td>
+                            {% for horario in designacion.horarios.all %}
+                                <span class="badge text-bg-light">{{ horario.get_dia_display }}: {{ horario.horas_catedra }}</span>
+                            {% empty %}
+                                {{ designacion.hs_catedra|default:"—" }}
+                            {% endfor %}
+                        </td>
+                        <td>{{ designacion.desde|date:"d/m/Y" }} – {{ designacion.hasta|date:"d/m/Y"|default:"Sin término" }}</td>
+                        <td>
+                            {% if designacion.activo %}
+                                <span class="badge text-bg-success">Activa</span>
+                            {% else %}
+                                <span class="badge text-bg-secondary">Baja</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% for evento in designacion.historial.all %}
+                                <div class="small">{{ evento.get_accion_display }} — {{ evento.fecha_hora|date:"d/m/Y H:i" }}</div>
+                            {% empty %}—{% endfor %}
+                        </td>
+                        <td class="text-nowrap">
+                            <a class="btn btn-sm btn-outline-primary" href="/personal/legajos/?dni={{ persona.dni }}&designacion={{ designacion.pk }}">Editar</a>
+                            {% if designacion.activo %}
+                                <form method="post" action="/personal/legajos/" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="accion" value="dar_baja_designacion">
+                                    <input type="hidden" name="dni" value="{{ persona.dni }}">
+                                    <input type="hidden" name="designacion_id" value="{{ designacion.pk }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Dar de baja</button>
+                                </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="9" class="text-center py-4">Este legajo todavía no tiene designaciones.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-light">
+        <h2 class="h5 mb-0">Consulta de designaciones</h2>
     </div>
     <div class="table-responsive">
         <table class="table table-striped table-hover align-middle mb-0">
             <thead class="table-dark">
                 <tr>
                     <th>DNI</th>
-                    <th>Docente</th>
+                    <th>Agente</th>
                     <th>Cargo</th>
                     <th>Espacio curricular</th>
-                    <th>Sit. revista</th>
-                    <th>Desde</th>
-                    <th>Hasta</th>
+                    <th>Situación</th>
+                    <th>Vigencia</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -268,46 +245,62 @@
                         <td>{{ resultado.persona.apellido_nombre }}</td>
                         <td>{{ resultado.cargo.descripcion }}</td>
                         <td>{{ resultado.espacio_curricular|default:"—" }}</td>
-                        <td>{{ resultado.sitacion_revista|default:"—" }}</td>
-                        <td>{{ resultado.desde|date:"d/m/Y" }}</td>
-                        <td>{{ resultado.hasta|date:"d/m/Y"|default:"Actual" }}</td>
+                        <td>{{ resultado.get_situacion_revista_display|default:"—" }}</td>
+                        <td>{{ resultado.desde|date:"d/m/Y" }} – {{ resultado.hasta|date:"d/m/Y"|default:"Sin término" }}</td>
+                        <td><a class="btn btn-sm btn-outline-secondary" href="/personal/legajos/?dni={{ resultado.persona.dni }}">Ver legajo</a></td>
                     </tr>
                 {% empty %}
-                    <tr>
-                        <td colspan="7" class="text-center py-4 text-secondary">
-                            No se encontraron docentes con los filtros aplicados.
-                        </td>
-                    </tr>
+                    <tr><td colspan="7" class="text-center py-4 text-secondary">No hay designaciones para los filtros indicados.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const tbody = document.getElementById('asignacionesBody');
-        const addButton = document.getElementById('agregarAsignacion');
+<div class="card shadow-sm border-0 mb-4" id="importacion">
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Importación masiva desde CSV</h2>
+    </div>
+    <div class="card-body">
+        <p class="text-secondary">
+            Codificación UTF-8. Columnas admitidas:
+            <code>dni,apellido,nombres,apellido_nombre,sexo,telefono,email,localidad,domicilio_calle,cargo_codigo,espacio_curricular,situacion_revista,desde,hasta,norma_tipo,norma_numero,organismo_emisor</code>.
+            Para importar sólo datos personales, deje vacía la columna de cargo. Las designaciones requieren una fecha <code>desde</code> en formato AAAA-MM-DD y un cargo ya registrado.
+        </p>
+        <form method="post" action="/personal/legajos/" enctype="multipart/form-data" class="row g-3 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="importar_csv">
+            <div class="col-md-8">
+                <label for="archivoCsv" class="form-label">Archivo CSV</label>
+                <input id="archivoCsv" class="form-control" type="file" name="archivo" accept=".csv,text/csv" required>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary">Procesar archivo</button>
+            </div>
+        </form>
+        {% if errores_importacion %}
+            <h3 class="h6 mt-4">Últimas filas rechazadas</h3>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered mb-0">
+                    <thead><tr><th>Archivo</th><th>Fila</th><th>DNI</th><th>Motivo</th></tr></thead>
+                    <tbody>
+                        {% for error in errores_importacion %}
+                            <tr><td>{{ error.archivo }}</td><td>{{ error.numero_fila }}</td><td>{{ error.dni_texto }}</td><td>{{ error.motivo_error }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+</div>
 
-        if (addButton) {
-            addButton.addEventListener('click', function () {
-                const firstRow = tbody.querySelector('tr');
-                const clone = firstRow.cloneNode(true);
-                clone.querySelectorAll('input, select').forEach((element) => {
-                    element.value = '';
-                });
-                tbody.appendChild(clone);
-            });
-        }
-
-        tbody.addEventListener('click', function (event) {
-            const button = event.target.closest('.remove-row');
-            if (!button) return;
-            const row = button.closest('tr');
-            if (tbody.rows.length > 1) {
-                row.remove();
-            }
-        });
-    });
-</script>
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-light"><h2 class="h5 mb-0">Administración de catálogos</h2></div>
+    <div class="card-body d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary" href="/admin/personal/cargo/">Cargos</a>
+        <a class="btn btn-outline-secondary" href="/admin/personal/carrera/">Carreras</a>
+        <a class="btn btn-outline-secondary" href="/admin/personal/espaciocurricular/">Espacios curriculares</a>
+        <a class="btn btn-outline-secondary" href="{{ licencias_admin_url }}">Tipos de licencia</a>
+    </div>
+</div>
 {% endblock %}
