@@ -1,30 +1,16 @@
-
 from django.contrib import admin
+from .models import LicenciaArticulo, LicenciaOtorgada
 
-from .models import LicenciaOtorgada
-
+@admin.register(LicenciaArticulo)
+class LicenciaArticuloAdmin(admin.ModelAdmin):
+    list_display = ('cod_licencia', 'articulo', 'tipo_licencia', 'sit_rev', 'clase')
+    search_fields = ('cod_licencia', 'articulo', 'tipo_licencia')
+    list_filter = ('clase', 'sit_rev', 'categoria_informe')
 
 @admin.register(LicenciaOtorgada)
 class LicenciaOtorgadaAdmin(admin.ModelAdmin):
-    list_display = (
-        "id",
-        "designacion",
-        "disp_numero",
-        "desde",
-        "hasta",
-    )
-
-    search_fields = (
-        "disp_numero",
-        "designacion__persona__dni",
-        "designacion__persona__apellido_nombre",
-    )
-
-    list_filter = (
-        "desde",
-        "hasta",
-    )
-
-    autocomplete_fields = (
-        "designacion",
-    )
+    list_display = ('designacion', 'articulo', 'desde', 'hasta', 'sit_rev')
+    list_filter = ('sit_rev', 'justifica')
+    date_hierarchy = 'desde'
+    # Esta línea soluciona el error E040
+    search_fields = ('disp_numero', 'articulo__articulo', 'articulo__tipo_licencia')
