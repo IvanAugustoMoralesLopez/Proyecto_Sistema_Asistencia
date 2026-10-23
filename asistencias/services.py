@@ -200,6 +200,33 @@ def _validar_designacion_vigente(designacion, fecha):
         )
 
 
+def _validar_marca_requisitos(marca, horas_inasistidas, licencia):
+    """
+    Aplica las reglas de la marca sobre horas y licencia (equivalentes al
+    CHECK de la tabla `asistencia` del diseño de base de datos: Presente
+    sin horas ni licencia, Ausente con horas, Licencia con horas y una
+    licencia aprobada vinculada).
+    """
+    horas_inasistidas = horas_inasistidas or Decimal("0")
+
+    if marca.requiere_horas and horas_inasistidas <= Decimal("0"):
+        raise ValidationError(
+            "La marca seleccionada requiere indicar horas "
+            "inasistidas mayores a cero."
+        )
+
+    if not marca.requiere_horas:
+        horas_inasistidas = Decimal("0")
+
+    if marca.requiere_licencia and licencia is None:
+        raise ValidationError(
+            "La marca seleccionada requiere una licencia "
+            "aprobada vinculada."
+        )
+
+    return horas_inasistidas
+
+
 def _validar_licencia(registro):
     if not registro.licencia_id:
         return
@@ -226,11 +253,7 @@ def _datos_registro(registro):
         "fecha": registro.fecha.isoformat(),
         "marca": registro.marca.codigo,
         "estado_registro": registro.estado_registro,
-        "horas_inasistidas": (
-            str(registro.horas_inasistidas)
-            if registro.horas_inasistidas is not None
-            else None
-        ),
+        "horas_inasistidas": str(registro.horas_inasistidas),
         "licencia_id": registro.licencia_id,
         "observaciones": registro.observaciones,
     }
@@ -265,21 +288,18 @@ def guardar_asistencia(
             "La marca seleccionada requiere observaciones."
         )
 
-    if (
-        datos.get("horas_inasistidas") is not None
-        and datos["horas_inasistidas"] < Decimal("0")
-    ):
-        raise ValidationError(
-            "Las horas inasistidas no pueden ser negativas."
-        )
+    licencia = datos.get("licencia")
+    horas_inasistidas = _validar_marca_requisitos(
+        marca, datos.get("horas_inasistidas"), licencia
+    )
 
     if registro_id is None:
         registro = RegistroAsistencia(
             designacion=designacion,
             fecha=fecha,
             marca=marca,
-            horas_inasistidas=datos.get("horas_inasistidas"),
-            licencia=datos.get("licencia"),
+            horas_inasistidas=horas_inasistidas,
+            licencia=licencia,
             observaciones=observaciones,
             creado_por=usuario,
             actualizado_por=usuario,
@@ -316,8 +336,8 @@ def guardar_asistencia(
         registro.designacion = designacion
         registro.fecha = fecha
         registro.marca = marca
-        registro.horas_inasistidas = datos.get("horas_inasistidas")
-        registro.licencia = datos.get("licencia")
+        registro.horas_inasistidas = horas_inasistidas
+        registro.licencia = licencia
         registro.observaciones = observaciones
         registro.actualizado_por = usuario
 

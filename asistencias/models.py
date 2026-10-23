@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.validators import MinValueValidator
@@ -12,6 +13,14 @@ class MarcaAsistencia(models.Model):
     descripcion = models.CharField(max_length=100)
     computa_inasistencia = models.BooleanField(null=True, blank=True)
     requiere_observacion = models.BooleanField(default=False)
+    requiere_horas = models.BooleanField(
+        default=False,
+        help_text="Si está activo, la carga diaria exige horas inasistidas mayores a cero.",
+    )
+    requiere_licencia = models.BooleanField(
+        default=False,
+        help_text="Si está activo, la carga diaria exige una licencia aprobada vinculada.",
+    )
     activa = models.BooleanField(default=True)
 
     class Meta:
@@ -95,7 +104,7 @@ class RegistroAsistencia(models.Model):
     horas_inasistidas = models.DecimalField(
         max_digits=6,
         decimal_places=2,
-        null=True,
+        default=Decimal("0"),
         blank=True,
         validators=[MinValueValidator(0)],
     )
@@ -132,10 +141,7 @@ class RegistroAsistencia(models.Model):
                 name="uq_asist_designacion_fecha",
             ),
             models.CheckConstraint(
-                condition=(
-                    Q(horas_inasistidas__isnull=True)
-                    | Q(horas_inasistidas__gte=0)
-                ),
+                condition=Q(horas_inasistidas__gte=0),
                 name="ck_asist_horas_no_negativas",
             ),
         ]
@@ -272,3 +278,25 @@ class SesionEdicion(models.Model):
 
     def __str__(self):
         return f"{self.usuario} — {self.token}"
+
+
+class DiaNoLaborable(models.Model):
+    class Tipo(models.TextChoices):
+        FERIADO = "FERIADO", "Feriado"
+        ASUETO = "ASUETO", "Asueto"
+        INHABIL = "INHABIL", "Día inhábil"
+
+    fecha = models.DateField(unique=True)
+    tipo = models.CharField(
+        max_length=10,
+        choices=Tipo.choices,
+        default=Tipo.FERIADO,
+    )
+    descripcion = models.CharField(max_length=150, blank=True)
+
+    class Meta:
+        db_table = "asistencia_dia_no_laborable"
+        ordering = ["fecha"]
+
+    def __str__(self):
+        return f"{self.fecha} — {self.get_tipo_display()}"

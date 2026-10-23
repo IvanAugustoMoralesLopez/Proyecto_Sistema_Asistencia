@@ -8,6 +8,7 @@ from .models import (
     EventoAsistencia,
     SesionEdicion,
     ControlConcurrencia,
+    DiaNoLaborable,
 )
 
 
@@ -18,6 +19,8 @@ class MarcaAsistenciaAdmin(admin.ModelAdmin):
         "descripcion",
         "computa_inasistencia",
         "requiere_observacion",
+        "requiere_horas",
+        "requiere_licencia",
         "activa",
     )
     search_fields = ("codigo", "descripcion")
@@ -25,7 +28,17 @@ class MarcaAsistenciaAdmin(admin.ModelAdmin):
         "activa",
         "computa_inasistencia",
         "requiere_observacion",
+        "requiere_horas",
+        "requiere_licencia",
     )
+
+
+@admin.register(DiaNoLaborable)
+class DiaNoLaborableAdmin(admin.ModelAdmin):
+    list_display = ("fecha", "tipo", "descripcion")
+    list_filter = ("tipo",)
+    search_fields = ("descripcion",)
+    date_hierarchy = "fecha"
 
 
 @admin.register(RegistroAsistencia)

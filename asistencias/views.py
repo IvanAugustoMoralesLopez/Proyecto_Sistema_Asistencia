@@ -21,6 +21,7 @@ from .models import (
     RegistroAsistencia,
     CierreMensual,
     EventoAsistencia,
+    DiaNoLaborable,
 )
 from .services import (
     adquirir_sesion_edicion,
@@ -79,12 +80,16 @@ def registro_diario(request):
     )
 
     cierre = None
+    dia_no_laborable = None
 
     try:
         fecha_objeto = date.fromisoformat(fecha_seleccionada)
         cierre = CierreMensual.objects.filter(
             anio=fecha_objeto.year,
             mes=fecha_objeto.month,
+        ).first()
+        dia_no_laborable = DiaNoLaborable.objects.filter(
+            fecha=fecha_objeto,
         ).first()
     except ValueError:
         messages.error(request, "La fecha seleccionada no es válida.")
@@ -97,6 +102,7 @@ def registro_diario(request):
             "registros": registros,
             "fecha_seleccionada": fecha_seleccionada,
             "cierre": cierre,
+            "dia_no_laborable": dia_no_laborable,
             "form": form,
         },
     )

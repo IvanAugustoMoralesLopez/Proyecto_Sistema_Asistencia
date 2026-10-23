@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -92,6 +94,7 @@ class RegistroAsistenciaForm(forms.ModelForm):
         fecha = cleaned.get("fecha")
         licencia = cleaned.get("licencia")
         observaciones = cleaned.get("observaciones", "")
+        horas_inasistidas = cleaned.get("horas_inasistidas")
 
         if (
             marca
@@ -102,6 +105,22 @@ class RegistroAsistenciaForm(forms.ModelForm):
                 "observaciones",
                 "Esta marca requiere una observación.",
             )
+
+        if marca:
+            if marca.requiere_horas:
+                if not horas_inasistidas or horas_inasistidas <= Decimal("0"):
+                    self.add_error(
+                        "horas_inasistidas",
+                        "Esta marca requiere horas inasistidas mayores a cero.",
+                    )
+            else:
+                cleaned["horas_inasistidas"] = Decimal("0")
+
+            if marca.requiere_licencia and not licencia:
+                self.add_error(
+                    "licencia",
+                    "Esta marca requiere una licencia aprobada vinculada.",
+                )
 
         if licencia and designacion:
             if licencia.designacion_id != designacion.pk:

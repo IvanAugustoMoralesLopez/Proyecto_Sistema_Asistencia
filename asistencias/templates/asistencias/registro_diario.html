@@ -48,6 +48,15 @@
     </div>
 {% endif %}
 
+{% if dia_no_laborable %}
+    <div class="alert alert-info">
+        {{ fecha_seleccionada }} es {{ dia_no_laborable.get_tipo_display|lower }}
+        {% if dia_no_laborable.descripcion %}— {{ dia_no_laborable.descripcion }}{% endif %}.
+        Esta marca es solo informativa: la carga de asistencia se computa igual
+        según el formulario presentado y el horario de clase vigente.
+    </div>
+{% endif %}
+
 <div class="table-responsive">
     <table class="table table-striped table-hover align-middle">
         <thead class="table-dark">
