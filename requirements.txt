@@ -11,3 +11,5 @@ mysqlclient>=2.2.7,<3.0
 # Herramientas para pruebas automatizadas
 pytest>=8.3,<10.0
 pytest-django>=4.9,<5.0
+
+#13.0.2-MariaDB MariaDB
