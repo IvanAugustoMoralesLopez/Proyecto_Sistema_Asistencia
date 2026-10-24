@@ -3,6 +3,7 @@ from django.contrib import admin
 
 from .models import (
     MarcaAsistencia,
+    CierreDiario,
     CierreMensual,
     RegistroAsistencia,
     EventoAsistencia,
@@ -31,6 +32,16 @@ class MarcaAsistenciaAdmin(admin.ModelAdmin):
         "requiere_horas",
         "requiere_licencia",
     )
+
+    # Catálogo cerrado (RF-08): las marcas las define la migración de datos.
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_readonly_fields(self, request, obj=None):
+        return ("codigo",) if obj else ()
 
 
 @admin.register(DiaNoLaborable)
@@ -73,6 +84,29 @@ class RegistroAsistenciaAdmin(admin.ModelAdmin):
     )
     date_hierarchy = "fecha"
 
+    # Solo consulta: las altas y modificaciones pasan por los servicios
+    # para respetar cierres, permisos por rol y auditoría.
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(CierreDiario)
+class CierreDiarioAdmin(admin.ModelAdmin):
+    list_display = ("fecha", "cerrado_por", "cerrado_en")
+    date_hierarchy = "fecha"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
     def has_delete_permission(self, request, obj=None):
         return False
 
@@ -110,6 +144,7 @@ class EventoAsistenciaAdmin(admin.ModelAdmin):
         "accion",
         "asistencia",
         "cierre",
+        "cierre_diario",
     )
     list_filter = ("accion", "creado_en")
     search_fields = (
@@ -119,6 +154,7 @@ class EventoAsistenciaAdmin(admin.ModelAdmin):
     readonly_fields = (
         "asistencia",
         "cierre",
+        "cierre_diario",
         "usuario",
         "accion",
         "motivo",

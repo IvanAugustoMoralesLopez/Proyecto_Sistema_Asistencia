@@ -15,15 +15,27 @@ from django.utils import timezone
 from .models import (
     RegistroAsistencia,
     MarcaAsistencia,
+    CierreDiario,
     CierreMensual,
     EventoAsistencia,
     ControlConcurrencia,
+    DiaNoLaborable,
     SesionEdicion,
+    licencia_cubre_fecha,
 )
 
 
 MAX_OPERADORES = 2
 MINUTOS_EXPIRACION_SESION = 15
+MOTIVO_MINIMO = 10
+
+# Días en los que existe obligación de marcado (lunes a viernes).
+DIAS_HABILES = (0, 1, 2, 3, 4)
+
+
+def _exigir_permiso(usuario, permiso, mensaje):
+    if not usuario.has_perm(permiso):
+        raise PermissionDenied(mensaje)
 
 
 def _obtener_control_bloqueado():
@@ -182,6 +194,59 @@ def _validar_periodo_abierto(fecha):
     return cierre
 
 
+def _validar_jornada_abierta(usuario, fecha, motivo):
+    """
+    RN-06: modificar una jornada cerrada requiere autorización de
+    Secretaría o Subsecretaría y queda justificado con un motivo.
+    """
+    if not CierreDiario.objects.filter(fecha=fecha).exists():
+        return
+
+    _exigir_permiso(
+        usuario,
+        "asistencias.modificar_jornada_cerrada",
+        f"La jornada del {fecha:%d/%m/%Y} está cerrada: modificarla "
+        "requiere autorización de Secretaría o Subsecretaría.",
+    )
+
+    if len(motivo.strip()) < MOTIVO_MINIMO:
+        raise ValidationError(
+            f"La jornada del {fecha:%d/%m/%Y} está cerrada: indicá el "
+            f"motivo de la modificación (al menos {MOTIVO_MINIMO} "
+            "caracteres)."
+        )
+
+
+def motivo_dia_no_laborable(fecha):
+    """
+    Devuelve el motivo por el que la fecha no tiene obligación de marcado
+    (feriado, asueto, día inhábil o fin de semana), o None si es hábil.
+    """
+    dia = DiaNoLaborable.objects.filter(fecha=fecha).first()
+
+    if dia:
+        texto = f"{fecha:%d/%m/%Y} es {dia.get_tipo_display().lower()}"
+
+        if dia.descripcion:
+            texto += f" ({dia.descripcion})"
+
+        return texto
+
+    if fecha.weekday() not in DIAS_HABILES:
+        return f"{fecha:%d/%m/%Y} es fin de semana"
+
+    return None
+
+
+def validar_dia_laborable(fecha):
+    motivo = motivo_dia_no_laborable(fecha)
+
+    if motivo:
+        raise ValidationError(
+            f"{motivo}: no corresponde registrar asistencia."
+        )
+
+
 def _validar_designacion_vigente(designacion, fecha):
     if not designacion.activo:
         raise ValidationError("La designación está inactiva.")
@@ -205,7 +270,7 @@ def _validar_marca_requisitos(marca, horas_inasistidas, licencia):
     Aplica las reglas de la marca sobre horas y licencia (equivalentes al
     CHECK de la tabla `asistencia` del diseño de base de datos: Presente
     sin horas ni licencia, Ausente con horas, Licencia con horas y una
-    licencia aprobada vinculada).
+    licencia vinculada).
     """
     horas_inasistidas = horas_inasistidas or Decimal("0")
 
@@ -220,8 +285,7 @@ def _validar_marca_requisitos(marca, horas_inasistidas, licencia):
 
     if marca.requiere_licencia and licencia is None:
         raise ValidationError(
-            "La marca seleccionada requiere una licencia "
-            "aprobada vinculada."
+            "La marca seleccionada requiere una licencia vinculada."
         )
 
     return horas_inasistidas
@@ -238,10 +302,7 @@ def _validar_licencia(registro):
             "La licencia no pertenece a esta designación."
         )
 
-    if licencia.estado != licencia.Estado.APROBADA:
-        raise ValidationError("La licencia no está aprobada.")
-
-    if not licencia.desde <= registro.fecha <= licencia.hasta:
+    if not licencia_cubre_fecha(licencia, registro.fecha):
         raise ValidationError(
             "La fecha de asistencia está fuera del período de licencia."
         )
@@ -256,7 +317,31 @@ def _datos_registro(registro):
         "horas_inasistidas": str(registro.horas_inasistidas),
         "licencia_id": registro.licencia_id,
         "observaciones": registro.observaciones,
+        "estado_justificacion": registro.estado_justificacion,
+        "nro_formulario": registro.nro_formulario,
+        "fecha_recepcion": (
+            registro.fecha_recepcion.isoformat()
+            if registro.fecha_recepcion
+            else None
+        ),
     }
+
+
+def _ajustar_justificacion(registro):
+    """
+    Toda inasistencia nace injustificada hasta recibir el formulario en
+    papel. Si la marca deja de computar inasistencia, el registro vuelve
+    a "no aplica" y se descartan los datos del formulario.
+    """
+    Justificacion = RegistroAsistencia.EstadoJustificacion
+
+    if not registro.marca.computa_inasistencia:
+        registro.estado_justificacion = Justificacion.NO_APLICA
+        registro.nro_formulario = ""
+        registro.fecha_recepcion = None
+        registro.recepcionado_por = None
+    elif registro.estado_justificacion == Justificacion.NO_APLICA:
+        registro.estado_justificacion = Justificacion.INJUSTIFICADA
 
 
 @transaction.atomic
@@ -272,12 +357,27 @@ def guardar_asistencia(
     Crea o modifica una asistencia.
     Todas las modificaciones relevantes quedan registradas en eventos.
     """
+    if registro_id is None:
+        _exigir_permiso(
+            usuario,
+            "asistencias.add_registroasistencia",
+            "No tenés permiso para registrar asistencia.",
+        )
+    else:
+        _exigir_permiso(
+            usuario,
+            "asistencias.change_registroasistencia",
+            "No tenés permiso para modificar asistencia.",
+        )
+
     _validar_sesion_edicion(usuario, token)
 
     designacion = datos["designacion"]
     fecha = datos["fecha"]
 
     _validar_periodo_abierto(fecha)
+    _validar_jornada_abierta(usuario, fecha, motivo)
+    validar_dia_laborable(fecha)
     _validar_designacion_vigente(designacion, fecha)
 
     marca = datos["marca"]
@@ -304,6 +404,7 @@ def guardar_asistencia(
             creado_por=usuario,
             actualizado_por=usuario,
         )
+        _ajustar_justificacion(registro)
         registro.full_clean()
         _validar_licencia(registro)
 
@@ -331,7 +432,21 @@ def guardar_asistencia(
 
         _validar_periodo_abierto(registro.fecha)
 
+        if registro.fecha != fecha:
+            _validar_jornada_abierta(usuario, registro.fecha, motivo)
+
         antes = _datos_registro(registro)
+
+        # Un registro validado solo se corrige con motivo y vuelve a
+        # borrador para que se valide nuevamente.
+        if registro.estado_registro == RegistroAsistencia.Estado.VALIDADO:
+            if len(motivo.strip()) < MOTIVO_MINIMO:
+                raise ValidationError(
+                    "Para modificar un registro validado indicá el motivo "
+                    f"del cambio (al menos {MOTIVO_MINIMO} caracteres)."
+                )
+
+            registro.estado_registro = RegistroAsistencia.Estado.BORRADOR
 
         registro.designacion = designacion
         registro.fecha = fecha
@@ -340,6 +455,7 @@ def guardar_asistencia(
         registro.licencia = licencia
         registro.observaciones = observaciones
         registro.actualizado_por = usuario
+        _ajustar_justificacion(registro)
 
         registro.full_clean()
         _validar_licencia(registro)
@@ -359,8 +475,180 @@ def guardar_asistencia(
     return registro
 
 
+class PlanillaConErrores(Exception):
+    """Filas de la planilla rápida con errores: {designacion_id: mensaje}."""
+
+    def __init__(self, errores):
+        super().__init__("La planilla tiene filas con errores.")
+        self.errores = errores
+
+
+@transaction.atomic
+def guardar_planilla(*, usuario, token, fecha, filas, motivo=""):
+    """
+    Registra de una vez las marcas de un día (RF-07). Cada fila es un dict
+    con designacion, marca, horas_inasistidas, licencia y observaciones.
+    Es todo o nada: si alguna fila falla no se guarda ninguna.
+    """
+    _exigir_permiso(
+        usuario,
+        "asistencias.add_registroasistencia",
+        "No tenés permiso para registrar asistencia.",
+    )
+    _validar_sesion_edicion(usuario, token)
+
+    if not filas:
+        raise ValidationError("No marcaste ninguna asistencia.")
+
+    # Errores que alcanzan a toda la planilla: se informan una sola vez.
+    _validar_periodo_abierto(fecha)
+    _validar_jornada_abierta(usuario, fecha, motivo)
+    validar_dia_laborable(fecha)
+
+    errores = {}
+    registros = []
+
+    for fila in filas:
+        try:
+            registros.append(
+                guardar_asistencia(
+                    usuario=usuario,
+                    token=token,
+                    datos={**fila, "fecha": fecha},
+                    motivo=motivo,
+                )
+            )
+        except ValidationError as exc:
+            errores[fila["designacion"].pk] = " ".join(exc.messages)
+
+    if errores:
+        raise PlanillaConErrores(errores)
+
+    return registros
+
+
+TRANSICIONES_JUSTIFICACION = {
+    RegistroAsistencia.EstadoJustificacion.INJUSTIFICADA: {
+        RegistroAsistencia.EstadoJustificacion.EN_TRAMITE,
+        RegistroAsistencia.EstadoJustificacion.JUSTIFICADA,
+    },
+    RegistroAsistencia.EstadoJustificacion.EN_TRAMITE: {
+        RegistroAsistencia.EstadoJustificacion.JUSTIFICADA,
+        RegistroAsistencia.EstadoJustificacion.INJUSTIFICADA,
+    },
+}
+
+
+@transaction.atomic
+def recepcionar_formulario(
+    *,
+    usuario,
+    token,
+    registro_id,
+    nuevo_estado,
+    nro_formulario="",
+    fecha_recepcion=None,
+    motivo="",
+):
+    """
+    Cambia el estado de justificación de una inasistencia al recibir (o
+    rechazar) el formulario en papel. Injustificada pasa a en trámite o
+    justificada; en trámite pasa a justificada o vuelve a injustificada.
+    """
+    _exigir_permiso(
+        usuario,
+        "asistencias.recepcionar_formulario",
+        "No tenés permiso para recepcionar formularios.",
+    )
+    _validar_sesion_edicion(usuario, token)
+
+    Justificacion = RegistroAsistencia.EstadoJustificacion
+
+    try:
+        registro = (
+            RegistroAsistencia.objects.select_for_update()
+            .select_related("marca")
+            .get(pk=registro_id)
+        )
+    except RegistroAsistencia.DoesNotExist as exc:
+        raise ValidationError(
+            "El registro que intentás modificar no existe."
+        ) from exc
+
+    _validar_periodo_abierto(registro.fecha)
+
+    if not registro.marca.computa_inasistencia:
+        raise ValidationError(
+            "El registro no es una inasistencia: no admite formulario."
+        )
+
+    if nuevo_estado not in Justificacion.values:
+        raise ValidationError("El estado de justificación no es válido.")
+
+    if nuevo_estado not in TRANSICIONES_JUSTIFICACION.get(
+        registro.estado_justificacion, set()
+    ):
+        raise ValidationError(
+            "No se puede pasar de "
+            f"{registro.get_estado_justificacion_display().lower()} a "
+            f"{Justificacion(nuevo_estado).label.lower()}."
+        )
+
+    nro_formulario = nro_formulario.strip()
+    motivo = motivo.strip()
+
+    if nuevo_estado == Justificacion.INJUSTIFICADA:
+        if len(motivo) < MOTIVO_MINIMO:
+            raise ValidationError(
+                "Para rechazar el formulario indicá el motivo "
+                f"(al menos {MOTIVO_MINIMO} caracteres)."
+            )
+
+        nro_formulario = ""
+        fecha_recepcion = None
+    else:
+        if not nro_formulario:
+            raise ValidationError(
+                "Indicá el número del formulario recepcionado."
+            )
+
+        fecha_recepcion = fecha_recepcion or timezone.localdate()
+
+        if fecha_recepcion > timezone.localdate():
+            raise ValidationError(
+                "La fecha de recepción no puede ser futura."
+            )
+
+    antes = _datos_registro(registro)
+
+    registro.estado_justificacion = nuevo_estado
+    registro.nro_formulario = nro_formulario
+    registro.fecha_recepcion = fecha_recepcion
+    registro.recepcionado_por = (
+        usuario if nuevo_estado != Justificacion.INJUSTIFICADA else None
+    )
+    registro.actualizado_por = usuario
+    registro.save()
+
+    EventoAsistencia.objects.create(
+        asistencia=registro,
+        usuario=usuario,
+        accion=EventoAsistencia.Accion.RECEPCIONAR,
+        motivo=motivo,
+        antes=antes,
+        despues=_datos_registro(registro),
+    )
+
+    return registro
+
+
 @transaction.atomic
 def validar_asistencia(*, usuario, token, registro_id):
+    _exigir_permiso(
+        usuario,
+        "asistencias.validar_registro",
+        "No tenés permiso para validar registros.",
+    )
     _validar_sesion_edicion(usuario, token)
 
     registro = (
@@ -391,7 +679,58 @@ def validar_asistencia(*, usuario, token, registro_id):
 
 
 @transaction.atomic
+def cerrar_dia(*, usuario, token, fecha):
+    """
+    Cierra la jornada (RN-06). Desde ese momento modificar sus registros
+    requiere el permiso `modificar_jornada_cerrada` y un motivo.
+    """
+    _exigir_permiso(
+        usuario,
+        "asistencias.cerrar_jornada",
+        "No tenés permiso para cerrar la jornada.",
+    )
+    _validar_sesion_edicion(usuario, token)
+
+    if fecha > timezone.localdate():
+        raise ValidationError("No se puede cerrar una jornada futura.")
+
+    motivo = motivo_dia_no_laborable(fecha)
+
+    if motivo:
+        raise ValidationError(f"{motivo}: no hay jornada para cerrar.")
+
+    _validar_periodo_abierto(fecha)
+
+    cierre, creado = CierreDiario.objects.get_or_create(
+        fecha=fecha,
+        defaults={"cerrado_por": usuario},
+    )
+
+    if not creado:
+        raise ValidationError("La jornada ya está cerrada.")
+
+    EventoAsistencia.objects.create(
+        cierre_diario=cierre,
+        usuario=usuario,
+        accion=EventoAsistencia.Accion.CERRAR_DIA,
+        despues={
+            "fecha": fecha.isoformat(),
+            "registros": RegistroAsistencia.objects.filter(
+                fecha=fecha
+            ).count(),
+        },
+    )
+
+    return cierre
+
+
+@transaction.atomic
 def cerrar_mes(*, usuario, anio, mes, token):
+    _exigir_permiso(
+        usuario,
+        "asistencias.cerrar_periodo",
+        "No tenés permiso para cerrar períodos.",
+    )
     _validar_sesion_edicion(usuario, token)
     _obtener_control_bloqueado()
 
@@ -453,9 +792,10 @@ def reabrir_mes(*, usuario, anio, mes, motivo, token):
 
     motivo = motivo.strip()
 
-    if len(motivo) < 10:
+    if len(motivo) < MOTIVO_MINIMO:
         raise ValidationError(
-            "El motivo de reapertura debe tener al menos 10 caracteres."
+            "El motivo de reapertura debe tener al menos "
+            f"{MOTIVO_MINIMO} caracteres."
         )
 
     cierre = CierreMensual.objects.select_for_update().get(
