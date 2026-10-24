@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Recepcionar formulario{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h1 class="h4 mb-3">Recepcionar formulario</h1>
+
+                <dl class="row mb-0">
+                    <dt class="col-sm-3">Docente</dt>
+                    <dd class="col-sm-9">
+                        {{ registro.designacion.persona.apellido_nombre }}
+                        ({{ registro.designacion.persona.dni }})
+                    </dd>
+
+                    <dt class="col-sm-3">Cargo</dt>
+                    <dd class="col-sm-9">{{ registro.designacion.cargo.descripcion }}</dd>
+
+                    <dt class="col-sm-3">Fecha</dt>
+                    <dd class="col-sm-9">{{ registro.fecha|date:"d/m/Y" }}</dd>
+
+                    <dt class="col-sm-3">Marca</dt>
+                    <dd class="col-sm-9">
+                        {{ registro.marca.codigo }} — {{ registro.marca.descripcion }}
+                        ({{ registro.horas_inasistidas }} hs)
+                    </dd>
+
+                    <dt class="col-sm-3">Justificación</dt>
+                    <dd class="col-sm-9">
+                        {% include "asistencias/includes/badge_justificacion.html" %}
+                    </dd>
+
+                    {% if registro.nro_formulario %}
+                        <dt class="col-sm-3">N° de formulario</dt>
+                        <dd class="col-sm-9">{{ registro.nro_formulario }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                {% if puede_recepcionar %}
+                    <form method="post">
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {{ form.non_field_errors }}
+                            </div>
+                        {% endif %}
+
+                        {% for field in form %}
+                            <div class="mb-3">
+                                <label class="form-label" for="{{ field.id_for_label }}">
+                                    {{ field.label }}
+                                </label>
+
+                                {{ field }}
+
+                                {% if field.help_text %}
+                                    <div class="form-text">{{ field.help_text }}</div>
+                                {% endif %}
+
+                                {% for error in field.errors %}
+                                    <div class="text-danger small">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endfor %}
+
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary" type="submit">
+                                Guardar
+                            </button>
+                            <a class="btn btn-outline-secondary"
+                               href="{% url 'asistencia:recepcion_formularios' %}">
+                                Cancelar
+                            </a>
+                        </div>
+                    </form>
+                {% else %}
+                    <p class="mb-3">
+                        Esta inasistencia no admite más cambios de estado.
+                    </p>
+                    <a class="btn btn-outline-secondary"
+                       href="{% url 'asistencia:recepcion_formularios' %}">
+                        Volver a la recepción
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

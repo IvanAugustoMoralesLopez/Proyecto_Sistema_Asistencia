@@ -1,0 +1,9 @@
+{% if registro.estado_justificacion == "NO_APLICA" %}
+    <span class="text-secondary">—</span>
+{% elif registro.estado_justificacion == "INJUSTIFICADA" %}
+    <span class="badge text-bg-danger">{{ registro.get_estado_justificacion_display }}</span>
+{% elif registro.estado_justificacion == "EN_TRAMITE" %}
+    <span class="badge text-bg-warning">{{ registro.get_estado_justificacion_display }}</span>
+{% else %}
+    <span class="badge text-bg-success">{{ registro.get_estado_justificacion_display }}</span>
+{% endif %}
