@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Bitácora de auditoría{% endblock %}
+{% block seccion %}reportes-bitacora{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Bitácora de auditoría</h1>
+
+<form method="get" class="card card-body mb-4">
+    <div class="row g-3">
+        {% for field in form %}
+            <div class="col-md-4">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+    </div>
+    {% for error in form.non_field_errors %}
+        <div class="text-danger small mt-2">{{ error }}</div>
+    {% endfor %}
+
+    <div class="mt-3 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Buscar</button>
+        <a class="btn btn-outline-secondary" href="{% url 'reportes:bitacora' %}">Limpiar filtros</a>
+    </div>
+</form>
+
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>Fecha y hora</th>
+                <th>Usuario</th>
+                <th>Acción</th>
+                <th>Registro afectado</th>
+                <th>Motivo</th>
+                <th>Cambios</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for evento in pagina %}
+                <tr>
+                    <td class="text-nowrap">{{ evento.creado_en|date:"d/m/Y H:i:s" }}</td>
+                    <td>{{ evento.usuario|default:"—" }}</td>
+                    <td>{{ evento.get_accion_display }}</td>
+                    <td>{{ evento.objetivo }}</td>
+                    <td>{{ evento.motivo|default:"—" }}</td>
+                    <td class="small">
+                        {% for campo, antes, despues in evento.cambios %}
+                            <div><strong>{{ campo }}:</strong> {{ antes }} → {{ despues }}</div>
+                        {% empty %}—{% endfor %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="6" class="text-center text-muted py-4">No hay eventos para los filtros elegidos.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if pagina.has_other_pages %}
+<nav aria-label="Paginación">
+    <ul class="pagination">
+        {% if pagina.has_previous %}
+            <li class="page-item"><a class="page-link" href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.previous_page_number }}">Anterior</a></li>
+        {% endif %}
+        <li class="page-item disabled"><span class="page-link">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span></li>
+        {% if pagina.has_next %}
+            <li class="page-item"><a class="page-link" href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.next_page_number }}">Siguiente</a></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}
