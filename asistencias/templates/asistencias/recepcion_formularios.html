@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Recepción de formularios{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3">Recepción de formularios en papel</h1>
+    <p class="text-secondary mb-0">
+        Seguimiento de las inasistencias: injustificada, en trámite o
+        justificada.
+    </p>
+</div>
+
+<form method="get" class="card card-body mb-4">
+    <div class="row g-3">
+        {% for field in form %}
+            <div class="col-md-4">
+                <label class="form-label" for="{{ field.id_for_label }}">
+                    {{ field.label }}
+                </label>
+
+                {{ field }}
+
+                {% for error in field.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="mt-3 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">
+            Buscar
+        </button>
+        <a class="btn btn-outline-secondary"
+           href="{% url 'asistencia:recepcion_formularios' %}">
+            Limpiar filtros
+        </a>
+    </div>
+</form>
+
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>Fecha</th>
+                <th>DNI</th>
+                <th>Docente</th>
+                <th>Cargo</th>
+                <th>Marca</th>
+                <th>Horas</th>
+                <th>Justificación</th>
+                <th>N° de formulario</th>
+                <th>Recepción</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for registro in pagina %}
+                <tr>
+                    <td>{{ registro.fecha|date:"d/m/Y" }}</td>
+                    <td>{{ registro.designacion.persona.dni }}</td>
+                    <td>{{ registro.designacion.persona.apellido_nombre }}</td>
+                    <td>{{ registro.designacion.cargo.descripcion }}</td>
+                    <td>{{ registro.marca.codigo }}</td>
+                    <td>{{ registro.horas_inasistidas }}</td>
+                    <td>
+                        {% include "asistencias/includes/badge_justificacion.html" %}
+                    </td>
+                    <td>{{ registro.nro_formulario|default:"—" }}</td>
+                    <td>
+                        {% if registro.fecha_recepcion %}
+                            {{ registro.fecha_recepcion|date:"d/m/Y" }}
+                            {% if registro.recepcionado_por %}
+                                <span class="text-secondary small">
+                                    · {{ registro.recepcionado_por }}
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td class="text-nowrap">
+                        <a class="btn btn-sm btn-outline-primary"
+                           href="{% url 'asistencia:detalle_asistencia' registro.pk %}">
+                            Ver
+                        </a>
+                        {% if registro.estado_justificacion != "JUSTIFICADA" and perms.asistencias.recepcionar_formulario %}
+                            <a class="btn btn-sm btn-outline-success"
+                               href="{% url 'asistencia:recepcionar_formulario' registro.pk %}">
+                                Recepcionar
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="10" class="text-center py-4">
+                        No hay inasistencias para los filtros elegidos.
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<nav aria-label="Paginación de la recepción de formularios">
+    <ul class="pagination">
+        {% if pagina.has_previous %}
+            <li class="page-item">
+                <a class="page-link"
+                   href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.previous_page_number }}">
+                    Anterior
+                </a>
+            </li>
+        {% endif %}
+
+        <li class="page-item active">
+            <span class="page-link">
+                Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}
+            </span>
+        </li>
+
+        {% if pagina.has_next %}
+            <li class="page-item">
+                <a class="page-link"
+                   href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.next_page_number }}">
+                    Siguiente
+                </a>
+            </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endblock %}

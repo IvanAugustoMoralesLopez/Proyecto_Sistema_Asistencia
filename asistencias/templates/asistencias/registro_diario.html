@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Registro diario{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3">Registro diario de asistencia</h1>
+        <p class="text-secondary mb-0">
+            Consulta por fecha y seguimiento de registros.
+        </p>
+    </div>
+
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary"
+           href="{% url 'asistencia:recepcion_formularios' %}">
+            Recepción de formularios
+        </a>
+        {% if perms.asistencias.add_registroasistencia %}
+            <a class="btn btn-primary"
+               href="{% url 'asistencia:planilla_rapida' %}?fecha={{ fecha_seleccionada }}">
+                Planilla rápida
+            </a>
+            <a class="btn btn-outline-primary"
+               href="{% url 'asistencia:crear_asistencia' %}">
+                Nueva asistencia
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<form method="get" class="card card-body mb-3">
+    <div class="row align-items-end g-3">
+        <div class="col-md-4">
+            <label class="form-label" for="fecha">
+                Fecha
+            </label>
+            <input
+                class="form-control"
+                type="date"
+                id="fecha"
+                name="fecha"
+                value="{{ fecha_seleccionada }}"
+                required
+            >
+        </div>
+
+        <div class="col-md-3">
+            <button class="btn btn-secondary" type="submit">
+                Consultar
+            </button>
+        </div>
+    </div>
+</form>
+
+{% if jornada_cerrada %}
+    <div class="alert alert-secondary">
+        Jornada cerrada por {{ jornada_cerrada.cerrado_por }} el
+        {{ jornada_cerrada.cerrado_en|date:"d/m/Y H:i" }}. Modificar sus
+        registros requiere autorización de Secretaría o Subsecretaría y un
+        motivo.
+    </div>
+{% elif puede_cerrar_jornada %}
+    <form method="post"
+          action="{% url 'asistencia:cerrar_jornada' %}"
+          class="mb-3">
+        {% csrf_token %}
+        <input type="hidden" name="fecha" value="{{ fecha_seleccionada }}">
+        <button class="btn btn-outline-dark" type="submit">
+            Cerrar jornada
+        </button>
+    </form>
+{% endif %}
+
+{% if cierre and cierre.estado == "CERRADO" %}
+    <div class="alert alert-warning">
+        El período correspondiente a esta fecha está cerrado.
+        No se deben modificar sus registros.
+    </div>
+{% endif %}
+
+{% if motivo_no_laborable %}
+    <div class="alert alert-info">
+        {{ motivo_no_laborable }}. No hay obligación de marcado ni se
+        computan inasistencias en esta fecha.
+    </div>
+{% endif %}
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>Fecha</th>
+                <th>DNI</th>
+                <th>Docente</th>
+                <th>Cargo</th>
+                <th>Espacio curricular</th>
+                <th>Marca</th>
+                <th>Estado</th>
+                <th>Justificación</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for registro in registros %}
+                <tr>
+                    <td>{{ registro.fecha|date:"d/m/Y" }}</td>
+                    <td>{{ registro.designacion.persona.dni }}</td>
+                    <td>
+                        {{ registro.designacion.persona.apellido_nombre }}
+                    </td>
+                    <td>{{ registro.designacion.cargo.descripcion }}</td>
+                    <td>
+                        {{ registro.designacion.espacio_curricular|default:"—" }}
+                    </td>
+                    <td>{{ registro.marca.codigo }} — {{ registro.marca.descripcion }}</td>
+                    <td>
+                        <span class="badge text-bg-secondary">
+                            {{ registro.get_estado_registro_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% include "asistencias/includes/badge_justificacion.html" %}
+                    </td>
+                    <td class="text-nowrap">
+                        <a class="btn btn-sm btn-outline-primary"
+                           href="{% url 'asistencia:detalle_asistencia' registro.pk %}">
+                            Ver
+                        </a>
+
+                        {% if perms.asistencias.change_registroasistencia %}
+                            <a class="btn btn-sm btn-outline-secondary"
+                               href="{% url 'asistencia:editar_asistencia' registro.pk %}">
+                                Editar
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-4">
+                        No hay registros para la fecha seleccionada.
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

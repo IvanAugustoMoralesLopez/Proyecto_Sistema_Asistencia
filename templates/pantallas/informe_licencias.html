@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Informe mensual de licencias · Sistema Asistencia{% endblock %}
+{% block seccion %}informe-licencias{% endblock %}
+
+{% block content %}
+{% include "includes/encabezado_planilla.html" with ruta="Administración / Licencias" titulo="Informe mensual de licencias" subtitulo="Registro y seguimiento de licencias por enfermedad, instrumentos legales y períodos aplicados." panel_id="panelRegistro" %}
+
+<div class="il-cabecera">
+    <div class="il-titulo">INFORME MENSUAL DE LICENCIAS POR ENFERMEDAD OTROS (IL-01)</div>
+    <div><strong>Mes</strong>Junio</div>
+    <div><strong>Año</strong>2026</div>
+    <div><strong>Código de oficina</strong>1452</div>
+    <div><strong>Código anexo</strong>0</div>
+    <div><strong>Unidad educativa</strong>Instituto XX</div>
+</div>
+
+<div class="planilla planilla--con-cabecera">
+    <table class="tabla-planilla">
+        <thead>
+            <tr>
+                <th>D.N.I.</th>
+                <th>Apellido y nombre</th>
+                <th class="centro">Sexo</th>
+                <th class="centro">Sit. de revista</th>
+                <th class="centro">Cód. de cargos</th>
+                <th>Descripción de cargos</th>
+                <th class="centro">Cód. lic.</th>
+                <th class="centro">Art.</th>
+                <th>Tipo</th>
+                <th class="centro">N°</th>
+                <th>Desde</th>
+                <th>Hasta</th>
+            </tr>
+        </thead>
+        <tbody>
+            {# Datos de ejemplo. Reemplazar por un {% for %} sobre las licencias del mes #}
+            <tr>
+                <td>11.111.111</td><td>ACOSTA, FELICIANO</td><td class="centro">M</td>
+                <td class="centro"><span class="sit-rev">TIT</span></td><td class="centro">166</td><td>hs cátedras</td>
+                <td class="centro">01.02.01</td><td class="centro">309 B-2</td><td>DISPOSICIÓN</td><td class="centro"></td>
+                <td>01/06/2026</td><td>30/06/2026</td>
+            </tr>
+            <tr>
+                <td>11.111.111</td><td>ACOSTA, FELICIANO</td><td class="centro">F</td>
+                <td class="centro"><span class="sit-rev">TIT</span></td><td class="centro">166</td><td>hs cátedras</td>
+                <td class="centro">01.02.02</td><td class="centro">309 B-2</td><td>DISPOSICIÓN</td><td class="centro"></td>
+                <td>08/06/2026</td><td>19/06/2026</td>
+            </tr>
+            <tr>
+                <td>11.111.111</td><td>ACOSTA, FELICIANO</td><td class="centro">F</td>
+                <td class="centro"><span class="sit-rev">INT</span></td><td class="centro">155</td><td>R. DE ESTUDIO</td>
+                <td class="centro">01.01.03</td><td class="centro">331-A</td><td>DISPOSICIÓN</td><td class="centro"></td>
+                <td>15/06/2026</td><td>17/06/2026</td>
+            </tr>
+            <tr>
+                <td>11.111.111</td><td>ACOSTA, FELICIANO</td><td class="centro">F</td>
+                <td class="centro"><span class="sit-rev">INT</span></td><td class="centro">165</td><td>SECRETARÍA</td>
+                <td class="centro"></td><td class="centro"></td><td>DISPOSICIÓN</td><td class="centro"></td>
+                <td></td><td></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block panel %}
+<div class="offcanvas offcanvas-end panel-registro" tabindex="-1" id="panelRegistro" aria-labelledby="panelRegistroTitulo">
+    <div class="offcanvas-header">
+        <h2 class="offcanvas-title h5" id="panelRegistroTitulo">Cargar Nuevos Datos</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+
+    <form method="post" class="d-flex flex-column flex-grow-1 overflow-hidden">
+        {% csrf_token %}
+        <div class="offcanvas-body">
+            <div class="mb-3">
+                <label class="form-label" for="i_dni">D.N.I.</label>
+                <input class="form-control" id="i_dni" name="dni" maxlength="8" inputmode="numeric" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="i_cargo">Cargo / materia</label>
+                <select class="form-select" id="i_cargo" name="designacion">
+                    {# Se completa con los cargos del docente según el DNI #}
+                    <option value="">Seleccionar...</option>
+                </select>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label" for="i_codlic">Cód. lic.</label>
+                    <input class="form-control" id="i_codlic" name="cod_licencia" placeholder="01.02.01">
+                </div>
+                <div class="col-6">
+                    <label class="form-label" for="i_art">Art.</label>
+                    <input class="form-control" id="i_art" name="articulo">
+                </div>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label" for="i_tipo">Tipo</label>
+                    <select class="form-select" id="i_tipo" name="norma_tipo">
+                        <option>Disposición</option>
+                        <option>Resolución</option>
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label" for="i_nro">N°</label>
+                    <input class="form-control" id="i_nro" name="norma_numero">
+                </div>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label" for="i_desde">Desde</label>
+                    <input class="form-control" id="i_desde" name="desde" type="date" required>
+                </div>
+                <div class="col-6">
+                    <label class="form-label" for="i_hasta">Hasta</label>
+                    <input class="form-control" id="i_hasta" name="hasta" type="date" required>
+                </div>
+            </div>
+        </div>
+        <div class="offcanvas-footer">
+            <button type="submit" class="btn btn-primario w-100">Cargar</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

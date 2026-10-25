@@ -1,0 +1,452 @@
+/* ==========================================================
+   Sistema Asistencia — estilos generales
+   Ubicación: static/css/app.css
+   ========================================================== */
+
+:root {
+    --azul: #2b67a4;
+    --azul-oscuro: #1f4f84;
+    --azul-suave: #e3ebf7;
+    --fondo: #c9d4ec;
+    --fondo-tabla: #ffffff;
+    --fila-alterna: #f6f8fc;
+    --fila-seleccion: #dbe7fb;
+    --color-texto: #212529;
+    --color-borde: #dee2e6;
+    --ancho-menu: 250px;
+    --ancho-menu-colapsado: 64px;
+    --alto-topbar: 48px;
+}
+
+body {
+    background: var(--fondo);
+    color: var(--color-texto);
+    min-height: 100vh;
+}
+
+/* ───────── Barra superior ───────── */
+.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+    height: var(--alto-topbar);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0 1rem;
+    background: var(--azul);
+    color: #fff;
+}
+
+.topbar__marca {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.topbar__menu {
+    background: none;
+    border: 0;
+    color: #fff;
+    font-size: 1.6rem;
+    line-height: 1;
+    padding: 0;
+}
+
+.topbar__usuario {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+}
+
+/* ───────── Estructura: menú + contenido ───────── */
+.app-shell {
+    display: flex;
+    min-height: calc(100vh - var(--alto-topbar));
+}
+
+.sidebar {
+    flex: 0 0 var(--ancho-menu);
+    width: var(--ancho-menu);
+    background: #fff;
+    border-right: 1px solid var(--color-borde);
+    overflow-y: auto;
+    transition: width 0.15s ease, flex-basis 0.15s ease;
+}
+
+.sidebar__nav {
+    padding: 0.75rem 0.5rem;
+}
+
+.sidebar__titulo {
+    margin: 0.75rem 0.75rem 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #7a8599;
+}
+
+.sidebar__link {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: 0.5rem;
+    color: #1d2b3f;
+    font-size: 0.85rem;
+    text-decoration: none;
+}
+
+.sidebar__link i {
+    flex: 0 0 auto;
+    font-size: 1.1rem;
+    color: var(--azul);
+}
+
+.sidebar__link:hover {
+    background: var(--azul-suave);
+}
+
+.sidebar__link.activo {
+    background: var(--azul-suave);
+    font-weight: 600;
+}
+
+.sidebar__link--nueva {
+    margin-top: 0.5rem;
+}
+
+.sidebar__sub {
+    padding-left: 0.5rem;
+}
+
+.sidebar__link--sub {
+    font-size: 0.8rem;
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+}
+
+/* Menú colapsado (solo íconos) */
+body.menu-colapsado .sidebar {
+    flex-basis: var(--ancho-menu-colapsado);
+    width: var(--ancho-menu-colapsado);
+}
+
+body.menu-colapsado .sidebar__link span,
+body.menu-colapsado .sidebar__titulo {
+    display: none;
+}
+
+body.menu-colapsado .sidebar__link {
+    justify-content: center;
+}
+
+.app-content {
+    flex: 1 1 auto;
+    min-width: 0; /* permite que las tablas hagan scroll horizontal */
+    padding: 1.25rem 1.5rem;
+}
+
+/* ───────── Encabezado de planilla ───────── */
+.encabezado-planilla {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.ruta {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #5d6b82;
+}
+
+.encabezado-planilla__titulo {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #17253b;
+}
+
+.encabezado-planilla__subtitulo {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #5d6b82;
+}
+
+.encabezado-planilla__acciones {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.buscador {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 280px;
+    padding: 0 0.75rem;
+    background: #f4f5f7;
+    border: 1px solid var(--color-borde);
+    border-radius: 0.5rem;
+}
+
+.buscador input {
+    flex: 1;
+    min-height: 38px;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    font-size: 0.85rem;
+}
+
+.btn-primario,
+.btn-primario-suave,
+.btn-filtro {
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-radius: 0.5rem;
+}
+
+.btn-primario {
+    background: var(--azul);
+    border: 1px solid var(--azul);
+    color: #fff;
+}
+
+.btn-primario:hover {
+    background: var(--azul-oscuro);
+    color: #fff;
+}
+
+.btn-primario-suave {
+    background: var(--azul-suave);
+    border: 1px solid var(--azul-suave);
+    color: var(--azul-oscuro);
+}
+
+.btn-primario-suave:disabled {
+    opacity: 0.6;
+}
+
+.btn-filtro {
+    background: transparent;
+    border: 0;
+    color: #1d2b3f;
+}
+
+/* ───────── Planillas (tablas) ───────── */
+.planilla {
+    background: var(--fondo-tabla);
+    border: 1px solid var(--color-borde);
+    border-radius: 0.75rem;
+    overflow: auto;
+    max-height: calc(100vh - 200px);
+}
+
+.tabla-planilla {
+    width: 100%;
+    margin: 0;
+    font-size: 0.78rem;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.tabla-planilla th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 0.7rem 0.75rem;
+    background: #fff;
+    border-bottom: 2px solid var(--azul);
+    color: var(--azul);
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.tabla-planilla td {
+    padding: 0.65rem 0.75rem;
+    border-bottom: 1px solid #eef0f4;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.tabla-planilla tbody tr {
+    cursor: pointer;
+}
+
+.tabla-planilla tbody tr:nth-child(even) {
+    background: var(--fila-alterna);
+}
+
+.tabla-planilla tbody tr:hover,
+.tabla-planilla tbody tr.fila-seleccionada {
+    background: var(--fila-seleccion);
+}
+
+.tabla-planilla td.centro,
+.tabla-planilla th.centro {
+    text-align: center;
+}
+
+.tabla-planilla .categoria {
+    font-weight: 700;
+    color: var(--azul);
+    white-space: normal;
+    background: #fff;
+}
+
+.tabla-planilla .enlace {
+    color: var(--azul);
+    font-weight: 600;
+}
+
+/* Situación de revista */
+.sit-rev {
+    font-weight: 700;
+    color: var(--azul);
+}
+
+/* ───────── Encabezado del informe IL-01 ───────── */
+.il-cabecera {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.5rem 1rem;
+    padding: 0.75rem 1rem;
+    background: #fff;
+    border: 1px solid var(--color-borde);
+    border-radius: 0.75rem 0.75rem 0 0;
+    border-bottom: 0;
+    font-size: 0.78rem;
+}
+
+.il-cabecera strong {
+    display: block;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    color: #7a8599;
+}
+
+.il-titulo {
+    grid-column: 1 / -1;
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.planilla--con-cabecera {
+    border-radius: 0 0 0.75rem 0.75rem;
+}
+
+/* ───────── Panel lateral "Cargar Nuevos Datos" ───────── */
+.panel-registro {
+    --bs-offcanvas-width: 380px;
+}
+
+.panel-registro .offcanvas-header {
+    border-bottom: 1px solid var(--color-borde);
+}
+
+.panel-registro .form-label {
+    margin-bottom: 0.25rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.panel-registro .offcanvas-footer {
+    padding: 1rem;
+    border-top: 1px solid var(--color-borde);
+}
+
+/* ───────── Componentes generales (compatibles con asistencias) ───────── */
+.card {
+    border: 1px solid var(--color-borde);
+    border-radius: 0.75rem;
+}
+
+.card-body {
+    padding: 1.25rem;
+}
+
+.table {
+    background: #fff;
+    vertical-align: middle;
+}
+
+.table th {
+    white-space: nowrap;
+}
+
+.table td {
+    overflow-wrap: anywhere;
+}
+
+.form-control,
+.form-select {
+    min-height: 40px;
+}
+
+textarea.form-control {
+    min-height: 100px;
+}
+
+.btn {
+    border-radius: 0.4rem;
+}
+
+.alert {
+    border-radius: 0.5rem;
+}
+
+pre {
+    max-width: 350px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* ───────── Pantallas chicas ───────── */
+@media (max-width: 768px) {
+    .topbar__marca span {
+        display: none;
+    }
+
+    .sidebar {
+        position: fixed;
+        top: var(--alto-topbar);
+        bottom: 0;
+        left: 0;
+        z-index: 1020;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+    }
+
+    body.menu-abierto .sidebar {
+        transform: translateX(0);
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .app-content {
+        padding: 0.75rem;
+    }
+
+    .buscador {
+        min-width: 100%;
+    }
+
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+}

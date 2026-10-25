@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Detalle de asistencia{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Detalle de asistencia</h1>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <dl class="row mb-0">
+            <dt class="col-sm-3">Fecha</dt>
+            <dd class="col-sm-9">{{ registro.fecha|date:"d/m/Y" }}</dd>
+
+            <dt class="col-sm-3">Docente</dt>
+            <dd class="col-sm-9">
+                {{ registro.designacion.persona.apellido_nombre }}
+            </dd>
+
+            <dt class="col-sm-3">DNI</dt>
+            <dd class="col-sm-9">{{ registro.designacion.persona.dni }}</dd>
+
+            <dt class="col-sm-3">Cargo</dt>
+            <dd class="col-sm-9">{{ registro.designacion.cargo.descripcion }}</dd>
+
+            <dt class="col-sm-3">Marca</dt>
+            <dd class="col-sm-9">
+                {{ registro.marca.codigo }} — {{ registro.marca.descripcion }}
+            </dd>
+
+            <dt class="col-sm-3">Horas inasistidas</dt>
+            <dd class="col-sm-9">
+                {{ registro.horas_inasistidas }}
+            </dd>
+
+            <dt class="col-sm-3">Licencia</dt>
+            <dd class="col-sm-9">
+                {{ registro.licencia|default:"Sin licencia asociada" }}
+            </dd>
+
+            <dt class="col-sm-3">Observaciones</dt>
+            <dd class="col-sm-9">
+                {{ registro.observaciones|default:"Sin observaciones" }}
+            </dd>
+
+            <dt class="col-sm-3">Estado del registro</dt>
+            <dd class="col-sm-9">{{ registro.get_estado_registro_display }}</dd>
+
+            <dt class="col-sm-3">Justificación</dt>
+            <dd class="col-sm-9">
+                {% include "asistencias/includes/badge_justificacion.html" %}
+                {% if registro.estado_justificacion != "NO_APLICA" and registro.estado_justificacion != "JUSTIFICADA" and perms.asistencias.recepcionar_formulario %}
+                    <a class="btn btn-sm btn-outline-success ms-2"
+                       href="{% url 'asistencia:recepcionar_formulario' registro.pk %}">
+                        Recepcionar formulario
+                    </a>
+                {% endif %}
+            </dd>
+
+            {% if registro.nro_formulario %}
+                <dt class="col-sm-3">N° de formulario</dt>
+                <dd class="col-sm-9">{{ registro.nro_formulario }}</dd>
+
+                <dt class="col-sm-3">Recepción</dt>
+                <dd class="col-sm-9">
+                    {{ registro.fecha_recepcion|date:"d/m/Y" }}
+                    {% if registro.recepcionado_por %}
+                        · {{ registro.recepcionado_por }}
+                    {% endif %}
+                </dd>
+            {% endif %}
+
+            <dt class="col-sm-3">Creado por</dt>
+            <dd class="col-sm-9">{{ registro.creado_por|default:"—" }}</dd>
+
+            <dt class="col-sm-3">Actualizado por</dt>
+            <dd class="col-sm-9">{{ registro.actualizado_por|default:"—" }}</dd>
+
+            <dt class="col-sm-3">Última modificación</dt>
+            <dd class="col-sm-9">
+                {{ registro.actualizado_en|date:"d/m/Y H:i:s" }}
+            </dd>
+        </dl>
+    </div>
+</div>
+
+<h2 class="h5 mb-3">Historial de cambios</h2>
+
+<div class="table-responsive">
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Fecha y hora</th>
+                <th>Usuario</th>
+                <th>Acción</th>
+                <th>Motivo</th>
+                <th>Antes</th>
+                <th>Después</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for evento in eventos %}
+                <tr>
+                    <td>{{ evento.creado_en|date:"d/m/Y H:i:s" }}</td>
+                    <td>{{ evento.usuario|default:"—" }}</td>
+                    <td>{{ evento.get_accion_display }}</td>
+                    <td>{{ evento.motivo|default:"—" }}</td>
+                    <td><pre class="small mb-0">{{ evento.antes|pprint }}</pre></td>
+                    <td><pre class="small mb-0">{{ evento.despues|pprint }}</pre></td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center">
+                        No hay eventos registrados.
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<a class="btn btn-outline-secondary"
+   href="{% url 'asistencia:historial' %}">
+    Volver al historial
+</a>
+{% endblock %}

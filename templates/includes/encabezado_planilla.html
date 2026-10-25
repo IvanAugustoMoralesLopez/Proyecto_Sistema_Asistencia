@@ -1,0 +1,42 @@
+{% comment %}
+Encabezado común de las planillas. Uso:
+{% include "includes/encabezado_planilla.html" with ruta="..." titulo="..." subtitulo="..." panel_id="panelRegistro" %}
+{% endcomment %}
+<div class="encabezado-planilla">
+    <div class="encabezado-planilla__texto">
+        <p class="ruta">{{ ruta }}</p>
+        <h1 class="encabezado-planilla__titulo">{{ titulo }}</h1>
+        <p class="encabezado-planilla__subtitulo">{{ subtitulo }}</p>
+    </div>
+
+    <div class="encabezado-planilla__acciones">
+        <form method="get" class="buscador">
+            <i class="bi bi-search"></i>
+            <input type="search" name="q" value="{{ request.GET.q }}"
+                   placeholder="Buscar por docente, DNI, espacio curricular o carrera...">
+        </form>
+
+        <button type="button" class="btn btn-primario-suave" id="btnModificar" disabled>Modificar</button>
+
+        <button type="button" class="btn btn-primario" data-bs-toggle="offcanvas"
+                data-bs-target="#{{ panel_id }}" aria-controls="{{ panel_id }}">
+            <i class="bi bi-plus-lg"></i> Nuevo Registro
+        </button>
+
+        <div class="dropdown">
+            <button type="button" class="btn btn-filtro" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-funnel"></i> Filtro
+            </button>
+            <div class="dropdown-menu dropdown-menu-end p-3" style="min-width: 240px;">
+                {# TODO: agregar los filtros de cada pantalla #}
+                <label class="form-label small mb-1" for="filtroSitRev">Situación de revista</label>
+                <select class="form-select form-select-sm" id="filtroSitRev">
+                    <option value="">Todas</option>
+                    <option>Titular</option>
+                    <option>Interino</option>
+                    <option>Suplente</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>

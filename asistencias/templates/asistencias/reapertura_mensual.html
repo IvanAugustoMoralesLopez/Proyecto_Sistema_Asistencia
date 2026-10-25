@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Reabrir período{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h3">Reabrir período mensual</h1>
+
+                <p>
+                    Período:
+                    <strong>{{ cierre.anio }}-{{ cierre.mes|stringformat:"02d" }}</strong>
+                </p>
+
+                <div class="alert alert-warning">
+                    La reapertura quedará registrada en el historial.
+                    Es obligatorio explicar el motivo.
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    {{ form.as_p }}
+
+                    <button class="btn btn-danger" type="submit">
+                        Confirmar reapertura
+                    </button>
+
+                    <a class="btn btn-outline-secondary"
+                       href="{% url 'asistencia:lista_cierres' %}">
+                        Cancelar
+                    </a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,329 @@
+import csv
+import io
+from datetime import date
+
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_http_methods
+
+from .forms import BuscarLegajoForm, DesignacionForm, PersonaForm
+from .models import (
+    Cargo,
+    Designacion,
+    EspacioCurricular,
+    ImportacionPersonalError,
+    Persona,
+)
+
+
+MAX_CSV_BYTES = 5 * 1024 * 1024
+
+
+def _mensaje_errores(exc):
+    if isinstance(exc, ValidationError):
+        if hasattr(exc, "message_dict"):
+            return "; ".join(
+                f"{campo}: {', '.join(errores)}"
+                for campo, errores in exc.message_dict.items()
+            )
+        return "; ".join(exc.messages)
+    return str(exc)
+
+
+def _importar_fila_personal(fila):
+    dni = (fila.get("dni") or "").strip()
+    if not dni:
+        raise ValidationError("Falta el DNI.")
+
+    persona = Persona.objects.filter(pk=dni).first()
+    apellido_nombre = (fila.get("apellido_nombre") or "").strip()
+    apellido = (fila.get("apellido") or "").strip()
+    nombres = (fila.get("nombres") or "").strip()
+    if not apellido_nombre and not (apellido or nombres):
+        if persona is None:
+            raise ValidationError(
+                "El DNI no existe y la fila no contiene datos personales para crearlo."
+            )
+    else:
+        persona = persona or Persona(dni=dni)
+        apellido_actual = (fila.get("apellido") or "").strip() if "apellido" in fila else persona.apellido
+        nombres_actuales = (fila.get("nombres") or "").strip() if "nombres" in fila else persona.nombres
+        if apellido_nombre:
+            persona.apellido_nombre = apellido_nombre
+        elif "apellido" in fila or "nombres" in fila:
+            persona.apellido_nombre = ", ".join(
+                parte for parte in (apellido_actual, nombres_actuales) if parte
+            )
+        for campo in (
+            "apellido",
+            "nombres",
+            "sexo",
+            "telefono",
+            "email",
+            "localidad",
+            "domicilio_calle",
+        ):
+            if campo in fila:
+                setattr(persona, campo, (fila.get(campo) or "").strip())
+        persona.full_clean()
+        persona.save()
+
+    codigo_cargo = (fila.get("cargo_codigo") or "").strip()
+    if not codigo_cargo:
+        return
+
+    cargo = Cargo.objects.filter(pk=codigo_cargo).first()
+    if cargo is None:
+        raise ValidationError(f"No existe el cargo '{codigo_cargo}'.")
+
+    espacio_nombre = (fila.get("espacio_curricular") or "").strip()
+    espacio = None
+    if espacio_nombre:
+        espacio = EspacioCurricular.objects.filter(
+            nombre__iexact=espacio_nombre,
+            activo=True,
+        ).first()
+        if espacio is None:
+            raise ValidationError(
+                f"No existe el espacio curricular '{espacio_nombre}'."
+            )
+
+    fecha_inicio = (fila.get("desde") or "").strip()
+    try:
+        desde = date.fromisoformat(fecha_inicio)
+    except ValueError as exc:
+        raise ValidationError(
+            "La fecha 'desde' debe tener formato AAAA-MM-DD."
+        ) from exc
+
+    situacion = (fila.get("situacion_revista") or "").strip().upper()
+    situacion = {
+        "TITULAR": Designacion.Situacion.TITULAR,
+        "INTERINO": Designacion.Situacion.INTERINO,
+        "SUPLENTE": Designacion.Situacion.SUPLENTE,
+    }.get(situacion, situacion)
+    designacion = Designacion(
+        persona=persona,
+        cargo=cargo,
+        espacio_curricular=espacio,
+        situacion_revista=situacion,
+        norma_tipo=(fila.get("norma_tipo") or "").strip(),
+        norma_numero=(fila.get("norma_numero") or "").strip(),
+        organismo_emisor=(fila.get("organismo_emisor") or "").strip(),
+        desde=desde,
+    )
+    fecha_fin = (fila.get("hasta") or "").strip()
+    if fecha_fin:
+        try:
+            designacion.hasta = date.fromisoformat(fecha_fin)
+        except ValueError as exc:
+            raise ValidationError(
+                "La fecha 'hasta' debe tener formato AAAA-MM-DD."
+            ) from exc
+
+    designacion.full_clean()
+    designacion.save()
+
+
+def _procesar_csv(archivo):
+    if archivo.size > MAX_CSV_BYTES:
+        raise ValidationError("El archivo CSV supera el máximo de 5 MB.")
+    if not archivo.name.lower().endswith(".csv"):
+        raise ValidationError("El archivo seleccionado debe tener extensión .csv.")
+
+    try:
+        contenido = archivo.read().decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ValidationError("El archivo debe estar codificado en UTF-8.") from exc
+
+    lector = csv.DictReader(io.StringIO(contenido))
+    if not lector.fieldnames:
+        raise ValidationError("El CSV debe incluir una fila de encabezados.")
+    lector.fieldnames = [nombre.strip().lower() for nombre in lector.fieldnames]
+    if "dni" not in lector.fieldnames:
+        raise ValidationError("El CSV debe incluir una columna 'dni'.")
+
+    total = 0
+    rechazadas = 0
+    for numero_fila, fila in enumerate(lector, start=2):
+        total += 1
+        try:
+            with transaction.atomic():
+                _importar_fila_personal(fila)
+        except (ValidationError, IntegrityError, ValueError) as exc:
+            rechazadas += 1
+            ImportacionPersonalError.objects.create(
+                archivo=archivo.name[:255],
+                numero_fila=numero_fila,
+                dni_texto=(fila.get("dni") or "")[:20],
+                motivo_error=_mensaje_errores(exc)[:255],
+                fila_original=fila,
+            )
+
+    return total, rechazadas
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def gestion_legajos(request):
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion == "importar_csv":
+            archivo = request.FILES.get("archivo")
+            if not archivo:
+                messages.error(request, "Seleccione un archivo CSV.")
+            else:
+                try:
+                    total, rechazadas = _procesar_csv(archivo)
+                except ValidationError as exc:
+                    messages.error(request, _mensaje_errores(exc))
+                else:
+                    messages.success(
+                        request,
+                        f"Importación finalizada: {total - rechazadas} filas "
+                        f"importadas y {rechazadas} rechazadas.",
+                    )
+            return redirect("/personal/legajos/")
+
+        if accion == "guardar_persona":
+            dni = request.POST.get("dni", "").strip()
+            persona_existente = Persona.objects.filter(pk=dni).first()
+            form = PersonaForm(request.POST, instance=persona_existente)
+            if form.is_valid():
+                persona = form.save()
+                messages.success(request, "El legajo se guardó correctamente.")
+                return redirect(f"/personal/legajos/?dni={persona.pk}")
+            messages.error(request, "Revise los datos personales indicados.")
+            return render(
+                request,
+                "personal/gestion_legajos.html",
+                _contexto_pantalla(request, form=form, persona=persona_existente),
+            )
+
+        if accion in {"guardar_designacion", "dar_baja_designacion"}:
+            dni = request.POST.get("dni", "").strip()
+            persona = get_object_or_404(Persona, pk=dni)
+            designacion_id = request.POST.get("designacion_id")
+            designacion = None
+            if designacion_id:
+                designacion = get_object_or_404(
+                    Designacion,
+                    pk=designacion_id,
+                    persona=persona,
+                )
+
+            if accion == "dar_baja_designacion":
+                if designacion and designacion.activo:
+                    designacion.activo = False
+                    designacion.save()
+                    messages.success(
+                        request,
+                        "La designación se dio de baja y se conservó en el historial.",
+                    )
+                return redirect(f"/personal/legajos/?dni={persona.pk}")
+
+            form = DesignacionForm(request.POST, instance=designacion)
+            if form.is_valid():
+                form.instance.persona = persona
+                designacion = form.save()
+                messages.success(request, "La designación se guardó correctamente.")
+                return redirect(f"/personal/legajos/?dni={persona.pk}")
+            messages.error(request, "Revise los datos de la designación.")
+            return render(
+                request,
+                "personal/gestion_legajos.html",
+                _contexto_pantalla(
+                    request,
+                    persona=persona,
+                    designacion_form=form,
+                    designacion_seleccionada=designacion,
+                ),
+            )
+
+        messages.error(request, "La acción solicitada no es válida.")
+        return redirect("/personal/legajos/")
+
+    filtro = BuscarLegajoForm(request.GET or None)
+    dni = (request.GET.get("dni") or "").strip()
+    persona = Persona.objects.filter(pk=dni).first() if dni else None
+    designacion_id = request.GET.get("designacion")
+    designacion = None
+    if persona and designacion_id:
+        designacion = Designacion.objects.filter(
+            pk=designacion_id,
+            persona=persona,
+        ).first()
+
+    return render(
+        request,
+        "personal/gestion_legajos.html",
+        _contexto_pantalla(
+            request,
+            filtro=filtro,
+            persona=persona,
+            designacion_seleccionada=designacion,
+        ),
+    )
+
+
+def _contexto_pantalla(
+    request,
+    *,
+    filtro=None,
+    form=None,
+    persona=None,
+    designacion_form=None,
+    designacion_seleccionada=None,
+):
+    filtro = filtro or BuscarLegajoForm(request.GET or None)
+    if form is None:
+        form = PersonaForm(instance=persona)
+    if designacion_form is None:
+        designacion_form = DesignacionForm(instance=designacion_seleccionada)
+
+    resultados = Designacion.objects.select_related(
+        "persona",
+        "cargo",
+        "espacio_curricular",
+        "espacio_curricular__carrera",
+    ).order_by("persona__apellido_nombre", "desde")
+    if not persona:
+        resultados = resultados.filter(activo=True)
+    if filtro.is_valid():
+        dni_filtro = filtro.cleaned_data.get("dni")
+        cargo = filtro.cleaned_data.get("cargo")
+        espacio = filtro.cleaned_data.get("espacio_curricular")
+        if dni_filtro:
+            resultados = resultados.filter(persona__dni__icontains=dni_filtro)
+        if cargo:
+            resultados = resultados.filter(cargo=cargo)
+        if espacio:
+            resultados = resultados.filter(espacio_curricular=espacio)
+
+    if persona:
+        designaciones = persona.designaciones.select_related(
+            "cargo",
+            "espacio_curricular",
+            "espacio_curricular__carrera",
+        ).prefetch_related("horarios", "historial")
+    else:
+        designaciones = Designacion.objects.none()
+
+    return {
+        "filtro": filtro,
+        "persona_form": form,
+        "designacion_form": designacion_form,
+        "persona": persona,
+        "designacion_seleccionada": designacion_seleccionada,
+        "designaciones": designaciones,
+        "resultados": resultados,
+        "cargos": Cargo.objects.filter(activo=True).order_by("descripcion"),
+        "espacios": EspacioCurricular.objects.filter(activo=True)
+        .select_related("carrera")
+        .order_by("carrera__nombre", "nombre"),
+        "errores_importacion": ImportacionPersonalError.objects.all()[:10],
+        "licencias_admin_url": "/admin/licencias/licenciaarticulo/",
+    }
