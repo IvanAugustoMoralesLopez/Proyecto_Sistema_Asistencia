@@ -94,14 +94,14 @@ class DesignacionTests(TestCase):
         form = PersonaForm(
             data={
                 "apellido_nombre": "Apellido actualizado, Docente",
-                "apellido": "Apellido actualizado",
-                "nombres": "Docente",
                 "sexo": "F",
                 "activa": "on",
             },
             instance=self.persona,
         )
 
+        self.assertNotIn("apellido", form.fields)
+        self.assertNotIn("nombres", form.fields)
         self.assertTrue(form.is_valid(), form.errors)
         persona = form.save()
         self.assertEqual(persona.pk, "30123456")
