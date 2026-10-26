@@ -288,6 +288,9 @@ class EventoAsistencia(models.Model):
         CERRAR_DIA = "CERRAR_DIA", "Cerrar jornada"
         CERRAR = "CERRAR", "Cerrar período"
         REABRIR = "REABRIR", "Reabrir período"
+        PARAMETROS = "PARAMETROS", "Modificar parámetros"
+        USUARIO_ALTA = "USUARIO_ALTA", "Alta de usuario"
+        USUARIO_EDITAR = "USUARIO_EDITAR", "Modificar usuario"
 
     asistencia = models.ForeignKey(
         RegistroAsistencia,
