@@ -60,6 +60,14 @@ def describir_objetivo(evento):
         return f"Período {evento.cierre.anio}-{evento.cierre.mes:02d}"
     if evento.cierre_diario_id:
         return f"Jornada {evento.cierre_diario.fecha:%d/%m/%Y}"
+    if evento.accion == EventoAsistencia.Accion.PARAMETROS:
+        return "Parámetros del sistema"
+    if evento.accion in (
+        EventoAsistencia.Accion.USUARIO_ALTA,
+        EventoAsistencia.Accion.USUARIO_EDITAR,
+    ):
+        datos = evento.despues if isinstance(evento.despues, dict) else {}
+        return f"Usuario {datos.get('usuario', '—')}"
     return "—"
 
 
