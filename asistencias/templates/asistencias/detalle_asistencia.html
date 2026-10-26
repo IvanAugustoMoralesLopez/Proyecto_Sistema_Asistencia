@@ -42,6 +42,33 @@
                 {{ registro.observaciones|default:"Sin observaciones" }}
             </dd>
 
+            <dt class="col-sm-3">Estado del registro</dt>
+            <dd class="col-sm-9">{{ registro.get_estado_registro_display }}</dd>
+
+            <dt class="col-sm-3">Justificación</dt>
+            <dd class="col-sm-9">
+                {% include "asistencias/includes/badge_justificacion.html" %}
+                {% if registro.estado_justificacion != "NO_APLICA" and registro.estado_justificacion != "JUSTIFICADA" and perms.asistencias.recepcionar_formulario %}
+                    <a class="btn btn-sm btn-outline-success ms-2"
+                       href="{% url 'asistencia:recepcionar_formulario' registro.pk %}">
+                        Recepcionar formulario
+                    </a>
+                {% endif %}
+            </dd>
+
+            {% if registro.nro_formulario %}
+                <dt class="col-sm-3">N° de formulario</dt>
+                <dd class="col-sm-9">{{ registro.nro_formulario }}</dd>
+
+                <dt class="col-sm-3">Recepción</dt>
+                <dd class="col-sm-9">
+                    {{ registro.fecha_recepcion|date:"d/m/Y" }}
+                    {% if registro.recepcionado_por %}
+                        · {{ registro.recepcionado_por }}
+                    {% endif %}
+                </dd>
+            {% endif %}
+
             <dt class="col-sm-3">Creado por</dt>
             <dd class="col-sm-9">{{ registro.creado_por|default:"—" }}</dd>
 

@@ -8,6 +8,21 @@ from django.db.models import Q
 from django.utils import timezone
 
 
+# Catálogo cerrado de marcas diarias (RF-08).
+CODIGOS_MARCA = ("P", "I", "LIC", "LT", "PR")
+
+
+def licencia_cubre_fecha(licencia, fecha):
+    """
+    Indica si la fecha está dentro del período de la licencia.
+    Una licencia sin fecha "hasta" se considera abierta.
+    """
+    if fecha < licencia.desde:
+        return False
+
+    return licencia.hasta is None or fecha <= licencia.hasta
+
+
 class MarcaAsistencia(models.Model):
     codigo = models.CharField(max_length=12, unique=True)
     descripcion = models.CharField(max_length=100)
@@ -26,6 +41,11 @@ class MarcaAsistencia(models.Model):
     class Meta:
         db_table = "asistencia_marca"
         ordering = ["codigo"]
+
+    @classmethod
+    def vigentes(cls):
+        """Marcas del catálogo cerrado que están activas."""
+        return cls.objects.filter(activa=True, codigo__in=CODIGOS_MARCA)
 
     def __str__(self):
         return f"{self.codigo} — {self.descripcion}"
@@ -65,6 +85,9 @@ class CierreMensual(models.Model):
     class Meta:
         db_table = "asistencia_cierre_mensual"
         ordering = ["-anio", "-mes"]
+        permissions = [
+            ("cerrar_periodo", "Puede cerrar períodos mensuales"),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["anio", "mes"],
@@ -84,6 +107,12 @@ class RegistroAsistencia(models.Model):
     class Estado(models.TextChoices):
         BORRADOR = "BORRADOR", "Borrador"
         VALIDADO = "VALIDADO", "Validado"
+
+    class EstadoJustificacion(models.TextChoices):
+        NO_APLICA = "NO_APLICA", "No aplica"
+        INJUSTIFICADA = "INJUSTIFICADA", "Injustificada"
+        EN_TRAMITE = "EN_TRAMITE", "En trámite"
+        JUSTIFICADA = "JUSTIFICADA", "Justificada"
 
     designacion = models.ForeignKey(
         "personal.Designacion",
@@ -117,6 +146,22 @@ class RegistroAsistencia(models.Model):
     )
     observaciones = models.TextField(blank=True)
 
+    # Flujo de la inasistencia al recibir el formulario en papel (RF-09).
+    estado_justificacion = models.CharField(
+        max_length=14,
+        choices=EstadoJustificacion.choices,
+        default=EstadoJustificacion.NO_APLICA,
+    )
+    nro_formulario = models.CharField(max_length=30, blank=True)
+    fecha_recepcion = models.DateField(null=True, blank=True)
+    recepcionado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="formularios_recepcionados",
+    )
+
     creado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -135,6 +180,17 @@ class RegistroAsistencia(models.Model):
     class Meta:
         db_table = "asistencia_registro"
         ordering = ["-fecha", "designacion_id"]
+        permissions = [
+            ("validar_registro", "Puede validar registros de asistencia"),
+            (
+                "recepcionar_formulario",
+                "Puede recepcionar formularios en papel",
+            ),
+            (
+                "modificar_jornada_cerrada",
+                "Puede modificar registros de una jornada cerrada",
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["designacion", "fecha"],
@@ -144,11 +200,23 @@ class RegistroAsistencia(models.Model):
                 condition=Q(horas_inasistidas__gte=0),
                 name="ck_asist_horas_no_negativas",
             ),
+            # En trámite o justificada requiere el nº de formulario físico.
+            models.CheckConstraint(
+                condition=(
+                    Q(estado_justificacion__in=["NO_APLICA", "INJUSTIFICADA"])
+                    | ~Q(nro_formulario="")
+                ),
+                name="ck_asist_formulario_requerido",
+            ),
         ]
         indexes = [
             models.Index(
                 fields=["fecha", "marca"],
                 name="ix_asist_fecha_marca",
+            ),
+            models.Index(
+                fields=["estado_justificacion", "fecha"],
+                name="ix_asist_justif_fecha",
             ),
             models.Index(
                 fields=["designacion", "fecha"],
@@ -175,7 +243,7 @@ class RegistroAsistencia(models.Model):
         if (
             self.licencia_id
             and self.fecha
-            and not self.licencia.desde <= self.fecha <= self.licencia.hasta
+            and not licencia_cubre_fecha(self.licencia, self.fecha)
         ):
             from django.core.exceptions import ValidationError
 
@@ -187,13 +255,42 @@ class RegistroAsistencia(models.Model):
         return f"{self.designacion_id} — {self.fecha}"
 
 
+class CierreDiario(models.Model):
+    """
+    Jornada cerrada (RN-06): una vez cerrada, modificar sus registros
+    requiere autorización de Secretaría o Subsecretaría.
+    """
+    fecha = models.DateField(unique=True)
+    cerrado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="cierres_diarios",
+    )
+    cerrado_en = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "asistencia_cierre_diario"
+        ordering = ["-fecha"]
+        permissions = [
+            ("cerrar_jornada", "Puede cerrar la jornada diaria"),
+        ]
+
+    def __str__(self):
+        return f"Jornada {self.fecha:%d/%m/%Y} cerrada"
+
+
 class EventoAsistencia(models.Model):
     class Accion(models.TextChoices):
         CREAR = "CREAR", "Crear"
         EDITAR = "EDITAR", "Editar"
         VALIDAR = "VALIDAR", "Validar"
+        RECEPCIONAR = "RECEPCIONAR", "Recepcionar formulario"
+        CERRAR_DIA = "CERRAR_DIA", "Cerrar jornada"
         CERRAR = "CERRAR", "Cerrar período"
         REABRIR = "REABRIR", "Reabrir período"
+        PARAMETROS = "PARAMETROS", "Modificar parámetros"
+        USUARIO_ALTA = "USUARIO_ALTA", "Alta de usuario"
+        USUARIO_EDITAR = "USUARIO_EDITAR", "Modificar usuario"
 
     asistencia = models.ForeignKey(
         RegistroAsistencia,
@@ -204,6 +301,13 @@ class EventoAsistencia(models.Model):
     )
     cierre = models.ForeignKey(
         CierreMensual,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="eventos",
+    )
+    cierre_diario = models.ForeignKey(
+        CierreDiario,
         null=True,
         blank=True,
         on_delete=models.PROTECT,

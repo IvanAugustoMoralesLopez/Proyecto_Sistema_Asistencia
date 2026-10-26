@@ -42,6 +42,7 @@
                 <th>Docente</th>
                 <th>Marca</th>
                 <th>Estado</th>
+                <th>Justificación</th>
                 <th>Actualizado por</th>
                 <th>Acciones</th>
             </tr>
@@ -55,6 +56,9 @@
                     <td>{{ registro.marca.codigo }}</td>
                     <td>{{ registro.get_estado_registro_display }}</td>
                     <td>
+                        {% include "asistencias/includes/badge_justificacion.html" %}
+                    </td>
+                    <td>
                         {{ registro.actualizado_por|default:"—" }}
                     </td>
                     <td class="text-nowrap">
@@ -62,12 +66,14 @@
                            href="{% url 'asistencia:detalle_asistencia' registro.pk %}">
                             Ver
                         </a>
-                        <a class="btn btn-sm btn-outline-secondary"
-                           href="{% url 'asistencia:editar_asistencia' registro.pk %}">
-                            Editar
-                        </a>
+                        {% if perms.asistencias.change_registroasistencia %}
+                            <a class="btn btn-sm btn-outline-secondary"
+                               href="{% url 'asistencia:editar_asistencia' registro.pk %}">
+                                Editar
+                            </a>
+                        {% endif %}
 
-                        {% if registro.estado_registro == "BORRADOR" %}
+                        {% if registro.estado_registro == "BORRADOR" and perms.asistencias.validar_registro %}
                             <form
                                 method="post"
                                 action="{% url 'asistencia:validar_registro' registro.pk %}"
@@ -86,7 +92,7 @@
                 </tr>
             {% empty %}
                 <tr>
-                    <td colspan="7" class="text-center py-4">
+                    <td colspan="8" class="text-center py-4">
                         No se encontraron registros.
                     </td>
                 </tr>
@@ -100,7 +106,7 @@
         {% if pagina.has_previous %}
             <li class="page-item">
                 <a class="page-link"
-                   href="?page={{ pagina.previous_page_number }}">
+                   href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.previous_page_number }}">
                     Anterior
                 </a>
             </li>
@@ -115,7 +121,7 @@
         {% if pagina.has_next %}
             <li class="page-item">
                 <a class="page-link"
-                   href="?page={{ pagina.next_page_number }}">
+                   href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.next_page_number }}">
                     Siguiente
                 </a>
             </li>

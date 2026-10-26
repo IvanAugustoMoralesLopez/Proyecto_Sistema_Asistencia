@@ -24,6 +24,7 @@ urlpatterns = [
     path("accounts/", include("django.contrib.auth.urls")),
     path("asistencia/", include("asistencias.urls")),
     path("personal/", include("personal.urls")),
+    path("reportes/", include("reportes.urls")),
 
     # Pantallas de prueba (después las reemplaza backend con sus vistas)
     path("pantallas/personal/", TemplateView.as_view(template_name="pantallas/datos_personal.html"), name="pantalla_personal"),

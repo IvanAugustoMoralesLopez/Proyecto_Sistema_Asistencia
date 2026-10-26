@@ -11,10 +11,22 @@
         </p>
     </div>
 
-    <a class="btn btn-primary"
-       href="{% url 'asistencia:crear_asistencia' %}">
-        Nueva asistencia
-    </a>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary"
+           href="{% url 'asistencia:recepcion_formularios' %}">
+            Recepción de formularios
+        </a>
+        {% if perms.asistencias.add_registroasistencia %}
+            <a class="btn btn-primary"
+               href="{% url 'asistencia:planilla_rapida' %}?fecha={{ fecha_seleccionada }}">
+                Planilla rápida
+            </a>
+            <a class="btn btn-outline-primary"
+               href="{% url 'asistencia:crear_asistencia' %}">
+                Nueva asistencia
+            </a>
+        {% endif %}
+    </div>
 </div>
 
 <form method="get" class="card card-body mb-3">
@@ -41,6 +53,25 @@
     </div>
 </form>
 
+{% if jornada_cerrada %}
+    <div class="alert alert-secondary">
+        Jornada cerrada por {{ jornada_cerrada.cerrado_por }} el
+        {{ jornada_cerrada.cerrado_en|date:"d/m/Y H:i" }}. Modificar sus
+        registros requiere autorización de Secretaría o Subsecretaría y un
+        motivo.
+    </div>
+{% elif puede_cerrar_jornada %}
+    <form method="post"
+          action="{% url 'asistencia:cerrar_jornada' %}"
+          class="mb-3">
+        {% csrf_token %}
+        <input type="hidden" name="fecha" value="{{ fecha_seleccionada }}">
+        <button class="btn btn-outline-dark" type="submit">
+            Cerrar jornada
+        </button>
+    </form>
+{% endif %}
+
 {% if cierre and cierre.estado == "CERRADO" %}
     <div class="alert alert-warning">
         El período correspondiente a esta fecha está cerrado.
@@ -48,12 +79,10 @@
     </div>
 {% endif %}
 
-{% if dia_no_laborable %}
+{% if motivo_no_laborable %}
     <div class="alert alert-info">
-        {{ fecha_seleccionada }} es {{ dia_no_laborable.get_tipo_display|lower }}
-        {% if dia_no_laborable.descripcion %}— {{ dia_no_laborable.descripcion }}{% endif %}.
-        Esta marca es solo informativa: la carga de asistencia se computa igual
-        según el formulario presentado y el horario de clase vigente.
+        {{ motivo_no_laborable }}. No hay obligación de marcado ni se
+        computan inasistencias en esta fecha.
     </div>
 {% endif %}
 
@@ -68,6 +97,7 @@
                 <th>Espacio curricular</th>
                 <th>Marca</th>
                 <th>Estado</th>
+                <th>Justificación</th>
                 <th>Acciones</th>
             </tr>
         </thead>
@@ -89,21 +119,26 @@
                             {{ registro.get_estado_registro_display }}
                         </span>
                     </td>
+                    <td>
+                        {% include "asistencias/includes/badge_justificacion.html" %}
+                    </td>
                     <td class="text-nowrap">
                         <a class="btn btn-sm btn-outline-primary"
                            href="{% url 'asistencia:detalle_asistencia' registro.pk %}">
                             Ver
                         </a>
 
-                        <a class="btn btn-sm btn-outline-secondary"
-                           href="{% url 'asistencia:editar_asistencia' registro.pk %}">
-                            Editar
-                        </a>
+                        {% if perms.asistencias.change_registroasistencia %}
+                            <a class="btn btn-sm btn-outline-secondary"
+                               href="{% url 'asistencia:editar_asistencia' registro.pk %}">
+                                Editar
+                            </a>
+                        {% endif %}
                     </td>
                 </tr>
             {% empty %}
                 <tr>
-                    <td colspan="8" class="text-center py-4">
+                    <td colspan="9" class="text-center py-4">
                         No hay registros para la fecha seleccionada.
                     </td>
                 </tr>

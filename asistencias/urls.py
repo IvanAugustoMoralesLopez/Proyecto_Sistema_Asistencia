@@ -36,6 +36,26 @@ urlpatterns = [
         name="validar_registro",
     ),
     path(
+        "planilla/",
+        views.planilla_rapida,
+        name="planilla_rapida",
+    ),
+    path(
+        "jornada/cerrar/",
+        views.cerrar_jornada,
+        name="cerrar_jornada",
+    ),
+    path(
+        "recepcion/",
+        views.recepcion_formularios,
+        name="recepcion_formularios",
+    ),
+    path(
+        "recepcion/<int:pk>/",
+        views.recepcionar_formulario_view,
+        name="recepcionar_formulario",
+    ),
+    path(
         "cierres/",
         views.lista_cierres,
         name="lista_cierres",

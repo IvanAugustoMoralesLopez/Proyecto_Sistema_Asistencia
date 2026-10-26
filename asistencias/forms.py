@@ -10,6 +10,12 @@ from licencias.models import LicenciaOtorgada
 from .models import (
     RegistroAsistencia,
     MarcaAsistencia,
+    licencia_cubre_fecha,
+)
+from .services import (
+    MOTIVO_MINIMO,
+    TRANSICIONES_JUSTIFICACION,
+    validar_dia_laborable,
 )
 
 
@@ -54,14 +60,10 @@ class RegistroAsistenciaForm(forms.ModelForm):
             )
         )
 
-        self.fields["marca"].queryset = MarcaAsistencia.objects.filter(
-            activa=True,
-        )
+        self.fields["marca"].queryset = MarcaAsistencia.vigentes()
 
         self.fields["licencia"].queryset = (
-            LicenciaOtorgada.objects.filter(
-                estado=LicenciaOtorgada.Estado.APROBADA,
-            ).select_related(
+            LicenciaOtorgada.objects.select_related(
                 "designacion__persona",
             )
         )
@@ -83,6 +85,8 @@ class RegistroAsistenciaForm(forms.ModelForm):
             raise ValidationError(
                 "No se permite registrar asistencia de una fecha futura."
             )
+
+        validar_dia_laborable(fecha)
 
         return fecha
 
@@ -129,7 +133,7 @@ class RegistroAsistenciaForm(forms.ModelForm):
                     "La licencia no corresponde a la designación elegida.",
                 )
 
-            if fecha and not licencia.desde <= fecha <= licencia.hasta:
+            if fecha and not licencia_cubre_fecha(licencia, fecha):
                 self.add_error(
                     "licencia",
                     "La fecha no está dentro del período de licencia.",
@@ -159,9 +163,26 @@ class FiltroAsistenciaForm(forms.Form):
     )
     marca = forms.ModelChoiceField(
         required=False,
-        queryset=MarcaAsistencia.objects.filter(activa=True),
+        queryset=MarcaAsistencia.vigentes(),
         empty_label="Todas las marcas",
     )
+    estado_justificacion = forms.ChoiceField(
+        required=False,
+        label="Justificación",
+        choices=[("", "Todos los estados")]
+        + RegistroAsistencia.EstadoJustificacion.choices,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for field in self.fields.values():
+            clase = (
+                "form-select"
+                if isinstance(field.widget, forms.Select)
+                else "form-control"
+            )
+            field.widget.attrs.setdefault("class", clase)
 
     def clean(self):
         cleaned = super().clean()
@@ -172,6 +193,98 @@ class FiltroAsistenciaForm(forms.Form):
             self.add_error(
                 "hasta",
                 "La fecha final debe ser igual o posterior a la inicial.",
+            )
+
+        return cleaned
+
+
+class FiltroRecepcionForm(FiltroAsistenciaForm):
+    """Filtro de la pantalla de recepción: por defecto, los pendientes."""
+
+    PENDIENTES = "PENDIENTES"
+    TODAS = "TODAS"
+
+    estado_justificacion = forms.ChoiceField(
+        required=False,
+        label="Justificación",
+        choices=[
+            (PENDIENTES, "Pendientes (injustificadas y en trámite)"),
+            *RegistroAsistencia.EstadoJustificacion.choices[1:],
+            (TODAS, "Todas las inasistencias"),
+        ],
+    )
+
+
+class RecepcionFormularioForm(forms.Form):
+    estado_justificacion = forms.ChoiceField(label="Nuevo estado")
+    nro_formulario = forms.CharField(
+        required=False,
+        max_length=30,
+        label="N° de formulario",
+    )
+    fecha_recepcion = forms.DateField(
+        required=False,
+        label="Fecha de recepción",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    motivo = forms.CharField(
+        required=False,
+        max_length=500,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text="Obligatorio al rechazar un formulario.",
+    )
+
+    def __init__(self, *args, registro, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        permitidos = TRANSICIONES_JUSTIFICACION.get(
+            registro.estado_justificacion, set()
+        )
+        self.fields["estado_justificacion"].choices = [
+            (valor, etiqueta)
+            for valor, etiqueta in RegistroAsistencia.EstadoJustificacion.choices
+            if valor in permitidos
+        ]
+        self.fields["fecha_recepcion"].initial = timezone.localdate()
+
+        for field in self.fields.values():
+            clase = (
+                "form-select"
+                if isinstance(field.widget, forms.Select)
+                else "form-control"
+            )
+            field.widget.attrs.setdefault("class", clase)
+
+    def clean_fecha_recepcion(self):
+        fecha = self.cleaned_data["fecha_recepcion"]
+
+        if fecha and fecha > timezone.localdate():
+            raise ValidationError(
+                "La fecha de recepción no puede ser futura."
+            )
+
+        return fecha
+
+    def clean(self):
+        cleaned = super().clean()
+        estado = cleaned.get("estado_justificacion")
+
+        if not estado:
+            return cleaned
+
+        if (
+            estado == RegistroAsistencia.EstadoJustificacion.INJUSTIFICADA
+        ):
+            if len(cleaned.get("motivo", "").strip()) < MOTIVO_MINIMO:
+                self.add_error(
+                    "motivo",
+                    "Indicá el motivo del rechazo "
+                    f"(al menos {MOTIVO_MINIMO} caracteres).",
+                )
+        elif not cleaned.get("nro_formulario", "").strip():
+            self.add_error(
+                "nro_formulario",
+                "Indicá el número del formulario recepcionado.",
             )
 
         return cleaned

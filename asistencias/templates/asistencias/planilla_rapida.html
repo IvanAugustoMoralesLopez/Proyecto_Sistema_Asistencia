@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}Planilla rápida{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3">Planilla rápida de asistencia</h1>
+        <p class="text-secondary mb-0">
+            Marcá a todos los docentes del día en una sola carga.
+        </p>
+    </div>
+
+    <a class="btn btn-outline-secondary"
+       href="{% url 'asistencia:registro_diario' %}?fecha={{ fecha_texto }}">
+        Volver al registro diario
+    </a>
+</div>
+
+<form method="get" class="card card-body mb-3">
+    <div class="row align-items-end g-3">
+        <div class="col-md-3">
+            <label class="form-label" for="fecha">Fecha</label>
+            <input class="form-control" type="date" id="fecha" name="fecha"
+                   value="{{ fecha_texto }}" required>
+        </div>
+
+        <div class="col-md-5">
+            <label class="form-label" for="q">Docente o DNI</label>
+            <input class="form-control" type="search" id="q" name="q"
+                   value="{{ texto }}" placeholder="Filtrar la planilla">
+        </div>
+
+        <div class="col-md-3">
+            <button class="btn btn-secondary" type="submit">Consultar</button>
+        </div>
+    </div>
+</form>
+
+{% if bloqueo %}
+    <div class="alert alert-warning">{{ bloqueo }}</div>
+{% endif %}
+
+{% if jornada_cerrada and not bloqueo %}
+    <div class="alert alert-secondary">
+        Jornada cerrada por {{ jornada_cerrada.cerrado_por }} el
+        {{ jornada_cerrada.cerrado_en|date:"d/m/Y H:i" }}. Como tenés
+        autorización, indicá el motivo de la carga.
+    </div>
+{% endif %}
+
+<p class="text-secondary">
+    {{ total }} designaciones vigentes · {{ marcadas }} ya marcadas ·
+    {{ pendientes }} pendientes
+</p>
+
+<form method="post" id="planilla">
+    {% csrf_token %}
+    <input type="hidden" name="fecha" value="{{ fecha_texto }}">
+    <input type="hidden" name="q" value="{{ texto }}">
+
+    {% if not bloqueo and pendientes %}
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            {% if marca_presente %}
+                <button class="btn btn-outline-success" type="button"
+                        id="btn-presentes">
+                    Marcar presente a todos los pendientes
+                </button>
+            {% endif %}
+            <button class="btn btn-outline-secondary" type="button"
+                    id="btn-limpiar">
+                Limpiar lo no guardado
+            </button>
+        </div>
+    {% endif %}
+
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Docente</th>
+                    <th>Cargo / espacio</th>
+                    <th>Marca</th>
+                    <th>Horas</th>
+                    <th>Licencia</th>
+                    <th>Observaciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fila in filas %}
+                    <tr class="{% if fila.error %}table-danger{% endif %}">
+                        <td class="text-nowrap">
+                            {% if fila.primera_del_docente %}
+                                <strong>{{ fila.designacion.persona.apellido_nombre }}</strong>
+                                <span class="text-secondary small">
+                                    {{ fila.designacion.persona.dni }}
+                                </span>
+                            {% else %}
+                                <span class="text-secondary">↳</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ fila.designacion.cargo.descripcion }}
+                            {% if fila.designacion.espacio_curricular %}
+                                <div class="text-secondary small">
+                                    {{ fila.designacion.espacio_curricular.nombre }}
+                                </div>
+                            {% endif %}
+                        </td>
+
+                        {% if fila.registro %}
+                            <td colspan="4">
+                                <span class="badge text-bg-secondary">
+                                    {{ fila.registro.marca.codigo }}
+                                </span>
+                                {{ fila.registro.marca.descripcion }}
+                                {% if fila.registro.horas_inasistidas %}
+                                    · {{ fila.registro.horas_inasistidas }} hs
+                                {% endif %}
+                                <a class="small ms-2"
+                                   href="{% url 'asistencia:detalle_asistencia' fila.registro.pk %}">
+                                    Ver
+                                </a>
+                            </td>
+                        {% else %}
+                            <td>
+                                <select class="form-select form-select-sm"
+                                        name="marca-{{ fila.designacion.pk }}"
+                                        data-persona="{{ fila.designacion.persona_id }}"
+                                        {% if bloqueo %}disabled{% endif %}>
+                                    <option value="">—</option>
+                                    {% for marca in marcas %}
+                                        <option value="{{ marca.pk }}"
+                                                data-horas="{{ marca.requiere_horas|yesno:'1,0' }}"
+                                                data-licencia="{{ marca.requiere_licencia|yesno:'1,0' }}"
+                                                {% if fila.valores.marca == marca.pk|stringformat:"s" %}selected{% endif %}>
+                                            {{ marca.codigo }} — {{ marca.descripcion }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td style="width: 7rem;">
+                                <input class="form-control form-control-sm"
+                                       type="number" min="0" step="0.25"
+                                       name="horas-{{ fila.designacion.pk }}"
+                                       value="{{ fila.valores.horas }}"
+                                       {% if bloqueo %}disabled{% endif %}>
+                            </td>
+                            <td>
+                                <select class="form-select form-select-sm"
+                                        name="licencia-{{ fila.designacion.pk }}"
+                                        {% if bloqueo or not fila.licencias %}disabled{% endif %}>
+                                    <option value="">
+                                        {% if fila.licencias %}—{% else %}Sin licencias{% endif %}
+                                    </option>
+                                    {% for licencia in fila.licencias %}
+                                        <option value="{{ licencia.pk }}"
+                                                {% if fila.valores.licencia == licencia.pk|stringformat:"s" %}selected{% endif %}>
+                                            {{ licencia.articulo.articulo }} · desde
+                                            {{ licencia.desde|date:"d/m/Y" }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <input class="form-control form-control-sm"
+                                       type="text" maxlength="200"
+                                       name="obs-{{ fila.designacion.pk }}"
+                                       value="{{ fila.valores.obs }}"
+                                       {% if bloqueo %}disabled{% endif %}>
+                                {% if fila.error %}
+                                    <div class="text-danger small mt-1">
+                                        {{ fila.error }}
+                                    </div>
+                                {% endif %}
+                            </td>
+                        {% endif %}
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-4">
+                            No hay designaciones vigentes para esta fecha.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if not bloqueo and pendientes %}
+        {% if jornada_cerrada %}
+            <div class="mb-3">
+                <label class="form-label" for="id_motivo">
+                    Motivo de la carga en una jornada cerrada
+                </label>
+                <textarea class="form-control" id="id_motivo" name="motivo"
+                          rows="2" maxlength="500" required
+                          minlength="10"></textarea>
+            </div>
+        {% endif %}
+
+        <button class="btn btn-primary" type="submit">
+            Guardar planilla
+        </button>
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var presente = "{{ marca_presente.pk|default:'' }}";
+    var selects = document.querySelectorAll("select[name^='marca-']");
+
+    // Habilita horas y licencia solo cuando la marca elegida las exige.
+    function sincronizar(select) {
+        var opcion = select.options[select.selectedIndex];
+        var fila = select.closest("tr");
+        var horas = fila.querySelector("input[name^='horas-']");
+        var licencia = fila.querySelector("select[name^='licencia-']");
+        var usaHoras = opcion && opcion.dataset.horas === "1";
+        var usaLicencia = opcion && opcion.dataset.licencia === "1";
+
+        if (horas) {
+            horas.readOnly = !usaHoras;
+            if (!usaHoras) { horas.value = ""; }
+        }
+        if (licencia && licencia.options.length > 1) {
+            licencia.disabled = !usaLicencia;
+            if (!usaLicencia) { licencia.value = ""; }
+        }
+    }
+
+    selects.forEach(function (select) {
+        sincronizar(select);
+
+        select.addEventListener("change", function () {
+            sincronizar(select);
+
+            // Una novedad global del docente: las demás designaciones
+            // sin marca toman la misma.
+            selects.forEach(function (otro) {
+                if (otro !== select && !otro.value &&
+                    otro.dataset.persona === select.dataset.persona) {
+                    otro.value = select.value;
+                    sincronizar(otro);
+                }
+            });
+        });
+    });
+
+    var botonPresentes = document.getElementById("btn-presentes");
+    if (botonPresentes) {
+        botonPresentes.addEventListener("click", function () {
+            selects.forEach(function (select) {
+                if (!select.value && !select.disabled) {
+                    select.value = presente;
+                    sincronizar(select);
+                }
+            });
+        });
+    }
+
+    var botonLimpiar = document.getElementById("btn-limpiar");
+    if (botonLimpiar) {
+        botonLimpiar.addEventListener("click", function () {
+            selects.forEach(function (select) {
+                select.value = "";
+                sincronizar(select);
+            });
+        });
+    }
+})();
+</script>
+{% endblock %}

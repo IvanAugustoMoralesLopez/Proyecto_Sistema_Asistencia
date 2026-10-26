@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Consulta de licencias{% endblock %}
+{% block seccion %}reportes-consultas{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Consulta de licencias</h1>
+
+<form method="get" class="card card-body mb-4">
+    <div class="row g-3">
+        {% for field in form %}
+            <div class="col-md-3">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+    </div>
+    {% for error in form.non_field_errors %}
+        <div class="text-danger small mt-2">{{ error }}</div>
+    {% endfor %}
+
+    <div class="mt-3 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Buscar</button>
+        <a class="btn btn-outline-secondary" href="{% url 'reportes:consultas' %}">Limpiar filtros</a>
+        <a class="btn btn-outline-success ms-auto"
+           href="?{% if querystring %}{{ querystring }}&{% endif %}exportar=csv">Exportar CSV</a>
+    </div>
+</form>
+
+<p class="text-muted small">{{ pagina.paginator.count }} resultado{{ pagina.paginator.count|pluralize }}.</p>
+
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>DNI</th>
+                <th>Docente</th>
+                <th>Cargo</th>
+                <th>Carrera</th>
+                <th>Licencia</th>
+                <th>Desde</th>
+                <th>Hasta</th>
+                <th>Instrumento</th>
+                <th>Justifica</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lic in pagina %}
+                <tr>
+                    <td>{{ lic.designacion.persona.dni }}</td>
+                    <td>{{ lic.designacion.persona.apellido_nombre }}</td>
+                    <td>{{ lic.designacion.cargo }}</td>
+                    <td>{{ lic.designacion.espacio_curricular.carrera|default:"—" }}</td>
+                    <td>{{ lic.articulo.articulo }} · {{ lic.articulo.tipo_licencia }}</td>
+                    <td class="text-nowrap">{{ lic.desde|date:"d/m/Y" }}</td>
+                    <td class="text-nowrap">{{ lic.hasta|date:"d/m/Y"|default:"—" }}</td>
+                    <td>{{ lic.instrumento }}</td>
+                    <td>
+                        {% if lic.justifica is True %}Sí{% elif lic.justifica is False %}No{% else %}Sin definir{% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="9" class="text-center text-muted py-4">No hay licencias para los filtros elegidos.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if pagina.has_other_pages %}
+<nav aria-label="Paginación">
+    <ul class="pagination">
+        {% if pagina.has_previous %}
+            <li class="page-item"><a class="page-link" href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.previous_page_number }}">Anterior</a></li>
+        {% endif %}
+        <li class="page-item disabled"><span class="page-link">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span></li>
+        {% if pagina.has_next %}
+            <li class="page-item"><a class="page-link" href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.next_page_number }}">Siguiente</a></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}
