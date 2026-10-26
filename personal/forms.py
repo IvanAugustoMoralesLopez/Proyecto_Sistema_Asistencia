@@ -46,8 +46,6 @@ class PersonaForm(forms.ModelForm):
         fields = [
             "dni",
             "apellido_nombre",
-            "apellido",
-            "nombres",
             "sexo",
             "fecha_nacimiento",
             "estado_civil",
@@ -72,8 +70,6 @@ class PersonaForm(forms.ModelForm):
                 }
             ),
             "apellido_nombre": forms.TextInput(attrs={"class": "form-control"}),
-            "apellido": forms.TextInput(attrs={"class": "form-control"}),
-            "nombres": forms.TextInput(attrs={"class": "form-control"}),
             "sexo": forms.Select(attrs={"class": "form-select"}),
             "fecha_nacimiento": forms.DateInput(
                 attrs={"class": "form-control", "type": "date"}
@@ -97,18 +93,11 @@ class PersonaForm(forms.ModelForm):
         if self.instance and self.instance.pk:
             self.fields["dni"].disabled = True
             self.fields["dni"].help_text = "El DNI identifica el legajo y no se modifica."
-        self.fields["apellido_nombre"].required = False
 
     def clean(self):
         cleaned_data = super().clean()
-        apellido = cleaned_data.get("apellido", "").strip()
-        nombres = cleaned_data.get("nombres", "").strip()
         nombre_completo = cleaned_data.get("apellido_nombre", "").strip()
-        if apellido or nombres:
-            cleaned_data["apellido_nombre"] = ", ".join(
-                parte for parte in (apellido, nombres) if parte
-            )
-        elif not nombre_completo:
+        if not nombre_completo:
             self.add_error(
                 "apellido_nombre",
                 "Ingrese el apellido y nombre del agente.",
