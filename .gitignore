@@ -8,3 +8,4 @@ staticfiles/
 media/
 .pytest_cache/
 .coverage
+.example.env
