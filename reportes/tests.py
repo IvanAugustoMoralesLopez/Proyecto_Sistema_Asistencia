@@ -50,6 +50,10 @@ class ParametroSistemaTests(TestCase):
         parametros = ParametroSistema.obtener()
         self.assertEqual(parametros.ciclo_lectivo, 2027)
         self.assertEqual(parametros.actualizado_por, usuario)
+        evento = EventoAsistencia.objects.get(accion="PARAMETROS")
+        self.assertEqual(evento.usuario, usuario)
+        self.assertEqual(evento.antes["ciclo_lectivo"], timezone.localdate().year)
+        self.assertEqual(evento.despues["ciclo_lectivo"], 2027)
 
     def test_ciclo_lectivo_invalido(self):
         self.client.force_login(crear_usuario("sub", "gestionar_parametros"))
@@ -135,7 +139,6 @@ class InalterabilidadTests(TestCase):
 
 # ───────────── RF-19: usuarios y roles ─────────────
 
-from django.contrib.admin.models import LogEntry
 from django.core.management import call_command
 
 
@@ -166,8 +169,11 @@ class UsuariosTests(TestCase):
         nuevo = User.objects.get(username="zunilda")
         self.assertTrue(nuevo.check_password("Clave-Segura-2026"))
         self.assertEqual(list(nuevo.groups.values_list("name", flat=True)), [BEDELIA])
-        entrada = LogEntry.objects.get(user=self.admin, object_id=str(nuevo.pk))
-        self.assertNotIn("Clave", entrada.change_message)
+        evento = EventoAsistencia.objects.get(usuario=self.admin, accion="USUARIO_ALTA")
+        self.assertEqual(evento.despues["usuario"], "zunilda")
+        self.assertEqual(evento.despues["rol"], BEDELIA)
+        self.assertNotIn("Clave", str(evento.despues))
+        self.assertNotIn("password", str(evento.despues).lower())
 
     def test_contrasena_debil_o_distinta(self):
         self.datos.update(password1="123", password2="123")
@@ -207,6 +213,32 @@ class UsuariosTests(TestCase):
         self.assertEqual(self.client.get(url).status_code, 403)
         self.client.force_login(User.objects.create_superuser("root2", password="x"))
         self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_edicion_registra_antes_y_despues_en_la_bitacora(self):
+        self.client.post(reverse("reportes:usuario_crear"), self.datos)
+        usuario = User.objects.get(username="zunilda")
+        self.datos.update(
+            rol=Group.objects.get(name=SECRETARIA).pk,
+            last_name="Aquino de Pérez",
+            password1="Otra-Clave-2026",
+            password2="Otra-Clave-2026",
+        )
+        self.client.post(reverse("reportes:usuario_editar", args=[usuario.pk]), self.datos)
+
+        evento = EventoAsistencia.objects.get(accion="USUARIO_EDITAR")
+        self.assertEqual(evento.antes["rol"], BEDELIA)
+        self.assertEqual(evento.despues["rol"], SECRETARIA)
+        self.assertEqual(evento.antes["apellido"], "Aquino")
+        self.assertEqual(evento.despues["apellido"], "Aquino de Pérez")
+        self.assertEqual(evento.despues["contraseña"], "restablecida")
+        self.assertNotIn("Otra-Clave", str(evento.despues))
+
+    def test_eventos_de_usuario_se_ven_en_la_pantalla_de_bitacora(self):
+        self.client.post(reverse("reportes:usuario_crear"), self.datos)
+        self.client.force_login(crear_usuario("sec", "ver_bitacora"))
+        respuesta = self.client.get(reverse("reportes:bitacora"), {"accion": "USUARIO_ALTA"})
+        evento = list(respuesta.context["pagina"])[0]
+        self.assertEqual(evento.objetivo, "Usuario zunilda")
 
     def test_listado_filtra_por_rol(self):
         self.client.post(reverse("reportes:usuario_crear"), self.datos)

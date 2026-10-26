@@ -1,19 +1,28 @@
-from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
-from django.db.models import Model
+from asistencias.models import EventoAsistencia
 
 
-def registrar_cambio(usuario, objeto, *, alta=False, mensaje=""):
+def registrar_evento(usuario, accion, *, motivo="", antes=None, despues=None):
     """
-    Deja constancia (usuario, fecha y hora, descripción) de un cambio de
-    configuración en el historial del admin de Django. Se usa para los
-    cambios que no generan un EventoAsistencia (usuarios y parámetros).
-    Nunca incluir contraseñas en el mensaje.
+    Deja un evento en la bitácora (RF-20) para cambios de configuración que
+    no están ligados a un registro de asistencia: usuarios y parámetros.
+    Nunca incluir contraseñas en antes/despues.
     """
-    modelo: type[Model] = type(objeto)
-    LogEntry.objects.log_actions(
-        usuario.pk,
-        modelo.objects.filter(pk=objeto.pk),
-        ADDITION if alta else CHANGE,
-        mensaje,
-        single_object=True,
+    return EventoAsistencia.objects.create(
+        usuario=usuario,
+        accion=accion,
+        motivo=motivo,
+        antes=antes,
+        despues=despues,
     )
+
+
+def datos_usuario(usuario, rol):
+    """Foto de los datos de un usuario que interesan para auditar."""
+    return {
+        "usuario": usuario.username,
+        "nombre": usuario.first_name,
+        "apellido": usuario.last_name,
+        "email": usuario.email,
+        "activo": usuario.is_active,
+        "rol": rol,
+    }
