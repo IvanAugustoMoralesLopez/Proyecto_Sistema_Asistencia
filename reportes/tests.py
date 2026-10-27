@@ -357,3 +357,81 @@ class SelectorsTests(ConsultasTests):
     def test_texto_instrumento(self):
         self.assertEqual(texto_instrumento(self.l1), "Disposición 12/2026")
         self.assertEqual(texto_instrumento(self.l2), "—")
+
+
+# ───────────── RF-18: alertas de agotamiento ─────────────
+
+from .selectors import calcular_alertas
+
+
+class AlertasTests(TestCase):
+    def setUp(self):
+        cargo = Cargo.objects.create(codigo="166", descripcion="Hs cátedra")
+        carrera = Carrera.objects.create(nombre="Software")
+        espacio = EspacioCurricular.objects.create(nombre="Prog", carrera=carrera)
+        persona = Persona.objects.create(dni="33333333", apellido_nombre="CABRAL, ANA")
+        self.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, espacio_curricular=espacio, desde=date(2026, 3, 1)
+        )
+        self.url = reverse("reportes:alertas")
+        self.client.force_login(crear_usuario("bedel", "consultar_licencias"))
+
+    def articulo(self, codigo, tope):
+        return LicenciaArticulo.objects.create(
+            cod_licencia=f"X.{codigo}", articulo=codigo, tipo_licencia=f"Tipo {codigo}",
+            sit_rev="Titular", goce_haberes="Con goce", autoridad="Dirección",
+            plazo="-", tope_dias_anual=tope,
+        )
+
+    def licencia(self, articulo, desde, hasta):
+        return LicenciaOtorgada.objects.create(
+            designacion=self.designacion, articulo=articulo, sit_rev="TIT",
+            desde=desde, hasta=hasta,
+        )
+
+    def test_proximo_y_agotado(self):
+        # lun 1/6 a vie 5/6/2026 = 5 días hábiles
+        self.licencia(self.articulo("A1", 6), date(2026, 6, 1), date(2026, 6, 5))
+        self.licencia(self.articulo("A2", 5), date(2026, 6, 8), date(2026, 6, 12))
+        alertas = {a["articulo"]: a for a in calcular_alertas(2026, 80)}
+        self.assertEqual(alertas["A1"]["usados"], 5)
+        self.assertEqual(alertas["A1"]["restantes"], 1)
+        self.assertFalse(alertas["A1"]["agotado"])
+        self.assertTrue(alertas["A2"]["agotado"])
+        self.assertEqual(alertas["A2"]["restantes"], 0)
+
+    def test_no_avisa_bajo_el_umbral_ni_sin_tope(self):
+        self.licencia(self.articulo("B1", 20), date(2026, 6, 1), date(2026, 6, 5))  # 25 %
+        self.licencia(self.articulo("B2", None), date(2026, 6, 1), date(2026, 6, 5))  # sin tope
+        self.assertEqual(calcular_alertas(2026, 80), [])
+
+    def test_otro_anio_no_cuenta(self):
+        self.licencia(self.articulo("C1", 5), date(2025, 6, 2), date(2025, 6, 6))
+        self.assertEqual(calcular_alertas(2026, 80), [])
+        self.assertEqual(len(calcular_alertas(2025, 80)), 1)
+
+    def test_suma_varias_licencias_del_mismo_articulo(self):
+        art = self.articulo("D1", 6)
+        self.licencia(art, date(2026, 6, 1), date(2026, 6, 3))   # 3
+        self.licencia(art, date(2026, 6, 8), date(2026, 6, 10))  # 3
+        (alerta,) = calcular_alertas(2026, 80)
+        self.assertEqual(alerta["usados"], 6)
+        self.assertTrue(alerta["agotado"])
+
+    def test_vista_requiere_permiso_y_usa_ciclo_lectivo_por_defecto(self):
+        self.client.force_login(crear_usuario("sin"))
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+        self.client.force_login(crear_usuario("bedel2", "consultar_licencias"))
+        self.licencia(self.articulo("E1", 5), date(2026, 6, 1), date(2026, 6, 5))
+        parametros = ParametroSistema.obtener()
+        parametros.ciclo_lectivo = 2026
+        parametros.save()
+        respuesta = self.client.get(self.url)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.context["alertas"]), 1)
+
+    def test_vista_solo_agotados(self):
+        self.licencia(self.articulo("F1", 6), date(2026, 6, 1), date(2026, 6, 5))  # 83 %
+        respuesta = self.client.get(self.url, {"anio": 2026, "umbral": 100})
+        self.assertEqual(respuesta.context["alertas"], [])

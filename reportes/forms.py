@@ -197,3 +197,22 @@ class FiltroConsultaForm(forms.Form):
         if desde and hasta and desde > hasta:
             raise forms.ValidationError("La fecha «desde» no puede ser posterior a «hasta».")
         return datos
+
+
+# ───────────── Alertas (RF-18) ─────────────
+
+class FiltroAlertasForm(forms.Form):
+    UMBRALES = [(50, "50 %"), (70, "70 %"), (80, "80 %"), (90, "90 %"), (100, "Solo agotados")]
+
+    anio = forms.IntegerField(
+        label="Año",
+        min_value=2000,
+        max_value=2100,
+        widget=forms.NumberInput(attrs={"class": "form-control"}),
+    )
+    umbral = forms.TypedChoiceField(
+        label="Avisar desde",
+        choices=UMBRALES,
+        coerce=int,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
