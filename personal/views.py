@@ -6,10 +6,17 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
-from .forms import BuscarLegajoForm, DesignacionForm, PersonaForm
+from .forms import (
+    BuscarLegajoForm,
+    DesignacionForm,
+    NuevaDesignacionForm,
+    PersonaForm,
+)
 from .models import (
     Cargo,
     Designacion,
@@ -327,3 +334,68 @@ def _contexto_pantalla(
         "errores_importacion": ImportacionPersonalError.objects.all()[:10],
         "licencias_admin_url": "/admin/licencias/licenciaarticulo/",
     }
+
+
+@login_required
+def registro_designaciones(request):
+    consulta = request.GET.get("q", "").strip()
+    designaciones = (
+        Designacion.objects.select_related(
+            "persona",
+            "cargo",
+            "espacio_curricular",
+        )
+        .prefetch_related("horarios")
+        .order_by("persona__apellido_nombre", "desde", "pk")
+    )
+    if consulta:
+        designaciones = designaciones.filter(
+            Q(persona__dni__icontains=consulta)
+            | Q(persona__apellido_nombre__icontains=consulta)
+            | Q(cargo__codigo__icontains=consulta)
+            | Q(cargo__descripcion__icontains=consulta)
+            | Q(espacio_curricular__nombre__icontains=consulta)
+            | Q(espacio_curricular__carrera__nombre__icontains=consulta)
+        )
+
+    for designacion in designaciones:
+        designacion.horas_por_dia = {
+            horario.dia: horario.horas_catedra
+            for horario in designacion.horarios.all()
+        }
+
+    return render(
+        request,
+        "pantallas/datos_personal.html",
+        {
+            "designaciones": designaciones,
+            "consulta": consulta,
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def nueva_designacion(request):
+    if request.method == "POST":
+        form = NuevaDesignacionForm(request.POST)
+        if form.is_valid():
+            designacion = form.save()
+            messages.success(
+                request,
+                "La designación docente se guardó correctamente.",
+            )
+            return redirect(reverse("pantalla_personal"))
+        messages.error(request, "Revise los datos de la designación.")
+    else:
+        inicial = {}
+        dni = request.GET.get("dni", "").strip()
+        if dni and Persona.objects.filter(pk=dni, activa=True).exists():
+            inicial["persona"] = dni
+        form = NuevaDesignacionForm(initial=inicial)
+
+    return render(
+        request,
+        "personal/nueva_designacion.html",
+        {"form": form},
+    )

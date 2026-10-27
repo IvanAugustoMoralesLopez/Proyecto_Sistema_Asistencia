@@ -258,3 +258,16 @@ class DesignacionForm(forms.ModelForm):
                 ).delete()
 
         return designacion
+
+
+class NuevaDesignacionForm(DesignacionForm):
+    persona = forms.ModelChoiceField(
+        queryset=Persona.objects.filter(activa=True).order_by("apellido_nombre"),
+        label="Legajo del agente",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    @transaction.atomic
+    def save(self, commit=True):
+        self.instance.persona = self.cleaned_data["persona"]
+        return super().save(commit=commit)

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva designación docente{% endblock %}
+{% block seccion %}datos-personal{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <p class="ruta mb-1">Administración / Personal docente / Nuevo registro</p>
+        <h1 class="h3 mb-1">Registrar designación docente</h1>
+        <p class="text-secondary mb-0">
+            Seleccione el legajo y complete los datos del cargo, espacio curricular, horario y vigencia.
+        </p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'pantalla_personal' %}">
+        Volver a designaciones
+    </a>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Nueva designación</h2>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="mb-4">
+                {{ form.persona.label_tag }}
+                {{ form.persona }}
+                {% for error in form.persona.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+                <div class="form-text">
+                    ¿El agente todavía no tiene legajo?
+                    <a href="{% url 'personal:gestion_legajos' %}">Crear legajo docente</a>.
+                </div>
+            </div>
+
+            <h3 class="h6 border-bottom pb-2">Cargo y situación administrativa</h3>
+            <div class="row g-3 mb-4">
+                <div class="col-md-3">{{ form.cargo.label_tag }}{{ form.cargo }}</div>
+                <div class="col-md-3">{{ form.espacio_curricular.label_tag }}{{ form.espacio_curricular }}</div>
+                <div class="col-md-3">{{ form.unidad_educativa.label_tag }}{{ form.unidad_educativa }}</div>
+                <div class="col-md-3">{{ form.situacion_revista.label_tag }}{{ form.situacion_revista }}</div>
+                <div class="col-md-3">{{ form.anio_curso.label_tag }}{{ form.anio_curso }}</div>
+                <div class="col-md-3">{{ form.division_seccion.label_tag }}{{ form.division_seccion }}</div>
+                <div class="col-md-3">{{ form.turno.label_tag }}{{ form.turno }}</div>
+                <div class="col-md-3">{{ form.hs_catedra.label_tag }}{{ form.hs_catedra }}</div>
+                <div class="col-md-3">{{ form.jornada.label_tag }}{{ form.jornada }}</div>
+                <div class="col-md-3">{{ form.especialidad.label_tag }}{{ form.especialidad }}</div>
+                <div class="col-md-3">{{ form.motivo.label_tag }}{{ form.motivo }}</div>
+            </div>
+
+            <h3 class="h6 border-bottom pb-2">Carga horaria semanal</h3>
+            <div class="row g-3 mb-4">
+                <div class="col">{{ form.horas_lun.label_tag }}{{ form.horas_lun }}</div>
+                <div class="col">{{ form.horas_mar.label_tag }}{{ form.horas_mar }}</div>
+                <div class="col">{{ form.horas_mie.label_tag }}{{ form.horas_mie }}</div>
+                <div class="col">{{ form.horas_jue.label_tag }}{{ form.horas_jue }}</div>
+                <div class="col">{{ form.horas_vie.label_tag }}{{ form.horas_vie }}</div>
+            </div>
+
+            <h3 class="h6 border-bottom pb-2">Normativa</h3>
+            <div class="row g-3 mb-4">
+                <div class="col-md-3">{{ form.norma_tipo.label_tag }}{{ form.norma_tipo }}</div>
+                <div class="col-md-3">{{ form.norma_numero.label_tag }}{{ form.norma_numero }}</div>
+                <div class="col-md-3">{{ form.norma_anio.label_tag }}{{ form.norma_anio }}</div>
+                <div class="col-md-3">{{ form.organismo_emisor.label_tag }}{{ form.organismo_emisor }}</div>
+                <div class="col-md-3">{{ form.disp_alta_nro.label_tag }}{{ form.disp_alta_nro }}</div>
+                <div class="col-md-3">{{ form.sello_regional_as.label_tag }}{{ form.sello_regional_as }}</div>
+                <div class="col-md-3">{{ form.novedad.label_tag }}{{ form.novedad }}</div>
+            </div>
+
+            <h3 class="h6 border-bottom pb-2">Vigencia y plan de estudio</h3>
+            <div class="row g-3 mb-4">
+                <div class="col-md-3">{{ form.desde.label_tag }}{{ form.desde }}</div>
+                <div class="col-md-3">{{ form.hasta.label_tag }}{{ form.hasta }}</div>
+                <div class="col-md-3">{{ form.pof.label_tag }}{{ form.pof }}</div>
+                <div class="col-md-3">{{ form.anio_pof.label_tag }}{{ form.anio_pof }}</div>
+                <div class="col-12">{{ form.observaciones.label_tag }}{{ form.observaciones }}</div>
+            </div>
+
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+            {% for field in form %}
+                {% for error in field.errors %}
+                    {% if field.name != "persona" %}
+                        <div class="text-danger small">{{ field.label }}: {{ error }}</div>
+                    {% endif %}
+                {% endfor %}
+            {% endfor %}
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Guardar designación</button>
+                <a class="btn btn-outline-secondary" href="{% url 'pantalla_personal' %}">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

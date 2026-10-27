@@ -18,10 +18,16 @@ Encabezado común de las planillas. Uso:
 
         <button type="button" class="btn btn-primario-suave" id="btnModificar" disabled>Modificar</button>
 
-        <button type="button" class="btn btn-primario" data-bs-toggle="offcanvas"
-                data-bs-target="#{{ panel_id }}" aria-controls="{{ panel_id }}">
-            <i class="bi bi-plus-lg"></i> Nuevo Registro
-        </button>
+        {% if nuevo_registro_url %}
+            <a class="btn btn-primario" href="{{ nuevo_registro_url }}">
+                <i class="bi bi-plus-lg"></i> Nuevo Registro
+            </a>
+        {% else %}
+            <button type="button" class="btn btn-primario" data-bs-toggle="offcanvas"
+                    data-bs-target="#{{ panel_id }}" aria-controls="{{ panel_id }}">
+                <i class="bi bi-plus-lg"></i> Nuevo Registro
+            </button>
+        {% endif %}
 
         <div class="dropdown">
             <button type="button" class="btn btn-filtro" data-bs-toggle="dropdown" aria-expanded="false">
