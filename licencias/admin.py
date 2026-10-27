@@ -3,7 +3,8 @@ from .models import LicenciaArticulo, LicenciaOtorgada
 
 @admin.register(LicenciaArticulo)
 class LicenciaArticuloAdmin(admin.ModelAdmin):
-    list_display = ('cod_licencia', 'articulo', 'tipo_licencia', 'sit_rev', 'clase')
+    list_display = ('cod_licencia', 'articulo', 'tipo_licencia', 'sit_rev', 'clase', 'tope_dias_anual')
+    list_editable = ('tope_dias_anual',)
     search_fields = ('cod_licencia', 'articulo', 'tipo_licencia')
     list_filter = ('clase', 'sit_rev', 'categoria_informe')
 

@@ -26,6 +26,12 @@ class LicenciaArticulo(models.Model):
     goce_haberes = models.CharField(max_length=30)
     autoridad = models.CharField(max_length=30)
     plazo = models.CharField(max_length=200)
+    
+    tope_dias_anual = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        verbose_name="Tope de días por año",
+        help_text="Vacío = sin tope numérico.",
+    )
 
     class Meta:
         db_table = 'licencia_articulo'
@@ -36,8 +42,8 @@ class LicenciaArticulo(models.Model):
     def __str__(self):
         return f"{self.articulo} - {self.tipo_licencia}"
 
+
 class LicenciaOtorgada(models.Model):
-    # La clave foránea apunta al modelo Designacion. Si lo tenés en la app 'personal', queda así:
     designacion = models.ForeignKey('personal.Designacion', on_delete=models.RESTRICT)
     articulo = models.ForeignKey(LicenciaArticulo, on_delete=models.RESTRICT)
     sit_rev = models.CharField(max_length=20)
