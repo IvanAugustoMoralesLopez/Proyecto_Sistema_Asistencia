@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from asistencias.models import EventoAsistencia
 from licencias.models import LicenciaOtorgada
+from licencias.services import dias_usados_en_anio
 
 
 # ───────────── Bitácora (RF-20) ─────────────
@@ -138,3 +139,57 @@ def texto_instrumento(licencia):
     if licencia.disp_anio:
         numero = f"{numero}/{licencia.disp_anio}" if numero else str(licencia.disp_anio)
     return " ".join(p for p in (licencia.disp_tipo, numero) if p) or "—"
+
+
+# ───────────── Alertas de agotamiento (RF-18) ─────────────
+
+UMBRAL_POR_DEFECTO = 80  # % del tope a partir del cual se avisa
+
+
+def calcular_alertas(anio, umbral=UMBRAL_POR_DEFECTO):
+    """
+    Docentes que consumieron al menos `umbral` % del tope anual de días de
+    un artículo de licencia. Solo se evalúan los artículos con tope numérico.
+
+    Los días se calculan con licencias.services.dias_usados_en_anio, la misma
+    regla de conteo del módulo de licencias. Un docente se evalúa por
+    artículo, sumando todas las licencias de ese artículo en el año.
+    """
+    licencias = (
+        LicenciaOtorgada.objects.filter(
+            articulo__tope_dias_anual__isnull=False,
+            articulo__tope_dias_anual__gt=0,
+            desde__year__lte=anio,
+        )
+        .filter(Q(hasta__isnull=True) | Q(hasta__year__gte=anio))
+        .select_related("designacion__persona", "articulo")
+        .order_by("-desde", "-pk")
+    )
+
+    # Un renglón por (docente, artículo). Si el artículo tiene distinto tope
+    # según la situación de revista, se usa el de la licencia más reciente.
+    pares = {}
+    for licencia in licencias:
+        persona = licencia.designacion.persona
+        pares.setdefault((persona.dni, licencia.articulo.articulo), licencia)
+
+    alertas = []
+    for (dni, codigo), licencia in pares.items():
+        tope = licencia.articulo.tope_dias_anual
+        usados = dias_usados_en_anio(dni, codigo, anio)
+        porcentaje = round(usados * 100 / tope)
+        if porcentaje >= umbral:
+            alertas.append({
+                "dni": dni,
+                "docente": licencia.designacion.persona.apellido_nombre,
+                "articulo": codigo,
+                "tipo_licencia": licencia.articulo.tipo_licencia,
+                "usados": usados,
+                "tope": tope,
+                "restantes": max(tope - usados, 0),
+                "porcentaje": porcentaje,
+                "agotado": usados >= tope,
+            })
+
+    alertas.sort(key=lambda a: (-a["porcentaje"], a["docente"]))
+    return alertas

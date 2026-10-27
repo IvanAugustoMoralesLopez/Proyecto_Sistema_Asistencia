@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Alertas de licencias{% endblock %}
+{% block seccion %}reportes-alertas{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Alertas de agotamiento de licencias</h1>
+
+<form method="get" class="card card-body mb-4">
+    <div class="row g-3 align-items-end">
+        {% for field in form %}
+            <div class="col-md-3">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+        <div class="col-md-3 d-flex gap-2">
+            <button class="btn btn-primary" type="submit">Ver alertas</button>
+            <a class="btn btn-outline-secondary" href="{% url 'reportes:alertas' %}">Restablecer</a>
+        </div>
+    </div>
+</form>
+
+<p class="text-muted small">
+    Se cuentan días hábiles (sin feriados ni días no laborables) por docente y artículo.
+    Solo se evalúan los artículos con tope anual cargado.
+</p>
+
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>Estado</th>
+                <th>DNI</th>
+                <th>Docente</th>
+                <th>Artículo</th>
+                <th>Tipo de licencia</th>
+                <th class="text-end">Usados</th>
+                <th class="text-end">Tope</th>
+                <th class="text-end">Restantes</th>
+                <th class="text-end">%</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in alertas %}
+                <tr>
+                    <td>
+                        {% if a.agotado %}<span class="badge text-bg-danger">Agotado</span>
+                        {% else %}<span class="badge text-bg-warning">Próximo al tope</span>{% endif %}
+                    </td>
+                    <td>{{ a.dni }}</td>
+                    <td>{{ a.docente }}</td>
+                    <td>{{ a.articulo }}</td>
+                    <td>{{ a.tipo_licencia }}</td>
+                    <td class="text-end">{{ a.usados }}</td>
+                    <td class="text-end">{{ a.tope }}</td>
+                    <td class="text-end">{{ a.restantes }}</td>
+                    <td class="text-end">{{ a.porcentaje }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="9" class="text-center text-muted py-4">No hay docentes cerca de su tope con estos criterios.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

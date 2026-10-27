@@ -15,6 +15,7 @@ from asistencias.models import EventoAsistencia
 from .auditoria import datos_usuario, registrar_evento
 from .exportaciones import ENCABEZADO_LICENCIAS, filas_licencias
 from .forms import (
+    FiltroAlertasForm,
     FiltroBitacoraForm,
     FiltroConsultaForm,
     ParametroSistemaForm,
@@ -23,7 +24,9 @@ from .forms import (
 from .models import ParametroSistema
 from .roles import ROLES
 from .selectors import (
+    UMBRAL_POR_DEFECTO,
     buscar_eventos,
+    calcular_alertas,
     buscar_licencias,
     describir_objetivo,
     resumir_cambios,
@@ -205,3 +208,21 @@ def consultas(request):
             "querystring": _querystring_sin(request, "page", "exportar"),
         },
     )
+
+
+# ───────────── Alertas de agotamiento (RF-18) ─────────────
+
+@login_required
+@permission_required("reportes.consultar_licencias", raise_exception=True)
+def alertas(request):
+    # Sin filtros elegidos: ciclo lectivo configurado y umbral por defecto.
+    datos = request.GET or {
+        "anio": ParametroSistema.obtener().ciclo_lectivo,
+        "umbral": UMBRAL_POR_DEFECTO,
+    }
+    form = FiltroAlertasForm(datos)
+    lista = []
+    if form.is_valid():
+        lista = calcular_alertas(form.cleaned_data["anio"], form.cleaned_data["umbral"])
+
+    return render(request, "reportes/alertas.html", {"form": form, "alertas": lista})

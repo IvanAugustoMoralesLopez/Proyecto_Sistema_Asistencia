@@ -96,6 +96,11 @@
                     <i class="bi bi-search"></i><span>Consultas</span>
                 </a>
                 {% endif %}
+                {% if perms.reportes.consultar_licencias %}
+                <a class="sidebar__link" data-seccion="reportes-alertas" href="{% url 'reportes:alertas' %}">
+                    <i class="bi bi-bell"></i><span>Alertas</span>
+                </a>
+                {% endif %}
                 {% if perms.reportes.ver_bitacora %}
                 <a class="sidebar__link" data-seccion="reportes-bitacora" href="{% url 'reportes:bitacora' %}">
                     <i class="bi bi-journal-check"></i><span>Bitácora</span>
