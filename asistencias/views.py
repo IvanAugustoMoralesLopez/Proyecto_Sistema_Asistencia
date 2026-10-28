@@ -90,13 +90,6 @@ def registro_diario(request):
         messages.error(request, "La fecha seleccionada no es válida.")
         return redirect("asistencia:registro_diario")
 
-    form = FiltroAsistenciaForm(
-        initial={
-            "desde": fecha_seleccionada,
-            "hasta": fecha_seleccionada,
-        }
-    )
-
     registros = (
         RegistroAsistencia.objects.select_related(
             "designacion__persona",
@@ -144,7 +137,6 @@ def registro_diario(request):
             "jornada_cerrada": jornada_cerrada,
             "puede_cerrar_jornada": puede_cerrar_jornada,
             "motivo_no_laborable": motivo_no_laborable,
-            "form": form,
         },
     )
 
@@ -571,6 +563,11 @@ def _aplicar_filtros(registros, datos):
 
     if datos.get("marca"):
         registros = registros.filter(marca=datos["marca"])
+
+    if datos.get("espacio_curricular"):
+        registros = registros.filter(
+            designacion__espacio_curricular=datos["espacio_curricular"]
+        )
 
     return registros
 

@@ -4,7 +4,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from personal.models import Designacion
+from personal.models import Designacion, EspacioCurricular
 from licencias.models import LicenciaOtorgada
 
 from .models import (
@@ -49,18 +49,33 @@ class RegistroAsistenciaForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.fields["designacion"].queryset = (
-            Designacion.objects.filter(
-                activo=True,
-                persona__activa=True,
-            ).select_related(
-                "persona",
-                "cargo",
-                "espacio_curricular",
-            )
+        designaciones_vigentes = Designacion.objects.filter(
+            activo=True,
+            persona__activa=True,
         )
+        marcas_vigentes = MarcaAsistencia.vigentes()
 
-        self.fields["marca"].queryset = MarcaAsistencia.vigentes()
+        # Si se edita un registro cuya designación o marca ya no está
+        # vigente (p. ej. el docente cesó), igual debe aparecer seleccionada
+        # en el combo; de lo contrario el formulario la rechaza como
+        # "opción no válida" aunque no se la haya cambiado.
+        if self.instance and self.instance.pk:
+            if self.instance.designacion_id:
+                designaciones_vigentes = designaciones_vigentes | Designacion.objects.filter(
+                    pk=self.instance.designacion_id
+                )
+            if self.instance.marca_id:
+                marcas_vigentes = marcas_vigentes | MarcaAsistencia.objects.filter(
+                    pk=self.instance.marca_id
+                )
+
+        self.fields["designacion"].queryset = designaciones_vigentes.select_related(
+            "persona",
+            "cargo",
+            "espacio_curricular",
+        ).distinct()
+
+        self.fields["marca"].queryset = marcas_vigentes.distinct()
 
         self.fields["licencia"].queryset = (
             LicenciaOtorgada.objects.select_related(
@@ -165,6 +180,14 @@ class FiltroAsistenciaForm(forms.Form):
         required=False,
         queryset=MarcaAsistencia.vigentes(),
         empty_label="Todas las marcas",
+    )
+    espacio_curricular = forms.ModelChoiceField(
+        required=False,
+        label="Materia",
+        queryset=EspacioCurricular.objects.filter(activo=True)
+        .select_related("carrera")
+        .order_by("carrera__nombre", "nombre"),
+        empty_label="Todas las materias",
     )
     estado_justificacion = forms.ChoiceField(
         required=False,
