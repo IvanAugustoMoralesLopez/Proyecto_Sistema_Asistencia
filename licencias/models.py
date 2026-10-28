@@ -1,6 +1,10 @@
-from django.db import models 
+from datetime import date
+
 from django.core.exceptions import ValidationError
-from datetime import date, timedelta 
+from django.db import models
+
+from .clasificacion import CATEGORIA_CHOICES
+from .dias import contar_dias_habiles
 
 
 class LicenciaArticulo(models.Model):
@@ -9,11 +13,9 @@ class LicenciaArticulo(models.Model):
         ('Permiso', 'Permiso'),
         ('Inasistencia', 'Inasistencia'),
     ]
-    CATEGORIA_CHOICES = [
-        ('Enfermedad común', 'Enfermedad común'),
-        ('Largo tratamiento', 'Largo tratamiento'),
-        ('Otros', 'Otros'),
-    ]
+    # Se mantiene el nombre de clase por compatibilidad; los valores salen de
+    # clasificacion.py (RN-04 / RN-05).
+    CATEGORIA_CHOICES = CATEGORIA_CHOICES
     SIT_REV_CHOICES = [
         ('Titular', 'Titular'),
         ('Interino', 'Interino'),
@@ -24,12 +26,14 @@ class LicenciaArticulo(models.Model):
     articulo = models.CharField(max_length=20)
     clase = models.CharField(max_length=15, choices=CLASE_CHOICES, default='Licencia')
     tipo_licencia = models.CharField(max_length=120)
-    categoria_informe = models.CharField(max_length=20, choices=CATEGORIA_CHOICES, default='Otros')
+    # Sin default a propósito: cada artículo debe clasificarse explícitamente
+    # en IL-01 o IL-02 (imputación estricta).
+    categoria_informe = models.CharField(max_length=30, choices=CATEGORIA_CHOICES)
     sit_rev = models.CharField(max_length=20, choices=SIT_REV_CHOICES)
     goce_haberes = models.CharField(max_length=30)
     autoridad = models.CharField(max_length=30)
     plazo = models.CharField(max_length=200)
-    
+
     tope_dias_anual = models.PositiveSmallIntegerField(
         null=True, blank=True,
         verbose_name="Tope de días por año",
@@ -50,7 +54,7 @@ class LicenciaOtorgada(models.Model):
     designacion = models.ForeignKey('personal.Designacion', on_delete=models.RESTRICT)
     articulo = models.ForeignKey(LicenciaArticulo, on_delete=models.RESTRICT)
     sit_rev = models.CharField(max_length=20)
-    
+
     # Datos de la disposición (DL-01)
     disp_tipo = models.CharField(max_length=20, null=True, blank=True)
     disp_oficina = models.CharField(max_length=10, null=True, blank=True)
@@ -58,7 +62,7 @@ class LicenciaOtorgada(models.Model):
     disp_anio = models.SmallIntegerField(null=True, blank=True)
     sello_regional_as = models.CharField(max_length=30, null=True, blank=True)
     justifica = models.BooleanField(null=True, blank=True)
-    
+
     # Fechas y observaciones
     desde = models.DateField()
     hasta = models.DateField(null=True, blank=True)
@@ -75,46 +79,44 @@ class LicenciaOtorgada(models.Model):
     def clean(self):
         super().clean()
 
-        # Importación local para evitar el error circular
+        # Chequeamos los *_id (no la relación) para evitar RelatedObjectDoesNotExist
+        # cuando el formulario del Admin todavía no tiene designación o artículo.
+        if not (self.articulo_id and self.designacion_id and self.desde):
+            return
+
+        tope = self.articulo.tope_dias_anual
+        if not tope:
+            return
+
+        # TODO (paso 3 - RN-08): hoy solo se valida en altas. Falta validar
+        # ediciones (excluyendo esta misma licencia), el cruce de año y la
+        # excepción por resolución.
+        if self.pk:
+            return
+
+        # Import local: services importa models, así que no puede ir arriba.
         from .services import dias_usados_en_anio
-        from asistencias.models import DiaNoLaborable
 
-        # Agregamos hasattr para evitar el RelatedObjectDoesNotExist si la designación aún no cargó
-        if hasattr(self, 'designacion') and self.articulo and self.articulo.tope_dias_anual and self.desde:
-            anio_actual = self.desde.year
+        dias_ya_usados = dias_usados_en_anio(
+            self.designacion.persona.dni,
+            self.articulo.articulo,
+            self.desde.year,
+        )
 
-            # 1. Calculamos días históricos consumidos (excluyendo la licencia actual si se está editando)
-            dias_ya_usados = dias_usados_en_anio(
-                self.designacion.persona.dni,
-                self.articulo.articulo,
-                anio_actual
-            )
-            
-            # Si estamos editando una licencia existente, restamos sus días previos para no contar doble
-            # (Asume que en el form se validarán las ediciones, o se usa self.pk para control)
-            
-            if not self.pk: # Solo validamos la suma en licencias nuevas
-                # 2. Calculamos los días hábiles de la solicitud actual
-                fin_calculo = self.hasta if self.hasta else date.today()
-                
-                feriados = set(DiaNoLaborable.objects.filter(
-                    fecha__range=[self.desde, fin_calculo]
-                ).values_list('fecha', flat=True))
+        # Licencia abierta: se calcula hasta hoy (igual criterio que services.py).
+        fin_calculo = self.hasta or date.today()
+        dias_pedidos = contar_dias_habiles(self.desde, fin_calculo)
 
-                dias_pedidos = 0
-                rango = (fin_calculo - self.desde).days + 1
-                
-                for i in range(rango):
-                    dia_evaluado = self.desde + timedelta(days=i)
-                    if dia_evaluado.weekday() < 5 and dia_evaluado not in feriados:
-                        dias_pedidos += 1
+        if dias_ya_usados + dias_pedidos > tope:
+            raise ValidationError({
+                'hasta': (
+                    f"Tope excedido (RN-08). El límite del artículo es {tope} días. "
+                    f"El docente ya usó {dias_ya_usados} días y ahora solicita "
+                    f"{dias_pedidos} más."
+                )
+            })
 
-                # 3. Verificamos que la suma no supere el tope anual
-                if (dias_ya_usados + dias_pedidos) > self.articulo.tope_dias_anual:
-                    raise ValidationError({
-                        'hasta': f"Tope excedido (RN-08). El límite del artículo es {self.articulo.tope_dias_anual} días. El docente ya usó {dias_ya_usados} días y ahora solicita {dias_pedidos} más."
-                    })
-                
+
 class RegistroBitacora(models.Model):
     accion = models.CharField(max_length=50)
     descripcion = models.TextField()
