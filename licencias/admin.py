@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import LicenciaArticulo, LicenciaOtorgada
+from .models import LicenciaArticulo, LicenciaOtorgada, RegistroBitacora
 
 @admin.register(LicenciaArticulo)
 class LicenciaArticuloAdmin(admin.ModelAdmin):
@@ -14,4 +14,10 @@ class LicenciaOtorgadaAdmin(admin.ModelAdmin):
     list_filter = ('sit_rev', 'justifica')
     date_hierarchy = 'desde'
     # Esta línea soluciona el error E040
-    search_fields = ('disp_numero', 'articulo__articulo', 'articulo__tipo_licencia')
+    search_fields = ('disp_numero', 'articulo__articulo', 'articulo__tipo_licencia') 
+
+@admin.register(RegistroBitacora)
+class RegistroBitacoraAdmin(admin.ModelAdmin):
+    list_display = ('fecha', 'accion', 'descripcion')
+    list_filter = ('accion', 'fecha')
+    search_fields = ('descripcion',)

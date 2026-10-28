@@ -13,10 +13,17 @@ def dias_usados_en_anio(dni: str, articulo: str, anio: int) -> int:
     )
 
     total_dias = 0
+    hoy = date.today()
+
     for lic in licencias:
-        # Recortamos el inicio y fin al año evaluado
+        # Recortamos el inicio al año evaluado
         inicio = max(lic.desde, date(anio, 1, 1))
-        fin = min(lic.hasta, date(anio, 12, 31)) if lic.hasta else date(anio, 12, 31)
+        
+        # FIX: Si no hay 'hasta', el tope es hoy (sin pasarse del 31 de dic de ese año)
+        if lic.hasta:
+            fin = min(lic.hasta, date(anio, 12, 31))
+        else:
+            fin = min(hoy, date(anio, 12, 31))
         
         # Obtenemos los feriados del rango en un formato optimizado (Set)
         feriados = set(DiaNoLaborable.objects.filter(
@@ -30,7 +37,7 @@ def dias_usados_en_anio(dni: str, articulo: str, anio: int) -> int:
             if dia_evaluado.weekday() < 5 and dia_evaluado not in feriados:
                 total_dias += 1
                 
-    return total_dias 
+    return total_dias
 
 def clasificar_planilla_licencia(licencia: LicenciaOtorgada) -> str:
     """Evalúa la licencia y la asigna a IL-01 (Salud) o IL-02 (Administrativa)."""
