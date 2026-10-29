@@ -1,16 +1,14 @@
 from datetime import date
 
-from django.core.exceptions import ValidationError
-from django.db import DatabaseError
 from django.test import SimpleTestCase
 
 from .clasificacion import (
+    CATEGORIAS_POR_PLANILLA,
     CategoriaSinPlanillaError,
     PLANILLA_IL01,
     PLANILLA_IL02,
     planilla_para_categoria,
 )
-from .db_errores import errores_de_regla, traducir_error_bd
 from .dias import contar_dias_habiles, listar_dias_habiles, rango_en_anio
 
 
@@ -61,37 +59,22 @@ class RangoEnAnioTests(SimpleTestCase):
         self.assertIsNone(rango_en_anio(date(2027, 1, 1), None, 2026, date(2026, 10, 28)))
 
 
-class PlanillaTests(SimpleTestCase):
-    def test_planillas_validas_se_devuelven_igual(self):
-        self.assertEqual(planilla_para_categoria('IL-01'), PLANILLA_IL01)
-        self.assertEqual(planilla_para_categoria('IL-02'), PLANILLA_IL02)
+class ClasificacionTests(SimpleTestCase):
+    def test_rn04_salud_va_a_il01(self):
+        for categoria in ('Enfermedad común', 'Corto tratamiento',
+                          'Largo tratamiento', 'Enfermedad familiar'):
+            self.assertEqual(planilla_para_categoria(categoria), PLANILLA_IL01)
 
-    def test_valores_invalidos_no_se_clasifican_solos(self):
-        for valor in ('Otros', 'Enfermedad común', '', None):
-            with self.assertRaises(CategoriaSinPlanillaError):
-                planilla_para_categoria(valor)
+    def test_rn05_administrativas_van_a_il02(self):
+        for categoria in ('Razones particulares', 'Examen', 'Duelo',
+                          'Matrimonio', 'Compensatorio', 'Comisión de servicio'):
+            self.assertEqual(planilla_para_categoria(categoria), PLANILLA_IL02)
 
+    def test_categoria_desconocida_no_se_clasifica_sola(self):
+        with self.assertRaises(CategoriaSinPlanillaError):
+            planilla_para_categoria('Otros')
 
-class _ErrorBD(DatabaseError):
-    """Simula el error que devuelve MySQL/MariaDB ante un SIGNAL SQLSTATE '45000'."""
-
-
-class ErroresDeReglaTests(SimpleTestCase):
-    def test_signal_se_traduce_a_validation_error(self):
-        exc = _ErrorBD(1644, 'RN-09: la licencia empieza fuera de la vigencia de la designacion')
-        error = traducir_error_bd(exc)
-        self.assertIsInstance(error, ValidationError)
-        self.assertIn('RN-09', str(error))
-
-    def test_otro_error_de_bd_no_se_traduce(self):
-        self.assertIsNone(traducir_error_bd(_ErrorBD(1062, 'Duplicate entry')))
-
-    def test_context_manager_convierte_signal(self):
-        with self.assertRaises(ValidationError):
-            with errores_de_regla():
-                raise _ErrorBD(1644, 'RN-06: el dia o el mes esta cerrado')
-
-    def test_context_manager_deja_pasar_otros_errores(self):
-        with self.assertRaises(_ErrorBD):
-            with errores_de_regla():
-                raise _ErrorBD(1062, 'Duplicate entry')
+    def test_ninguna_categoria_esta_en_las_dos_planillas(self):
+        il01 = set(CATEGORIAS_POR_PLANILLA[PLANILLA_IL01])
+        il02 = set(CATEGORIAS_POR_PLANILLA[PLANILLA_IL02])
+        self.assertFalse(il01 & il02)

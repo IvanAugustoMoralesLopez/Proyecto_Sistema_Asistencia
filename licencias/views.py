@@ -40,9 +40,9 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
     # RF-10: los feriados/asuetos no generan horas afectadas. Una sola consulta.
     feriados = obtener_feriados(primer_dia, ultimo_dia)
 
-    # RF-12: licencias (no anuladas) que intersecan con este mes
+    # RF-12: licencias que intersecan con este mes
     licencias = LicenciaOtorgada.objects.filter(
-        desde__lte=ultimo_dia, anulada=False,
+        desde__lte=ultimo_dia
     ).exclude(
         hasta__lt=primer_dia
     ).select_related('designacion', 'articulo')
@@ -51,7 +51,7 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
     cache_horarios = {}
 
     for lic in licencias:
-        # RF-15: planilla IL-01 / IL-02 según el catálogo (RN-04 / RN-05)
+        # RF-15: clasificación IL-01 / IL-02 (estricta, RN-04 / RN-05)
         try:
             planilla_destino = clasificar_planilla_licencia(lic)
             requiere_revision = False
@@ -67,7 +67,8 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
         horas_afectadas = 0
         dias_totales_mes = (fin_mes - inicio_mes).days + 1
 
-        # RF-13: se recorren los días de la licencia y se suman las horas afectadas;
+        # RF-13: se recorren los días de la licencia y se suman las horas afectadas.
+        # No se usa "solo días hábiles" porque pueden existir horarios en sábado;
         # lo único que se omite son los feriados (RF-10).
         for i in range(dias_totales_mes):
             dia_evaluado = inicio_mes + timedelta(days=i)
