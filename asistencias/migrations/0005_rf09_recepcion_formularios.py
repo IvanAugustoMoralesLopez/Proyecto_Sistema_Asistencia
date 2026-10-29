@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('asistencias', '0004_corregir_marcas_asistencia'),
-        ('licencias', '0001_initial'),
+        ('licencias', '0003_alter_licenciaotorgada_options_and_more'),
         ('personal', '0001_initial'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

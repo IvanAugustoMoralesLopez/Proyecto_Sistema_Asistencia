@@ -1,8 +1,9 @@
 from django.apps import AppConfig
 
 
-class LicenciasConfig(AppConfig):
+class LicenciasConfig(AppConfig): # El nombre de la clase puede variar según tu app
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'licencias'
-    # Sin ready(): la bitácora (RF-20) la escriben los triggers de la base en la
-    # tabla `auditoria`, así que ya no se usa licencias/signals.py.
+    name = 'licencias' # Asegurate de que coincida con el nombre de tu carpeta
+
+    def ready(self):
+        import licencias.signals
