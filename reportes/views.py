@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from asistencias.models import EventoAsistencia
 
 from .auditoria import datos_usuario, registrar_evento
-from .exportaciones import ENCABEZADO_LICENCIAS, filas_licencias
+from .exportaciones import ENCABEZADO_CONSULTA, filas_consulta
 from .forms import (
     FiltroAlertasForm,
     FiltroBitacoraForm,
@@ -27,10 +27,9 @@ from .selectors import (
     UMBRAL_POR_DEFECTO,
     buscar_eventos,
     calcular_alertas,
-    buscar_licencias,
+    buscar_consulta,
     describir_objetivo,
     resumir_cambios,
-    texto_instrumento,
 )
 
 User = get_user_model()
@@ -184,20 +183,18 @@ def usuario_editar(request, pk):
 @permission_required("reportes.consultar_licencias", raise_exception=True)
 def consultas(request):
     form = FiltroConsultaForm(request.GET or None)
-    licencias = buscar_licencias(form.cleaned_data if form.is_valid() else {})
+    resultados = buscar_consulta(form.cleaned_data if form.is_valid() else {})
 
     if form.is_valid() and request.GET.get("exportar") == "csv":
         respuesta = HttpResponse(content_type="text/csv; charset=utf-8")
-        respuesta["Content-Disposition"] = 'attachment; filename="consulta_licencias.csv"'
+        respuesta["Content-Disposition"] = 'attachment; filename="consulta_licencias_y_ausencias.csv"'
         respuesta.write("\ufeff")  # para que Excel respete los acentos
         escritor = csv.writer(respuesta)
-        escritor.writerow(ENCABEZADO_LICENCIAS)
-        escritor.writerows(filas_licencias(licencias))
+        escritor.writerow(ENCABEZADO_CONSULTA)
+        escritor.writerows(filas_consulta(resultados))
         return respuesta
 
-    pagina = Paginator(licencias, 25).get_page(request.GET.get("page"))
-    for lic in pagina:
-        lic.instrumento = texto_instrumento(lic)
+    pagina = Paginator(resultados, 25).get_page(request.GET.get("page"))
 
     return render(
         request,

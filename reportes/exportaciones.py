@@ -1,12 +1,8 @@
-from .selectors import texto_instrumento
-
-ENCABEZADO_LICENCIAS = [
-    "DNI", "Apellido y nombre", "Cargo", "Carrera", "Cód. licencia",
-    "Artículo", "Tipo de licencia", "Sit. de revista", "Desde", "Hasta",
-    "Instrumento legal", "Justifica",
+ENCABEZADO_CONSULTA = [
+    "Origen", "DNI", "Apellido y nombre", "Cargo", "Carrera", "Materia",
+    "Cód. licencia", "Artículo", "Tipo / marca", "Sit. de revista",
+    "Desde", "Hasta", "Instrumento legal / formulario", "Justifica",
 ]
-
-_JUSTIFICA = {True: "Sí", False: "No", None: "Sin definir"}
 
 
 def _texto_seguro(valor):
@@ -15,22 +11,22 @@ def _texto_seguro(valor):
     return "'" + valor if valor[:1] in ("=", "+", "-", "@") else valor
 
 
-def filas_licencias(licencias):
-    """Genera una fila de CSV por licencia (el queryset ya viene filtrado)."""
-    for lic in licencias.iterator():
-        designacion = lic.designacion
-        espacio = designacion.espacio_curricular
+def filas_consulta(filas):
+    """Genera una fila de CSV por cada FilaConsulta (ya filtrada y ordenada)."""
+    for fila in filas:
         yield [
-            designacion.persona.dni,
-            _texto_seguro(designacion.persona.apellido_nombre),
-            _texto_seguro(designacion.cargo),
-            _texto_seguro(espacio.carrera if espacio else ""),
-            lic.articulo.cod_licencia,
-            lic.articulo.articulo,
-            _texto_seguro(lic.articulo.tipo_licencia),
-            lic.sit_rev,
-            lic.desde.strftime("%d/%m/%Y"),
-            lic.hasta.strftime("%d/%m/%Y") if lic.hasta else "",
-            _texto_seguro(texto_instrumento(lic)),
-            _JUSTIFICA[lic.justifica],
+            fila.origen,
+            fila.dni,
+            _texto_seguro(fila.docente),
+            _texto_seguro(fila.cargo),
+            _texto_seguro(fila.carrera),
+            _texto_seguro(fila.materia),
+            fila.codigo,
+            fila.articulo,
+            _texto_seguro(fila.tipo),
+            fila.sit_rev,
+            fila.desde.strftime("%d/%m/%Y"),
+            fila.hasta.strftime("%d/%m/%Y") if fila.hasta else "",
+            _texto_seguro(fila.instrumento),
+            fila.justifica,
         ]
