@@ -1,10 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Consulta de licencias{% endblock %}
+{% block title %}Consulta de licencias y ausencias{% endblock %}
 {% block seccion %}reportes-consultas{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-4">Consulta de licencias</h1>
+<h1 class="h3 mb-1">Consulta de licencias y ausencias</h1>
+<p class="text-muted small mb-4">
+    Una sola pantalla para licencias otorgadas y ausencias o permisos simples.
+    Los filtros de tipo de licencia e instrumento legal solo aplican a licencias.
+</p>
 
 <form method="get" class="card card-body mb-4">
     <div class="row g-3">
@@ -36,11 +40,12 @@
     <table class="table table-striped align-middle">
         <thead class="table-dark">
             <tr>
+                <th>Origen</th>
                 <th>DNI</th>
                 <th>Docente</th>
                 <th>Cargo</th>
-                <th>Carrera</th>
-                <th>Licencia</th>
+                <th>Carrera / Materia</th>
+                <th>Tipo</th>
                 <th>Desde</th>
                 <th>Hasta</th>
                 <th>Instrumento</th>
@@ -48,22 +53,30 @@
             </tr>
         </thead>
         <tbody>
-            {% for lic in pagina %}
+            {% for fila in pagina %}
                 <tr>
-                    <td>{{ lic.designacion.persona.dni }}</td>
-                    <td>{{ lic.designacion.persona.apellido_nombre }}</td>
-                    <td>{{ lic.designacion.cargo }}</td>
-                    <td>{{ lic.designacion.espacio_curricular.carrera|default:"—" }}</td>
-                    <td>{{ lic.articulo.articulo }} · {{ lic.articulo.tipo_licencia }}</td>
-                    <td class="text-nowrap">{{ lic.desde|date:"d/m/Y" }}</td>
-                    <td class="text-nowrap">{{ lic.hasta|date:"d/m/Y"|default:"—" }}</td>
-                    <td>{{ lic.instrumento }}</td>
                     <td>
-                        {% if lic.justifica is True %}Sí{% elif lic.justifica is False %}No{% else %}Sin definir{% endif %}
+                        {% if fila.es_licencia %}
+                            <span class="badge text-bg-primary">Licencia</span>
+                        {% else %}
+                            <span class="badge text-bg-warning">Ausencia</span>
+                        {% endif %}
                     </td>
+                    <td>{{ fila.dni }}</td>
+                    <td>{{ fila.docente }}</td>
+                    <td>{{ fila.cargo }}</td>
+                    <td>
+                        {{ fila.materia|default:"—" }}
+                        {% if fila.carrera %}<div class="text-muted small">{{ fila.carrera }}</div>{% endif %}
+                    </td>
+                    <td>{% if fila.articulo %}{{ fila.articulo }} · {% endif %}{{ fila.tipo }}</td>
+                    <td class="text-nowrap">{{ fila.desde|date:"d/m/Y" }}</td>
+                    <td class="text-nowrap">{{ fila.hasta|date:"d/m/Y"|default:"—" }}</td>
+                    <td>{{ fila.instrumento }}</td>
+                    <td>{{ fila.justifica }}</td>
                 </tr>
             {% empty %}
-                <tr><td colspan="9" class="text-center text-muted py-4">No hay licencias para los filtros elegidos.</td></tr>
+                <tr><td colspan="10" class="text-center text-muted py-4">No hay licencias ni ausencias para los filtros elegidos.</td></tr>
             {% endfor %}
         </tbody>
     </table>
