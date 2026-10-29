@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('asistencias', '0001_initial'),
-        ('licencias', '0002_licenciaotorgada_estado'),
+       ('licencias', '0001_initial'),
         ('personal', '0001_initial'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
