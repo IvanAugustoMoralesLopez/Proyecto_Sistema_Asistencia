@@ -359,6 +359,184 @@ class SelectorsTests(ConsultasTests):
         self.assertEqual(texto_instrumento(self.l2), "—")
 
 
+# ───────────── RF-17: filtro por materia y consulta unificada ─────────────
+
+from asistencias.models import MarcaAsistencia, RegistroAsistencia
+
+from .selectors import buscar_ausencias, buscar_consulta
+
+
+class ConsultaUnificadaTests(TestCase):
+    """Licencias + ausencias/permisos en una sola pantalla, filtrables por materia."""
+
+    def setUp(self):
+        ConsultasTests.setUp(self)  # mismos datos base: 2 docentes, 2 licencias
+        inasistencia = MarcaAsistencia.objects.get(codigo="I")
+        retirado = MarcaAsistencia.objects.get(codigo="PR")
+        presente = MarcaAsistencia.objects.get(codigo="P")
+        licencia = MarcaAsistencia.objects.get(codigo="LIC")
+
+        def registro(designacion, fecha, marca, **extra):
+            return RegistroAsistencia.objects.create(
+                designacion=designacion, fecha=fecha, marca=marca, **extra
+            )
+
+        self.a1 = registro(
+            self.d_acosta, date(2026, 9, 3), inasistencia,
+            horas_inasistidas=4, estado_justificacion="INJUSTIFICADA",
+        )
+        self.a2 = registro(
+            self.d_benitez, date(2026, 9, 10), retirado,
+            horas_inasistidas=2, estado_justificacion="EN_TRAMITE", nro_formulario="F-77",
+        )
+        # No deben aparecer: presente, y día amparado por una licencia.
+        registro(self.d_acosta, date(2026, 9, 4), presente)
+        registro(self.d_acosta, date(2026, 6, 10), licencia, horas_inasistidas=4, licencia=self.l1)
+
+    def claves(self, **filtros):
+        respuesta = self.client.get(self.url, filtros)
+        self.assertEqual(respuesta.status_code, 200)
+        return [(f.origen, f.pk) for f in respuesta.context["pagina"]]
+
+    # --- filtro por materia (RF-17) ---
+    def test_filtro_por_materia_en_licencias_y_ausencias(self):
+        materia = self.d_acosta.espacio_curricular
+        self.assertEqual(
+            set(self.claves(espacio_curricular=materia.pk)),
+            {("Licencia", self.l1.pk), ("Ausencia", self.a1.pk)},
+        )
+        otra = self.d_benitez.espacio_curricular
+        self.assertEqual(
+            set(self.claves(espacio_curricular=otra.pk)),
+            {("Licencia", self.l2.pk), ("Ausencia", self.a2.pk)},
+        )
+
+    def test_materia_de_otra_carrera_es_error(self):
+        respuesta = self.client.get(
+            self.url,
+            {"carrera": self.redes.pk, "espacio_curricular": self.d_acosta.espacio_curricular.pk},
+        )
+        self.assertIn("espacio_curricular", respuesta.context["form"].errors)
+
+    def test_materia_inactiva_no_se_ofrece(self):
+        espacio = self.d_acosta.espacio_curricular
+        espacio.activo = False
+        espacio.save()
+        respuesta = self.client.get(self.url)
+        self.assertNotIn(espacio, respuesta.context["form"].fields["espacio_curricular"].queryset)
+
+    # --- consulta unificada ---
+    def test_por_defecto_muestra_licencias_y_ausencias(self):
+        self.assertEqual(
+            set(self.claves()),
+            {("Licencia", self.l1.pk), ("Licencia", self.l2.pk),
+             ("Ausencia", self.a1.pk), ("Ausencia", self.a2.pk)},
+        )
+
+    def test_no_duplica_dias_con_licencia_ni_presentes(self):
+        ausencias = [r.pk for r in buscar_ausencias()]
+        self.assertEqual(set(ausencias), {self.a1.pk, self.a2.pk})
+
+    def test_filtro_origen(self):
+        self.assertEqual({o for o, _ in self.claves(origen="licencias")}, {"Licencia"})
+        self.assertEqual({o for o, _ in self.claves(origen="ausencias")}, {"Ausencia"})
+
+    def test_orden_mezclado_por_fecha_descendente(self):
+        # a2 (10/9) > a1 (3/9) > l2 (10/8) > l1 (1/6)
+        self.assertEqual(
+            self.claves(),
+            [("Ausencia", self.a2.pk), ("Ausencia", self.a1.pk),
+             ("Licencia", self.l2.pk), ("Licencia", self.l1.pk)],
+        )
+
+    def test_filtros_de_licencia_excluyen_ausencias(self):
+        self.assertEqual(self.claves(tipo_licencia="Enfermedad"), [("Licencia", self.l1.pk)])
+        self.assertEqual(self.claves(disp_anio="2026"), [("Licencia", self.l1.pk)])
+
+    def test_filtros_comunes_aplican_a_ausencias(self):
+        self.assertEqual(
+            set(self.claves(dni="2222", origen="ausencias")), {("Ausencia", self.a2.pk)}
+        )
+        self.assertEqual(
+            self.claves(origen="ausencias", desde="2026-09-05", hasta="2026-09-30"),
+            [("Ausencia", self.a2.pk)],
+        )
+        self.assertEqual(
+            self.claves(origen="ausencias", carrera=self.sistemas.pk), [("Ausencia", self.a1.pk)]
+        )
+
+    def test_justificacion_en_ausencias(self):
+        self.assertEqual(self.claves(origen="ausencias", justifica="no"), [("Ausencia", self.a1.pk)])
+        self.assertEqual(self.claves(origen="ausencias", justifica="pendiente"), [("Ausencia", self.a2.pk)])
+        self.assertEqual(self.claves(origen="ausencias", justifica="si"), [])
+
+    def test_paginacion_mezclada_sin_perder_ni_repetir_filas(self):
+        presente_inasist = MarcaAsistencia.objects.get(codigo="I")
+        for dia in range(1, 29):
+            RegistroAsistencia.objects.create(
+                designacion=self.d_benitez, fecha=date(2026, 10, dia), marca=presente_inasist,
+                horas_inasistidas=1, estado_justificacion="INJUSTIFICADA",
+            )
+        total = 4 + 28
+        p1 = self.claves()
+        p2 = self.claves(page=2)
+        self.assertEqual(len(p1), 25)
+        self.assertEqual(len(p2), total - 25)
+        self.assertEqual(len(set(p1) | set(p2)), total)
+        self.assertEqual(buscar_consulta().count(), total)
+
+    # --- exportación ---
+    def test_csv_incluye_ambos_origenes_y_materia(self):
+        respuesta = self.client.get(self.url, {"exportar": "csv"})
+        texto = respuesta.content.decode("utf-8-sig")
+        self.assertIn("Origen", texto.splitlines()[0])
+        self.assertIn("Materia", texto.splitlines()[0])
+        self.assertIn("Licencia,11111111", texto)
+        self.assertIn("Ausencia,22222222", texto)
+        self.assertIn("Formulario F-77", texto)
+        self.assertIn("Mat 11111111", texto)
+
+    def test_csv_respeta_filtro_de_materia(self):
+        respuesta = self.client.get(
+            self.url,
+            {"exportar": "csv", "espacio_curricular": self.d_benitez.espacio_curricular.pk},
+        )
+        texto = respuesta.content.decode("utf-8-sig")
+        self.assertIn("BENITEZ", texto)
+        self.assertNotIn("ACOSTA", texto)
+
+    def test_csv_neutraliza_formulas(self):
+        self.d_acosta.persona.apellido_nombre = "=CMD()"
+        self.d_acosta.persona.save()
+        texto = self.client.get(self.url, {"exportar": "csv"}).content.decode("utf-8-sig")
+        self.assertIn("'=CMD()", texto)
+        self.assertNotIn(",=CMD()", texto)
+
+
+class HistorialAsistenciasPorMateriaTests(TestCase):
+    """RF-17 también pide filtrar por materia el historial de asistencias."""
+
+    def setUp(self):
+        ConsultasTests.setUp(self)
+        inasistencia = MarcaAsistencia.objects.get(codigo="I")
+        self.r1 = RegistroAsistencia.objects.create(
+            designacion=self.d_acosta, fecha=date(2026, 9, 3), marca=inasistencia,
+            horas_inasistidas=4, estado_justificacion="INJUSTIFICADA",
+        )
+        self.r2 = RegistroAsistencia.objects.create(
+            designacion=self.d_benitez, fecha=date(2026, 9, 3), marca=inasistencia,
+            horas_inasistidas=4, estado_justificacion="INJUSTIFICADA",
+        )
+
+    def test_filtra_por_materia(self):
+        url = reverse("asistencia:historial")
+        respuesta = self.client.get(
+            url, {"espacio_curricular": self.d_benitez.espacio_curricular.pk}
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual([r.pk for r in respuesta.context["pagina"]], [self.r2.pk])
+
+
 # ───────────── RF-18: alertas de agotamiento ─────────────
 
 from .selectors import calcular_alertas
