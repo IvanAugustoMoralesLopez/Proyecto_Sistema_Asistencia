@@ -26,7 +26,7 @@ urlpatterns = [
     path("asistencia/", include("asistencias.urls")),
     path("personal/", include("personal.urls")),
     path("reportes/", include("reportes.urls")),
-
+    path("licencias/", include("licencias.urls")),
     # Pantallas de prueba (después las reemplaza backend con sus vistas)
     path(
         "pantallas/personal/",

@@ -10,7 +10,12 @@ from personal.models import Horario
 from .clasificacion import CategoriaSinPlanillaError
 from .dias import obtener_feriados
 from .models import LicenciaOtorgada
-from .services import clasificar_planilla_licencia
+from .services import clasificar_planilla_licencia 
+from django.contrib import messages
+from django.contrib.auth.decorators import permission_required
+from django.shortcuts import redirect, reverse
+from django.views.decorators.http import require_http_methods
+from .forms import LicenciaOtorgadaForm
 
 # Mapeo de Python weekday() a formato varchar(3) de la DB
 MAPEO_DIAS = {
@@ -92,4 +97,29 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
         'anio': anio,
         'mes': mes,
         'desglose': desglose,
-    })
+        })
+ 
+@permission_required("licencias.add_licenciaotorgada", raise_exception=True)
+@require_http_methods(["GET", "POST"])
+def nueva_licencia_otorgada(request):
+    if request.method == "POST":
+        form = LicenciaOtorgadaForm(request.POST)
+
+        if form.is_valid():
+            form.save()
+            messages.success(
+                request,
+                "La licencia se registró correctamente."
+            )
+            return redirect(reverse("licencias:nueva_licencia_otorgada"))
+
+        messages.error(request, "Revise los datos de la licencia.")
+
+    else:
+        form = LicenciaOtorgadaForm()
+
+    return render(
+        request,
+        "licencias/nueva_licencia_otorgada.html",
+        {"form": form}
+    )
