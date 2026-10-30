@@ -17,7 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
-from django.views.generic import TemplateView
+from django.views.generic import RedirectView, TemplateView
 from personal.views import registro_designaciones
 
 urlpatterns = [
@@ -28,9 +28,13 @@ urlpatterns = [
     path("reportes/", include("reportes.urls")),
 
     # Pantallas de prueba (después las reemplaza backend con sus vistas)
-    path("pantallas/personal/", registro_designaciones, name="pantalla_personal"),
+    path(
+        "pantallas/personal/",
+        RedirectView.as_view(pattern_name="inicio_personal", permanent=False),
+        name="pantalla_personal",
+    ),
     path("pantallas/licencias/", TemplateView.as_view(template_name="pantallas/codigos_licencia.html"), name="pantalla_licencias"),
     path("pantallas/informe/", TemplateView.as_view(template_name="pantallas/informe_licencias.html"), name="pantalla_informe"),
     path("pantallas/ingreso-egreso/", TemplateView.as_view(template_name="pantallas/ingreso_egreso.html"), name="pantalla_ingreso_egreso"),
-    path("", TemplateView.as_view(template_name="pantallas/datos_personal.html")),
+    path("", registro_designaciones, name="inicio_personal"),
 ]

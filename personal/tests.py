@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, RequestFactory, TestCase
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.urls import reverse
 
 from .models import (
@@ -19,6 +20,14 @@ from .views import _procesar_csv, gestion_legajos
 
 
 class DesignacionTests(TestCase):
+    def otorgar_permiso(self, usuario, codename):
+        usuario.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="personal",
+                codename=codename,
+            )
+        )
+
     def setUp(self):
         self.persona = Persona.objects.create(
             dni="30123456",
@@ -182,6 +191,7 @@ class DesignacionTests(TestCase):
         )
         request = RequestFactory().get("/personal/legajos/")
         request.user = usuario
+        self.otorgar_permiso(usuario, "change_persona")
 
         response = gestion_legajos(request)
 
@@ -205,6 +215,7 @@ class DesignacionTests(TestCase):
             password="test-password",
         )
         cliente.force_login(usuario)
+        self.otorgar_permiso(usuario, "change_persona")
         respuesta_autenticada = cliente.get(url)
 
         self.assertEqual(respuesta_autenticada.status_code, 200)
@@ -227,7 +238,7 @@ class DesignacionTests(TestCase):
         cliente = Client()
         cliente.force_login(usuario)
 
-        respuesta = cliente.get(reverse("pantalla_personal"))
+        respuesta = cliente.get(reverse("pantalla_personal"), follow=True)
 
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, "30123456")
@@ -242,6 +253,7 @@ class DesignacionTests(TestCase):
         )
         cliente = Client()
         cliente.force_login(usuario)
+        self.otorgar_permiso(usuario, "change_designacion")
 
         respuesta = cliente.post(
             reverse("personal:nueva_designacion"),
@@ -279,7 +291,7 @@ class DesignacionTests(TestCase):
             follow=True,
         )
 
-        self.assertRedirects(respuesta, reverse("pantalla_personal"))
+        self.assertRedirects(respuesta, reverse("inicio_personal"))
         self.assertContains(respuesta, "30123456")
         self.assertContains(respuesta, "Profesor")
         designacion = Designacion.objects.get(
