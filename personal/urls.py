@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import gestion_legajos, nueva_designacion
+from .views import catalogos_personal, gestion_legajos, nueva_designacion
 
 app_name = "personal"
 
@@ -11,4 +11,5 @@ urlpatterns = [
         nueva_designacion,
         name="nueva_designacion",
     ),
+    path("catalogos/", catalogos_personal, name="catalogos"),
 ]
