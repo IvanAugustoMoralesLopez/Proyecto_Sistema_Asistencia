@@ -1,43 +1,41 @@
-from datetime import date, timedelta
+from datetime import date
+
 from django.db.models import Q
+
+from .clasificacion import planilla_para_categoria
+from .dias import contar_dias_habiles, obtener_feriados, rango_en_anio
 from .models import LicenciaOtorgada
-from asistencias.models import DiaNoLaborable
+
 
 def dias_usados_en_anio(dni: str, articulo: str, anio: int) -> int:
+    """Días hábiles consumidos por el docente en `anio` para el artículo dado."""
     licencias = LicenciaOtorgada.objects.filter(
         designacion__persona__dni=dni,
         articulo__articulo=articulo,
-        desde__year__lte=anio
+        desde__year__lte=anio,
     ).filter(
         Q(hasta__isnull=True) | Q(hasta__year__gte=anio)
     )
 
+    # Una sola consulta de feriados para todo el año (antes era una por licencia).
+    feriados = obtener_feriados(date(anio, 1, 1), date(anio, 12, 31))
+    hoy = date.today()
+
     total_dias = 0
     for lic in licencias:
-        # Recortamos el inicio y fin al año evaluado
-        inicio = max(lic.desde, date(anio, 1, 1))
-        fin = min(lic.hasta, date(anio, 12, 31)) if lic.hasta else date(anio, 12, 31)
-        
-        # Obtenemos los feriados del rango en un formato optimizado (Set)
-        feriados = set(DiaNoLaborable.objects.filter(
-            fecha__range=[inicio, fin]
-        ).values_list('fecha', flat=True))
-        
-        # Contamos solo días hábiles (lunes a viernes, no feriados)
-        rango_dias = (fin - inicio).days + 1
-        for i in range(rango_dias):
-            dia_evaluado = inicio + timedelta(days=i)
-            if dia_evaluado.weekday() < 5 and dia_evaluado not in feriados:
-                total_dias += 1
-                
-    return total_dias 
+        rango = rango_en_anio(lic.desde, lic.hasta, anio, hoy)
+        if rango is None:
+            continue
+        inicio, fin = rango
+        total_dias += contar_dias_habiles(inicio, fin, feriados)
+
+    return total_dias
+
 
 def clasificar_planilla_licencia(licencia: LicenciaOtorgada) -> str:
-    """Evalúa la licencia y la asigna a IL-01 (Salud) o IL-02 (Administrativa)."""
-    # RN-04: Licencias médicas y de salud van a IL-01
-    categorias_salud = ['Enfermedad común', 'Largo tratamiento']
-    if licencia.articulo.categoria_informe in categorias_salud:
-        return 'IL-01'
-    
-    # RN-05: Razones particulares, permisos y otros van a IL-02
-    return 'IL-02'
+    """
+    Asigna la licencia a IL-01 (salud, RN-04) o IL-02 (administrativas, RN-05).
+    Lanza CategoriaSinPlanillaError si la categoría del artículo no está
+    contemplada en ninguna de las dos reglas.
+    """
+    return planilla_para_categoria(licencia.articulo.categoria_informe)

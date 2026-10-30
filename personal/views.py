@@ -3,7 +3,7 @@ import io
 from datetime import date
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
@@ -173,7 +173,7 @@ def _procesar_csv(archivo):
     return total, rechazadas
 
 
-@login_required
+@permission_required("personal.change_persona", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def gestion_legajos(request):
     if request.method == "POST":
@@ -374,7 +374,7 @@ def registro_designaciones(request):
     )
 
 
-@login_required
+@permission_required("personal.change_designacion", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def nueva_designacion(request):
     if request.method == "POST":
@@ -385,7 +385,7 @@ def nueva_designacion(request):
                 request,
                 "La designación docente se guardó correctamente.",
             )
-            return redirect(reverse("pantalla_personal"))
+            return redirect(reverse("inicio_personal"))
         messages.error(request, "Revise los datos de la designación.")
     else:
         inicial = {}

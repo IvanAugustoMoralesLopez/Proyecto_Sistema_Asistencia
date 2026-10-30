@@ -13,8 +13,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from asistencias.models import EventoAsistencia
 
 from .auditoria import datos_usuario, registrar_evento
-from .exportaciones import ENCABEZADO_LICENCIAS, filas_licencias
+from .exportaciones import ENCABEZADO_CONSULTA, filas_consulta
 from .forms import (
+    FiltroAlertasForm,
     FiltroBitacoraForm,
     FiltroConsultaForm,
     ParametroSistemaForm,
@@ -23,11 +24,12 @@ from .forms import (
 from .models import ParametroSistema
 from .roles import ROLES
 from .selectors import (
+    UMBRAL_POR_DEFECTO,
     buscar_eventos,
-    buscar_licencias,
+    calcular_alertas,
+    buscar_consulta,
     describir_objetivo,
     resumir_cambios,
-    texto_instrumento,
 )
 
 User = get_user_model()
@@ -181,20 +183,18 @@ def usuario_editar(request, pk):
 @permission_required("reportes.consultar_licencias", raise_exception=True)
 def consultas(request):
     form = FiltroConsultaForm(request.GET or None)
-    licencias = buscar_licencias(form.cleaned_data if form.is_valid() else {})
+    resultados = buscar_consulta(form.cleaned_data if form.is_valid() else {})
 
     if form.is_valid() and request.GET.get("exportar") == "csv":
         respuesta = HttpResponse(content_type="text/csv; charset=utf-8")
-        respuesta["Content-Disposition"] = 'attachment; filename="consulta_licencias.csv"'
+        respuesta["Content-Disposition"] = 'attachment; filename="consulta_licencias_y_ausencias.csv"'
         respuesta.write("\ufeff")  # para que Excel respete los acentos
         escritor = csv.writer(respuesta)
-        escritor.writerow(ENCABEZADO_LICENCIAS)
-        escritor.writerows(filas_licencias(licencias))
+        escritor.writerow(ENCABEZADO_CONSULTA)
+        escritor.writerows(filas_consulta(resultados))
         return respuesta
 
-    pagina = Paginator(licencias, 25).get_page(request.GET.get("page"))
-    for lic in pagina:
-        lic.instrumento = texto_instrumento(lic)
+    pagina = Paginator(resultados, 25).get_page(request.GET.get("page"))
 
     return render(
         request,
@@ -205,3 +205,21 @@ def consultas(request):
             "querystring": _querystring_sin(request, "page", "exportar"),
         },
     )
+
+
+# ───────────── Alertas de agotamiento (RF-18) ─────────────
+
+@login_required
+@permission_required("reportes.consultar_licencias", raise_exception=True)
+def alertas(request):
+    # Sin filtros elegidos: ciclo lectivo configurado y umbral por defecto.
+    datos = request.GET or {
+        "anio": ParametroSistema.obtener().ciclo_lectivo,
+        "umbral": UMBRAL_POR_DEFECTO,
+    }
+    form = FiltroAlertasForm(datos)
+    lista = []
+    if form.is_valid():
+        lista = calcular_alertas(form.cleaned_data["anio"], form.cleaned_data["umbral"])
+
+    return render(request, "reportes/alertas.html", {"form": form, "alertas": lista})
