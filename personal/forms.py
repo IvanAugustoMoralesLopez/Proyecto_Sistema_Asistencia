@@ -3,12 +3,48 @@ from django.db import transaction
 
 from .models import (
     Cargo,
+    Carrera,
     Designacion,
     EspacioCurricular,
     Horario,
     Persona,
     UnidadEducativa,
 )
+
+
+class CargoForm(forms.ModelForm):
+    class Meta:
+        model = Cargo
+        fields = ["codigo", "descripcion", "es_docente", "activo"]
+        widgets = {
+            "codigo": forms.TextInput(attrs={"class": "form-control"}),
+            "descripcion": forms.TextInput(attrs={"class": "form-control"}),
+            "es_docente": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+
+class CarreraForm(forms.ModelForm):
+    class Meta:
+        model = Carrera
+        fields = ["nombre", "plan_estudio", "anio_plan", "activa"]
+        widgets = {
+            "nombre": forms.TextInput(attrs={"class": "form-control"}),
+            "plan_estudio": forms.TextInput(attrs={"class": "form-control"}),
+            "anio_plan": forms.NumberInput(attrs={"class": "form-control"}),
+            "activa": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+
+class EspacioCurricularForm(forms.ModelForm):
+    class Meta:
+        model = EspacioCurricular
+        fields = ["nombre", "carrera", "activo"]
+        widgets = {
+            "nombre": forms.TextInput(attrs={"class": "form-control"}),
+            "carrera": forms.Select(attrs={"class": "form-select"}),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
 
 
 class BuscarLegajoForm(forms.Form):

@@ -15,7 +15,7 @@
 <div class="planilla">
     <table class="tabla-planilla">
         <thead>
-            <tr>
+            <tr data-edit-url="{% url 'personal:gestion_legajos' %}?dni={{ designacion.persona.dni }}&amp;designacion={{ designacion.pk }}">
                 <th>D.N.I</th>
                 <th>Apellido y nombre</th>
                 <th class="centro">Sexo</th>
@@ -84,4 +84,26 @@
         </tbody>
     </table>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var filas = document.querySelectorAll('.tabla-planilla tbody tr[data-edit-url]');
+    var modificar = document.getElementById('btnModificar');
+    filas.forEach(function (fila) {
+        fila.addEventListener('click', function () {
+            filas.forEach(function (otra) { otra.classList.remove('fila-seleccionada'); });
+            fila.classList.add('fila-seleccionada');
+            modificar.disabled = false;
+        });
+    });
+    if (modificar) {
+        modificar.addEventListener('click', function () {
+            var fila = document.querySelector('.tabla-planilla tr.fila-seleccionada');
+            if (fila) window.location.href = fila.dataset.editUrl;
+        });
+    }
+})();
+</script>
 {% endblock %}
