@@ -7,8 +7,14 @@ from .dias import contar_dias_habiles, obtener_feriados, rango_en_anio
 from .models import LicenciaOtorgada
 
 
-def dias_usados_en_anio(dni: str, articulo: str, anio: int) -> int:
-    """Días hábiles consumidos por el docente en `anio` para el artículo dado."""
+def dias_usados_en_anio(dni: str, articulo: str, anio: int, excluir_id: int = None) -> int:
+    """
+    Días hábiles consumidos por el docente en `anio` para el artículo dado.
+
+    `excluir_id`: id de una licencia que NO debe contarse. Se usa al editar,
+    para que la licencia no se cuente contra sí misma. Por defecto no excluye
+    nada, así que las llamadas existentes (reportes, etc.) siguen igual.
+    """
     licencias = LicenciaOtorgada.objects.filter(
         designacion__persona__dni=dni,
         articulo__articulo=articulo,
@@ -16,6 +22,9 @@ def dias_usados_en_anio(dni: str, articulo: str, anio: int) -> int:
     ).filter(
         Q(hasta__isnull=True) | Q(hasta__year__gte=anio)
     )
+
+    if excluir_id is not None:
+        licencias = licencias.exclude(pk=excluir_id)
 
     # Una sola consulta de feriados para todo el año (antes era una por licencia).
     feriados = obtener_feriados(date(anio, 1, 1), date(anio, 12, 31))
