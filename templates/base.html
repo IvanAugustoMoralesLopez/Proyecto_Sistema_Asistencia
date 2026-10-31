@@ -44,7 +44,6 @@
             <nav class="sidebar__nav">
                 <p class="sidebar__titulo">Planillas</p>
 
-                {# TODO: reemplazar href="#" por {% url %} cuando existan las vistas #}
                 <a class="sidebar__link" data-seccion="datos-personal" href="{% url 'pantalla_personal' %}">
                     <i class="bi bi-person-vcard"></i><span>Datos de personal</span>
                 </a>
@@ -58,27 +57,7 @@
                     <i class="bi bi-box-arrow-right"></i><span>Ingreso y egreso de los profesores</span>
                 </a>
 
-                <a class="sidebar__link sidebar__link--nueva" href="#">
-                    <i class="bi bi-plus-circle-fill"></i><span>Nueva tabla</span>
-                </a>
-
-                {# Planillas renovables (informe mensual e ingreso/egreso). #}
-                {# La vista puede pasar `planillas_recientes`; si no, se muestran de ejemplo. #}
-                <div class="sidebar__sub">
-                    {% for p in planillas_recientes %}
-                        <a class="sidebar__link sidebar__link--sub" href="{{ p.url }}">
-                            <i class="bi bi-table"></i><span>{{ p.nombre }}</span>
-                        </a>
-                    {% empty %}
-                        <a class="sidebar__link sidebar__link--sub" href="#">
-                            <i class="bi bi-table"></i><span>Registro Docente 16/10</span>
-                        </a>
-                        <a class="sidebar__link sidebar__link--sub" href="#">
-                            <i class="bi bi-table"></i><span>Registro Docente 16/09</span>
-                        </a>
-                    {% endfor %}
-                </div>
-
+                
                 <p class="sidebar__titulo">Asistencia</p>
                 <a class="sidebar__link" data-seccion="asistencia-diaria" href="{% url 'asistencia:registro_diario' %}">
                     <i class="bi bi-calendar-check"></i><span>Registro diario</span>
@@ -89,6 +68,7 @@
                 <a class="sidebar__link" data-seccion="asistencia-cierres" href="{% url 'asistencia:lista_cierres' %}">
                     <i class="bi bi-lock"></i><span>Cierres</span>
                 </a>
+
                 {% if perms.reportes.consultar_licencias or perms.reportes.ver_bitacora or perms.reportes.gestionar_parametros or perms.reportes.gestionar_usuarios %}
                 <p class="sidebar__titulo">Administración</p>
                 {% if perms.reportes.consultar_licencias %}
@@ -135,36 +115,39 @@
         </main>
     </div>
 
-    {# Panel lateral "Cargar Nuevos Datos" (lo define cada pantalla) #}
+    {# Panel lateral "Cargar Nuevos Datos" #}
     {% block panel %}{% endblock %}
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Menú lateral: colapsa en escritorio, se desliza en pantallas chicas
         document.getElementById('btnMenu').addEventListener('click', function () {
-            var clase = window.innerWidth <= 768 ? 'menu-abierto' : 'menu-colapsado';
+            const clase = window.innerWidth <= 768 ? 'menu-abierto' : 'menu-colapsado';
             document.body.classList.toggle(clase);
         });
 
         // Marca como activo el link del menú que coincide con la pantalla actual
         (function () {
-            var actual = document.body.dataset.seccion;
+            const actual = document.body.dataset.seccion;
             if (!actual) return;
             document.querySelectorAll('.sidebar__link[data-seccion]').forEach(function (a) {
                 if (a.dataset.seccion === actual) a.classList.add('activo');
             });
         })();
 
-        // Selección de fila en las planillas (habilita el botón Modificar)
-        document.querySelectorAll('.tabla-planilla tbody tr').forEach(function (fila) {
-            fila.addEventListener('click', function () {
-                var yaActiva = fila.classList.contains('fila-seleccionada');
-                document.querySelectorAll('.tabla-planilla .fila-seleccionada')
-                    .forEach(function (f) { f.classList.remove('fila-seleccionada'); });
-                if (!yaActiva) fila.classList.add('fila-seleccionada');
-                var btn = document.getElementById('btnModificar');
-                if (btn) btn.disabled = yaActiva;
-            });
+        // Selección de fila en las planillas (delegación de eventos optimizada)
+        document.addEventListener('click', function (event) {
+            const fila = event.target.closest('.tabla-planilla tbody tr');
+            if (!fila) return;
+
+            const yaActiva = fila.classList.contains('fila-seleccionada');
+            document.querySelectorAll('.tabla-planilla .fila-seleccionada')
+                .forEach(function (f) { f.classList.remove('fila-seleccionada'); });
+
+            if (!yaActiva) fila.classList.add('fila-seleccionada');
+
+            const btn = document.getElementById('btnModificar');
+            if (btn) btn.disabled = yaActiva;
         });
     </script>
     {% block extra_js %}{% endblock %}

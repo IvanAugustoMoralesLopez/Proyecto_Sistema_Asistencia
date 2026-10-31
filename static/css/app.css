@@ -1,7 +1,7 @@
 /* ==========================================================
-   Sistema Asistencia — estilos generales
-   Ubicación: static/css/app.css
-   ========================================================== */
+    Sistema Asistencia — estilos generales
+    Ubicación: static/css/app.css
+    ========================================================== */
 
 :root {
     --azul: #2b67a4;
@@ -112,12 +112,12 @@ body {
     color: var(--azul);
 }
 
-.sidebar__link:hover {
+.sidebar__link:hover,
+.sidebar__link.activo {
     background: var(--azul-suave);
 }
 
 .sidebar__link.activo {
-    background: var(--azul-suave);
     font-weight: 600;
 }
 
@@ -152,7 +152,7 @@ body.menu-colapsado .sidebar__link {
 
 .app-content {
     flex: 1 1 auto;
-    min-width: 0; /* permite que las tablas hagan scroll horizontal */
+    min-width: 0;
     padding: 1.25rem 1.5rem;
 }
 
@@ -212,6 +212,7 @@ body.menu-colapsado .sidebar__link {
     font-size: 0.85rem;
 }
 
+/* Botones personalizados agrupados */
 .btn-primario,
 .btn-primario-suave,
 .btn-filtro {
@@ -297,7 +298,7 @@ body.menu-colapsado .sidebar__link {
     background: var(--fila-seleccion);
 }
 
-.tabla-planilla td.centro,
+.tabla-planilla .centro,
 .tabla-planilla th.centro {
     text-align: center;
 }
@@ -309,15 +310,14 @@ body.menu-colapsado .sidebar__link {
     background: #fff;
 }
 
-.tabla-planilla .enlace {
+.tabla-planilla .enlace,
+.sit-rev {
     color: var(--azul);
     font-weight: 600;
 }
 
-/* Situación de revista */
 .sit-rev {
     font-weight: 700;
-    color: var(--azul);
 }
 
 /* ───────── Encabezado del informe IL-01 ───────── */
@@ -371,7 +371,7 @@ body.menu-colapsado .sidebar__link {
     border-top: 1px solid var(--color-borde);
 }
 
-/* ───────── Componentes generales (compatibles con asistencias) ───────── */
+/* ───────── Componentes generales ───────── */
 .card {
     border: 1px solid var(--color-borde);
     border-radius: 0.75rem;
