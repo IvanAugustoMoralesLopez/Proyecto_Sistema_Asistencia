@@ -1,4 +1,4 @@
-
+```django
 {% extends "base.html" %}
 
 {% block title %}Licencias otorgadas{% endblock %}
@@ -45,7 +45,10 @@
                     <option value="">Todos los artículos</option>
 
                     {% for item in articulos %}
-                        <option value="{{ item.id }}" {% if request.GET.articulo == item.id|stringformat:"s" %}selected{% endif %}>
+                        <option
+                            value="{{ item.id }}"
+                            {% if request.GET.articulo == item.id|stringformat:"s" %}selected{% endif %}
+                        >
                             {{ item.articulo }} - {{ item.tipo_licencia }}
                         </option>
                     {% endfor %}
@@ -79,8 +82,10 @@
                     Filtrar
                 </button>
 
-                <a href="{% url 'licencias:listado_licencias_otorgadas' %}"
-                   class="btn btn-outline-secondary">
+                <a
+                    href="{% url 'licencias:listado_licencias_otorgadas' %}"
+                    class="btn btn-outline-secondary"
+                >
                     Limpiar filtros
                 </a>
             </div>
@@ -98,8 +103,10 @@
                             <th>Desde</th>
                             <th>Hasta</th>
                             <th>Justificada</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
+
                     <tbody>
                         {% for licencia in licencias %}
                             <tr>
@@ -107,6 +114,7 @@
                                 <td>{{ licencia.designacion.cargo }}</td>
                                 <td>{{ licencia.articulo }}</td>
                                 <td>{{ licencia.desde|date:"d/m/Y" }}</td>
+
                                 <td>
                                     {% if licencia.hasta %}
                                         {{ licencia.hasta|date:"d/m/Y" }}
@@ -114,6 +122,7 @@
                                         Sin fecha
                                     {% endif %}
                                 </td>
+
                                 <td>
                                     {% if licencia.justifica is None %}
                                         Sin especificar
@@ -122,6 +131,16 @@
                                     {% else %}
                                         No
                                     {% endif %}
+                                </td>
+
+                                <td>
+                                    <a
+                                        href="{% url 'licencias:editar_licencia_otorgada' licencia.id %}?{{ request.GET.urlencode }}"
+                                        class="btn btn-sm btn-outline-primary"
+                                        onclick="return confirm('¿Desea ingresar a editar esta licencia?');"
+                                    >
+                                        Editar
+                                    </a>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -136,3 +155,4 @@
     </div>
 </div>
 {% endblock %}
+```
