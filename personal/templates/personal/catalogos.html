@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }} · Personal{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+        <p class="text-secondary mb-1">Personal / Administración</p>
+        <h1 class="h3 mb-0">Administración de catálogos</h1>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'personal:gestion_legajos' %}">
+        <i class="bi bi-arrow-left"></i> Volver a legajos
+    </a>
+</div>
+
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item"><a class="nav-link {% if seccion == 'cargos' %}active{% endif %}" href="?seccion=cargos">Cargos</a></li>
+    <li class="nav-item"><a class="nav-link {% if seccion == 'carreras' %}active{% endif %}" href="?seccion=carreras">Carreras</a></li>
+    <li class="nav-item"><a class="nav-link {% if seccion == 'espacios' %}active{% endif %}" href="?seccion=espacios">Espacios curriculares</a></li>
+    <li class="nav-item"><a class="nav-link {% if seccion == 'licencias' %}active{% endif %}" href="?seccion=licencias">Tipos de licencia</a></li>
+</ul>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-dark text-white">
+                <h2 class="h5 mb-0">{% if objeto %}Modificar{% else %}Agregar{% endif %} {{ titulo }}</h2>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="accion" value="guardar">
+                    {% if objeto %}<input type="hidden" name="objeto_id" value="{{ objeto.pk }}">{% endif %}
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {{ field }}
+                            {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </div>
+                    {% endfor %}
+                    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+                    <button class="btn btn-primary" type="submit">Guardar</button>
+                    {% if objeto %}<a class="btn btn-outline-secondary" href="?seccion={{ seccion }}">Cancelar</a>{% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card shadow-sm border-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Registro</th>
+                            <th class="text-end">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for registro in registros %}
+                        <tr>
+                            <td>{{ registro }}</td>
+                            <td class="text-end text-nowrap">
+                                <a class="btn btn-sm btn-outline-primary" href="?seccion={{ seccion }}&editar={{ registro.pk }}">Editar</a>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="accion" value="eliminar">
+                                    <input type="hidden" name="objeto_id" value="{{ registro.pk }}">
+                                    <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('¿Desactivar o eliminar este registro?');">Eliminar</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="2" class="text-center py-4 text-secondary">No hay registros cargados.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

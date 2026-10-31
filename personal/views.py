@@ -3,21 +3,33 @@ import io
 from datetime import date
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
-from .forms import BuscarLegajoForm, DesignacionForm, PersonaForm
+from .forms import (
+    BuscarLegajoForm,
+    CarreraForm,
+    CargoForm,
+    DesignacionForm,
+    EspacioCurricularForm,
+    NuevaDesignacionForm,
+    PersonaForm,
+)
 from .models import (
     Cargo,
+    Carrera,
     Designacion,
     EspacioCurricular,
     ImportacionPersonalError,
     Persona,
 )
-
+from licencias.models import LicenciaArticulo
+from licencias.forms import LicenciaArticuloForm
 
 MAX_CSV_BYTES = 5 * 1024 * 1024
 
@@ -166,7 +178,7 @@ def _procesar_csv(archivo):
     return total, rechazadas
 
 
-@login_required
+@permission_required("personal.change_persona", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def gestion_legajos(request):
     if request.method == "POST":
@@ -327,3 +339,151 @@ def _contexto_pantalla(
         "errores_importacion": ImportacionPersonalError.objects.all()[:10],
         "licencias_admin_url": "/admin/licencias/licenciaarticulo/",
     }
+
+
+@login_required
+@permission_required("personal.change_designacion", raise_exception=True)
+def registro_designaciones(request):
+    consulta = request.GET.get("q", "").strip()
+    situacion = request.GET.get("sit_revista", "").strip()
+    designaciones = (
+        Designacion.objects.select_related(
+            "persona",
+            "cargo",
+            "espacio_curricular",
+        )
+        .prefetch_related("horarios")
+        .order_by("persona__apellido_nombre", "desde", "pk")
+    )
+    if consulta:
+        designaciones = designaciones.filter(
+            Q(persona__dni__icontains=consulta)
+            | Q(persona__apellido_nombre__icontains=consulta)
+            | Q(cargo__codigo__icontains=consulta)
+            | Q(cargo__descripcion__icontains=consulta)
+            | Q(espacio_curricular__nombre__icontains=consulta)
+            | Q(espacio_curricular__carrera__nombre__icontains=consulta)
+        )
+    if situacion:
+        designaciones = designaciones.filter(situacion_revista=situacion)
+
+    for designacion in designaciones:
+        designacion.horas_por_dia = {
+            horario.dia: horario.horas_catedra
+            for horario in designacion.horarios.all()
+        }
+
+    return render(
+        request,
+        "pantallas/datos_personal.html",
+        {
+            "designaciones": designaciones,
+            "consulta": consulta,
+        },
+    )
+
+
+@permission_required("personal.change_cargo", raise_exception=True)
+def catalogos_personal(request):
+    configuracion = {
+        "cargos": {
+            "titulo": "Cargos",
+            "modelo": Cargo,
+            "form": CargoForm,
+            "campo_activo": "activo",
+        },
+        "carreras": {
+            "titulo": "Carreras",
+            "modelo": Carrera,
+            "form": CarreraForm,
+            "campo_activo": "activa",
+        },
+        "espacios": {
+            "titulo": "Espacios curriculares",
+            "modelo": EspacioCurricular,
+            "form": EspacioCurricularForm,
+            "campo_activo": "activo",
+        },
+        "licencias": {
+            "titulo": "Tipos de licencia",
+            "modelo": LicenciaArticulo,
+            "form": LicenciaArticuloForm,
+            "campo_activo": None,
+        },
+    }
+    seccion = request.GET.get("seccion", "cargos")
+    if seccion not in configuracion:
+        seccion = "cargos"
+
+    datos = configuracion[seccion]
+    objeto_id = request.GET.get("editar")
+    objeto = datos["modelo"].objects.filter(pk=objeto_id).first() if objeto_id else None
+
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion == "guardar":
+            objeto = datos["modelo"].objects.filter(pk=request.POST.get("objeto_id")).first()
+            form = datos["form"](request.POST, instance=objeto)
+            if form.is_valid():
+                form.save()
+                messages.success(request, f"{datos['titulo']} guardado correctamente.")
+                return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
+        elif accion == "eliminar":
+            objeto = datos["modelo"].objects.filter(pk=request.POST.get("objeto_id")).first()
+            if objeto:
+                campo_activo = datos["campo_activo"]
+                if campo_activo:
+                    setattr(objeto, campo_activo, False)
+                    objeto.save(update_fields=[campo_activo])
+                    messages.success(request, "El catálogo se desactivó correctamente.")
+                else:
+                    objeto.delete()
+                    messages.success(request, "El registro se eliminó correctamente.")
+                return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
+        else:
+            form = datos["form"](request.POST)
+    else:
+        form = datos["form"](instance=objeto) if objeto else datos["form"]()
+
+    if request.method == "POST" and accion == "guardar" and not form.is_valid():
+        messages.error(request, "Revise los datos ingresados.")
+
+    return render(
+        request,
+        "personal/catalogos.html",
+        {
+            "seccion": seccion,
+            "configuracion": configuracion,
+            "titulo": datos["titulo"],
+            "form": form,
+            "objeto": objeto,
+            "registros": datos["modelo"].objects.all().order_by("pk"),
+        },
+    )
+
+
+@permission_required("personal.change_designacion", raise_exception=True)
+@require_http_methods(["GET", "POST"])
+def nueva_designacion(request):
+    if request.method == "POST":
+        form = NuevaDesignacionForm(request.POST)
+        if form.is_valid():
+            designacion = form.save()
+            messages.success(
+                request,
+                "La designación docente se guardó correctamente.",
+            )
+            return redirect(reverse("inicio_personal"))
+        messages.error(request, "Revise los datos de la designación.")
+    else:
+        inicial = {}
+        dni = request.GET.get("dni", "").strip()
+        if dni and Persona.objects.filter(pk=dni, activa=True).exists():
+            inicial["persona"] = dni
+        form = NuevaDesignacionForm(initial=inicial)
+
+    return render(
+        request,
+        "personal/nueva_designacion.html",
+        {"form": form},
+    )

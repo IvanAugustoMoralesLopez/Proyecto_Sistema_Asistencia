@@ -3,12 +3,48 @@ from django.db import transaction
 
 from .models import (
     Cargo,
+    Carrera,
     Designacion,
     EspacioCurricular,
     Horario,
     Persona,
     UnidadEducativa,
 )
+
+
+class CargoForm(forms.ModelForm):
+    class Meta:
+        model = Cargo
+        fields = ["codigo", "descripcion", "es_docente", "activo"]
+        widgets = {
+            "codigo": forms.TextInput(attrs={"class": "form-control"}),
+            "descripcion": forms.TextInput(attrs={"class": "form-control"}),
+            "es_docente": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+
+class CarreraForm(forms.ModelForm):
+    class Meta:
+        model = Carrera
+        fields = ["nombre", "plan_estudio", "anio_plan", "activa"]
+        widgets = {
+            "nombre": forms.TextInput(attrs={"class": "form-control"}),
+            "plan_estudio": forms.TextInput(attrs={"class": "form-control"}),
+            "anio_plan": forms.NumberInput(attrs={"class": "form-control"}),
+            "activa": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+
+class EspacioCurricularForm(forms.ModelForm):
+    class Meta:
+        model = EspacioCurricular
+        fields = ["nombre", "carrera", "activo"]
+        widgets = {
+            "nombre": forms.TextInput(attrs={"class": "form-control"}),
+            "carrera": forms.Select(attrs={"class": "form-select"}),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
 
 
 class BuscarLegajoForm(forms.Form):
@@ -46,8 +82,6 @@ class PersonaForm(forms.ModelForm):
         fields = [
             "dni",
             "apellido_nombre",
-            "apellido",
-            "nombres",
             "sexo",
             "fecha_nacimiento",
             "estado_civil",
@@ -72,8 +106,6 @@ class PersonaForm(forms.ModelForm):
                 }
             ),
             "apellido_nombre": forms.TextInput(attrs={"class": "form-control"}),
-            "apellido": forms.TextInput(attrs={"class": "form-control"}),
-            "nombres": forms.TextInput(attrs={"class": "form-control"}),
             "sexo": forms.Select(attrs={"class": "form-select"}),
             "fecha_nacimiento": forms.DateInput(
                 attrs={"class": "form-control", "type": "date"}
@@ -97,18 +129,11 @@ class PersonaForm(forms.ModelForm):
         if self.instance and self.instance.pk:
             self.fields["dni"].disabled = True
             self.fields["dni"].help_text = "El DNI identifica el legajo y no se modifica."
-        self.fields["apellido_nombre"].required = False
 
     def clean(self):
         cleaned_data = super().clean()
-        apellido = cleaned_data.get("apellido", "").strip()
-        nombres = cleaned_data.get("nombres", "").strip()
         nombre_completo = cleaned_data.get("apellido_nombre", "").strip()
-        if apellido or nombres:
-            cleaned_data["apellido_nombre"] = ", ".join(
-                parte for parte in (apellido, nombres) if parte
-            )
-        elif not nombre_completo:
+        if not nombre_completo:
             self.add_error(
                 "apellido_nombre",
                 "Ingrese el apellido y nombre del agente.",
@@ -269,3 +294,16 @@ class DesignacionForm(forms.ModelForm):
                 ).delete()
 
         return designacion
+
+
+class NuevaDesignacionForm(DesignacionForm):
+    persona = forms.ModelChoiceField(
+        queryset=Persona.objects.filter(activa=True).order_by("apellido_nombre"),
+        label="Legajo del agente",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    @transaction.atomic
+    def save(self, commit=True):
+        self.instance.persona = self.cleaned_data["persona"]
+        return super().save(commit=commit)

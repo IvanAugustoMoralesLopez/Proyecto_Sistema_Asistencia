@@ -20,10 +20,10 @@
             <i class="bi bi-list"></i>
         </button>
 
-        <a class="topbar__marca" href="/">
+        <div class="topbar__marca">
             <i class="bi bi-mortarboard-fill"></i>
             <span>Sistema Asistencia</span>
-        </a>
+        </div>
 
         {% if user.is_authenticated %}
             <div class="topbar__usuario">
@@ -89,6 +89,7 @@
                 </a>
 
                 {% if perms.reportes.consultar_licencias or perms.reportes.ver_bitacora or perms.reportes.gestionar_parametros or perms.reportes.gestionar_usuarios %}
+<<<<<<< HEAD
                     <p class="sidebar__titulo">Administración</p>
                     {% if perms.reportes.consultar_licencias %}
                     <a class="sidebar__link" data-seccion="reportes-consultas" href="{% url 'reportes:consultas' %}">
@@ -110,6 +111,34 @@
                         <i class="bi bi-gear"></i><span>Parámetros</span>
                     </a>
                     {% endif %}
+=======
+                <p class="sidebar__titulo">Administración</p>
+                {% if perms.reportes.consultar_licencias %}
+                <a class="sidebar__link" data-seccion="reportes-consultas" href="{% url 'reportes:consultas' %}">
+                    <i class="bi bi-search"></i><span>Consultas</span>
+                </a>
+                {% endif %}
+                {% if perms.reportes.consultar_licencias %}
+                <a class="sidebar__link" data-seccion="reportes-alertas" href="{% url 'reportes:alertas' %}">
+                    <i class="bi bi-bell"></i><span>Alertas</span>
+                </a>
+                {% endif %}
+                {% if perms.reportes.ver_bitacora %}
+                <a class="sidebar__link" data-seccion="reportes-bitacora" href="{% url 'reportes:bitacora' %}">
+                    <i class="bi bi-journal-check"></i><span>Bitácora</span>
+                </a>
+                {% endif %}
+                {% if perms.reportes.gestionar_usuarios %}
+                <a class="sidebar__link" data-seccion="reportes-usuarios" href="{% url 'reportes:usuarios' %}">
+                    <i class="bi bi-people"></i><span>Usuarios y roles</span>
+                </a>
+                {% endif %}
+                {% if perms.reportes.gestionar_parametros %}
+                <a class="sidebar__link" data-seccion="reportes-parametros" href="{% url 'reportes:parametros' %}">
+                    <i class="bi bi-gear"></i><span>Parámetros</span>
+                </a>
+                {% endif %}
+>>>>>>> main
                 {% endif %}
             </nav>
         </aside>

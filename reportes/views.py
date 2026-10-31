@@ -5,13 +5,17 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
-from .auditoria import registrar_cambio
-from .exportaciones import ENCABEZADO_LICENCIAS, filas_licencias
+from asistencias.models import EventoAsistencia
+
+from .auditoria import datos_usuario, registrar_evento
+from .exportaciones import ENCABEZADO_CONSULTA, filas_consulta
 from .forms import (
+    FiltroAlertasForm,
     FiltroBitacoraForm,
     FiltroConsultaForm,
     ParametroSistemaForm,
@@ -20,11 +24,12 @@ from .forms import (
 from .models import ParametroSistema
 from .roles import ROLES
 from .selectors import (
+    UMBRAL_POR_DEFECTO,
     buscar_eventos,
-    buscar_licencias,
+    calcular_alertas,
+    buscar_consulta,
     describir_objetivo,
     resumir_cambios,
-    texto_instrumento,
 )
 
 User = get_user_model()
@@ -63,18 +68,23 @@ def bitacora(request):
 @login_required
 @permission_required("reportes.gestionar_parametros", raise_exception=True)
 def parametros(request):
+    campos = ("codigo_oficina", "nombre_oficina", "ciclo_lectivo")
     instancia = ParametroSistema.obtener()
+    # Foto previa: is_valid() ya modifica la instancia en memoria.
+    antes = {c: getattr(instancia, c) for c in campos}
     form = ParametroSistemaForm(request.POST or None, instance=instancia)
 
     if request.method == "POST" and form.is_valid():
-        parametro = form.save(commit=False)
-        parametro.actualizado_por = request.user
-        parametro.save()
-        registrar_cambio(
-            request.user,
-            parametro,
-            mensaje="Parámetros modificados: " + ", ".join(form.changed_data),
-        )
+        with transaction.atomic():
+            parametro = form.save(commit=False)
+            parametro.actualizado_por = request.user
+            parametro.save()
+            registrar_evento(
+                request.user,
+                EventoAsistencia.Accion.PARAMETROS,
+                antes=antes,
+                despues={c: getattr(parametro, c) for c in campos},
+            )
         messages.success(request, "Parámetros actualizados.")
         return redirect("reportes:parametros")
 
@@ -122,13 +132,13 @@ def usuarios(request):
 def usuario_crear(request):
     form = UsuarioForm(request.POST or None, usuario_actual=request.user)
     if request.method == "POST" and form.is_valid():
-        nuevo = form.save()
-        registrar_cambio(
-            request.user,
-            nuevo,
-            alta=True,
-            mensaje=f"Alta de usuario con rol {form.cleaned_data['rol'].name}.",
-        )
+        with transaction.atomic():
+            nuevo = form.save()
+            registrar_evento(
+                request.user,
+                EventoAsistencia.Accion.USUARIO_ALTA,
+                despues=datos_usuario(nuevo, form.cleaned_data["rol"].name),
+            )
         messages.success(request, f"Usuario «{nuevo.username}» creado.")
         return redirect("reportes:usuarios")
     return render(request, "reportes/usuario_form.html", {"form": form, "titulo": "Nuevo usuario"})
@@ -142,17 +152,22 @@ def usuario_editar(request, pk):
     if objetivo.is_superuser and not request.user.is_superuser:
         raise PermissionDenied
 
+    # Foto previa: is_valid() ya modifica la instancia en memoria.
+    antes = datos_usuario(objetivo, _rol_de(objetivo))
     form = UsuarioForm(request.POST or None, instance=objetivo, usuario_actual=request.user)
     if request.method == "POST" and form.is_valid():
-        cambios = [c for c in form.changed_data if c not in ("password1", "password2")]
-        if form.cleaned_data.get("password1"):
-            cambios.append("contraseña")
-        form.save()
-        registrar_cambio(
-            request.user,
-            objetivo,
-            mensaje="Usuario modificado: " + (", ".join(cambios) or "sin cambios") + ".",
-        )
+        with transaction.atomic():
+            form.save()
+            objetivo.refresh_from_db()
+            despues = datos_usuario(objetivo, form.cleaned_data["rol"].name)
+            if form.cleaned_data.get("password1"):
+                despues["contraseña"] = "restablecida"  # nunca el valor
+            registrar_evento(
+                request.user,
+                EventoAsistencia.Accion.USUARIO_EDITAR,
+                antes=antes,
+                despues=despues,
+            )
         messages.success(request, f"Usuario «{objetivo.username}» actualizado.")
         return redirect("reportes:usuarios")
     return render(
@@ -168,20 +183,18 @@ def usuario_editar(request, pk):
 @permission_required("reportes.consultar_licencias", raise_exception=True)
 def consultas(request):
     form = FiltroConsultaForm(request.GET or None)
-    licencias = buscar_licencias(form.cleaned_data if form.is_valid() else {})
+    resultados = buscar_consulta(form.cleaned_data if form.is_valid() else {})
 
     if form.is_valid() and request.GET.get("exportar") == "csv":
         respuesta = HttpResponse(content_type="text/csv; charset=utf-8")
-        respuesta["Content-Disposition"] = 'attachment; filename="consulta_licencias.csv"'
+        respuesta["Content-Disposition"] = 'attachment; filename="consulta_licencias_y_ausencias.csv"'
         respuesta.write("\ufeff")  # para que Excel respete los acentos
         escritor = csv.writer(respuesta)
-        escritor.writerow(ENCABEZADO_LICENCIAS)
-        escritor.writerows(filas_licencias(licencias))
+        escritor.writerow(ENCABEZADO_CONSULTA)
+        escritor.writerows(filas_consulta(resultados))
         return respuesta
 
-    pagina = Paginator(licencias, 25).get_page(request.GET.get("page"))
-    for lic in pagina:
-        lic.instrumento = texto_instrumento(lic)
+    pagina = Paginator(resultados, 25).get_page(request.GET.get("page"))
 
     return render(
         request,
@@ -192,3 +205,21 @@ def consultas(request):
             "querystring": _querystring_sin(request, "page", "exportar"),
         },
     )
+
+
+# ───────────── Alertas de agotamiento (RF-18) ─────────────
+
+@login_required
+@permission_required("reportes.consultar_licencias", raise_exception=True)
+def alertas(request):
+    # Sin filtros elegidos: ciclo lectivo configurado y umbral por defecto.
+    datos = request.GET or {
+        "anio": ParametroSistema.obtener().ciclo_lectivo,
+        "umbral": UMBRAL_POR_DEFECTO,
+    }
+    form = FiltroAlertasForm(datos)
+    lista = []
+    if form.is_valid():
+        lista = calcular_alertas(form.cleaned_data["anio"], form.cleaned_data["umbral"])
+
+    return render(request, "reportes/alertas.html", {"form": form, "alertas": lista})

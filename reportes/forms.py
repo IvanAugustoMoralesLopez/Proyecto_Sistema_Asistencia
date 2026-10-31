@@ -5,9 +5,10 @@ from django.contrib.auth.password_validation import validate_password
 
 from asistencias.models import EventoAsistencia
 from licencias.models import LicenciaArticulo
-from personal.models import Carrera
+from personal.models import Carrera, EspacioCurricular
 
 from .models import ParametroSistema
+from .selectors import ORIGEN_AUSENCIAS, ORIGEN_LICENCIAS, ORIGEN_TODOS
 from .roles import ROLES
 
 User = get_user_model()
@@ -158,6 +159,13 @@ class UsuarioForm(forms.ModelForm):
 
 
 
+ORIGENES = [
+    (ORIGEN_TODOS, "Licencias y ausencias"),
+    (ORIGEN_LICENCIAS, "Solo licencias"),
+    (ORIGEN_AUSENCIAS, "Solo ausencias y permisos"),
+]
+
+
 class FiltroConsultaForm(forms.Form):
     JUSTIFICA = [
         ("", "Todas"),
@@ -174,8 +182,22 @@ class FiltroConsultaForm(forms.Form):
         empty_label="Todas",
         widget=forms.Select(attrs={"class": "form-select"}),
     )
-    desde = forms.DateField(label="Licencia desde", required=False, widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
-    hasta = forms.DateField(label="Licencia hasta", required=False, widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
+    espacio_curricular = forms.ModelChoiceField(
+        label="Materia",
+        queryset=EspacioCurricular.objects.none(),
+        required=False,
+        empty_label="Todas",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    origen = forms.ChoiceField(
+        label="Mostrar",
+        required=False,
+        initial=ORIGEN_TODOS,
+        choices=ORIGENES,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    desde = forms.DateField(label="Desde", required=False, widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
+    hasta = forms.DateField(label="Hasta", required=False, widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
     tipo_licencia = forms.ChoiceField(label="Tipo de licencia", required=False, widget=forms.Select(attrs={"class": "form-select"}))
     disp_tipo = forms.CharField(label="Instrumento (tipo)", required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
     disp_numero = forms.CharField(label="Instrumento (número)", required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -190,10 +212,37 @@ class FiltroConsultaForm(forms.Form):
             .distinct()
         )
         self.fields["tipo_licencia"].choices = [("", "Todos")] + [(t, t) for t in tipos]
+        self.fields["espacio_curricular"].queryset = (
+            EspacioCurricular.objects.filter(activo=True)
+            .select_related("carrera")
+            .order_by("carrera__nombre", "nombre")
+        )
 
     def clean(self):
         datos = super().clean()
         desde, hasta = datos.get("desde"), datos.get("hasta")
         if desde and hasta and desde > hasta:
             raise forms.ValidationError("La fecha «desde» no puede ser posterior a «hasta».")
+        carrera, espacio = datos.get("carrera"), datos.get("espacio_curricular")
+        if carrera and espacio and espacio.carrera_id != carrera.pk:
+            self.add_error("espacio_curricular", "La materia no pertenece a la carrera elegida.")
         return datos
+
+
+# ───────────── Alertas (RF-18) ─────────────
+
+class FiltroAlertasForm(forms.Form):
+    UMBRALES = [(50, "50 %"), (70, "70 %"), (80, "80 %"), (90, "90 %"), (100, "Solo agotados")]
+
+    anio = forms.IntegerField(
+        label="Año",
+        min_value=2000,
+        max_value=2100,
+        widget=forms.NumberInput(attrs={"class": "form-control"}),
+    )
+    umbral = forms.TypedChoiceField(
+        label="Avisar desde",
+        choices=UMBRALES,
+        coerce=int,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )

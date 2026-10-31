@@ -50,6 +50,10 @@ class ParametroSistemaTests(TestCase):
         parametros = ParametroSistema.obtener()
         self.assertEqual(parametros.ciclo_lectivo, 2027)
         self.assertEqual(parametros.actualizado_por, usuario)
+        evento = EventoAsistencia.objects.get(accion="PARAMETROS")
+        self.assertEqual(evento.usuario, usuario)
+        self.assertEqual(evento.antes["ciclo_lectivo"], timezone.localdate().year)
+        self.assertEqual(evento.despues["ciclo_lectivo"], 2027)
 
     def test_ciclo_lectivo_invalido(self):
         self.client.force_login(crear_usuario("sub", "gestionar_parametros"))
@@ -135,7 +139,6 @@ class InalterabilidadTests(TestCase):
 
 # ───────────── RF-19: usuarios y roles ─────────────
 
-from django.contrib.admin.models import LogEntry
 from django.core.management import call_command
 
 
@@ -166,8 +169,11 @@ class UsuariosTests(TestCase):
         nuevo = User.objects.get(username="zunilda")
         self.assertTrue(nuevo.check_password("Clave-Segura-2026"))
         self.assertEqual(list(nuevo.groups.values_list("name", flat=True)), [BEDELIA])
-        entrada = LogEntry.objects.get(user=self.admin, object_id=str(nuevo.pk))
-        self.assertNotIn("Clave", entrada.change_message)
+        evento = EventoAsistencia.objects.get(usuario=self.admin, accion="USUARIO_ALTA")
+        self.assertEqual(evento.despues["usuario"], "zunilda")
+        self.assertEqual(evento.despues["rol"], BEDELIA)
+        self.assertNotIn("Clave", str(evento.despues))
+        self.assertNotIn("password", str(evento.despues).lower())
 
     def test_contrasena_debil_o_distinta(self):
         self.datos.update(password1="123", password2="123")
@@ -207,6 +213,32 @@ class UsuariosTests(TestCase):
         self.assertEqual(self.client.get(url).status_code, 403)
         self.client.force_login(User.objects.create_superuser("root2", password="x"))
         self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_edicion_registra_antes_y_despues_en_la_bitacora(self):
+        self.client.post(reverse("reportes:usuario_crear"), self.datos)
+        usuario = User.objects.get(username="zunilda")
+        self.datos.update(
+            rol=Group.objects.get(name=SECRETARIA).pk,
+            last_name="Aquino de Pérez",
+            password1="Otra-Clave-2026",
+            password2="Otra-Clave-2026",
+        )
+        self.client.post(reverse("reportes:usuario_editar", args=[usuario.pk]), self.datos)
+
+        evento = EventoAsistencia.objects.get(accion="USUARIO_EDITAR")
+        self.assertEqual(evento.antes["rol"], BEDELIA)
+        self.assertEqual(evento.despues["rol"], SECRETARIA)
+        self.assertEqual(evento.antes["apellido"], "Aquino")
+        self.assertEqual(evento.despues["apellido"], "Aquino de Pérez")
+        self.assertEqual(evento.despues["contraseña"], "restablecida")
+        self.assertNotIn("Otra-Clave", str(evento.despues))
+
+    def test_eventos_de_usuario_se_ven_en_la_pantalla_de_bitacora(self):
+        self.client.post(reverse("reportes:usuario_crear"), self.datos)
+        self.client.force_login(crear_usuario("sec", "ver_bitacora"))
+        respuesta = self.client.get(reverse("reportes:bitacora"), {"accion": "USUARIO_ALTA"})
+        evento = list(respuesta.context["pagina"])[0]
+        self.assertEqual(evento.objetivo, "Usuario zunilda")
 
     def test_listado_filtra_por_rol(self):
         self.client.post(reverse("reportes:usuario_crear"), self.datos)
@@ -325,3 +357,259 @@ class SelectorsTests(ConsultasTests):
     def test_texto_instrumento(self):
         self.assertEqual(texto_instrumento(self.l1), "Disposición 12/2026")
         self.assertEqual(texto_instrumento(self.l2), "—")
+
+
+# ───────────── RF-17: filtro por materia y consulta unificada ─────────────
+
+from asistencias.models import MarcaAsistencia, RegistroAsistencia
+
+from .selectors import buscar_ausencias, buscar_consulta
+
+
+class ConsultaUnificadaTests(TestCase):
+    """Licencias + ausencias/permisos en una sola pantalla, filtrables por materia."""
+
+    def setUp(self):
+        ConsultasTests.setUp(self)  # mismos datos base: 2 docentes, 2 licencias
+        inasistencia = MarcaAsistencia.objects.get(codigo="I")
+        retirado = MarcaAsistencia.objects.get(codigo="PR")
+        presente = MarcaAsistencia.objects.get(codigo="P")
+        licencia = MarcaAsistencia.objects.get(codigo="LIC")
+
+        def registro(designacion, fecha, marca, **extra):
+            return RegistroAsistencia.objects.create(
+                designacion=designacion, fecha=fecha, marca=marca, **extra
+            )
+
+        self.a1 = registro(
+            self.d_acosta, date(2026, 9, 3), inasistencia,
+            horas_inasistidas=4, estado_justificacion="INJUSTIFICADA",
+        )
+        self.a2 = registro(
+            self.d_benitez, date(2026, 9, 10), retirado,
+            horas_inasistidas=2, estado_justificacion="EN_TRAMITE", nro_formulario="F-77",
+        )
+        # No deben aparecer: presente, y día amparado por una licencia.
+        registro(self.d_acosta, date(2026, 9, 4), presente)
+        registro(self.d_acosta, date(2026, 6, 10), licencia, horas_inasistidas=4, licencia=self.l1)
+
+    def claves(self, **filtros):
+        respuesta = self.client.get(self.url, filtros)
+        self.assertEqual(respuesta.status_code, 200)
+        return [(f.origen, f.pk) for f in respuesta.context["pagina"]]
+
+    # --- filtro por materia (RF-17) ---
+    def test_filtro_por_materia_en_licencias_y_ausencias(self):
+        materia = self.d_acosta.espacio_curricular
+        self.assertEqual(
+            set(self.claves(espacio_curricular=materia.pk)),
+            {("Licencia", self.l1.pk), ("Ausencia", self.a1.pk)},
+        )
+        otra = self.d_benitez.espacio_curricular
+        self.assertEqual(
+            set(self.claves(espacio_curricular=otra.pk)),
+            {("Licencia", self.l2.pk), ("Ausencia", self.a2.pk)},
+        )
+
+    def test_materia_de_otra_carrera_es_error(self):
+        respuesta = self.client.get(
+            self.url,
+            {"carrera": self.redes.pk, "espacio_curricular": self.d_acosta.espacio_curricular.pk},
+        )
+        self.assertIn("espacio_curricular", respuesta.context["form"].errors)
+
+    def test_materia_inactiva_no_se_ofrece(self):
+        espacio = self.d_acosta.espacio_curricular
+        espacio.activo = False
+        espacio.save()
+        respuesta = self.client.get(self.url)
+        self.assertNotIn(espacio, respuesta.context["form"].fields["espacio_curricular"].queryset)
+
+    # --- consulta unificada ---
+    def test_por_defecto_muestra_licencias_y_ausencias(self):
+        self.assertEqual(
+            set(self.claves()),
+            {("Licencia", self.l1.pk), ("Licencia", self.l2.pk),
+             ("Ausencia", self.a1.pk), ("Ausencia", self.a2.pk)},
+        )
+
+    def test_no_duplica_dias_con_licencia_ni_presentes(self):
+        ausencias = [r.pk for r in buscar_ausencias()]
+        self.assertEqual(set(ausencias), {self.a1.pk, self.a2.pk})
+
+    def test_filtro_origen(self):
+        self.assertEqual({o for o, _ in self.claves(origen="licencias")}, {"Licencia"})
+        self.assertEqual({o for o, _ in self.claves(origen="ausencias")}, {"Ausencia"})
+
+    def test_orden_mezclado_por_fecha_descendente(self):
+        # a2 (10/9) > a1 (3/9) > l2 (10/8) > l1 (1/6)
+        self.assertEqual(
+            self.claves(),
+            [("Ausencia", self.a2.pk), ("Ausencia", self.a1.pk),
+             ("Licencia", self.l2.pk), ("Licencia", self.l1.pk)],
+        )
+
+    def test_filtros_de_licencia_excluyen_ausencias(self):
+        self.assertEqual(self.claves(tipo_licencia="Enfermedad"), [("Licencia", self.l1.pk)])
+        self.assertEqual(self.claves(disp_anio="2026"), [("Licencia", self.l1.pk)])
+
+    def test_filtros_comunes_aplican_a_ausencias(self):
+        self.assertEqual(
+            set(self.claves(dni="2222", origen="ausencias")), {("Ausencia", self.a2.pk)}
+        )
+        self.assertEqual(
+            self.claves(origen="ausencias", desde="2026-09-05", hasta="2026-09-30"),
+            [("Ausencia", self.a2.pk)],
+        )
+        self.assertEqual(
+            self.claves(origen="ausencias", carrera=self.sistemas.pk), [("Ausencia", self.a1.pk)]
+        )
+
+    def test_justificacion_en_ausencias(self):
+        self.assertEqual(self.claves(origen="ausencias", justifica="no"), [("Ausencia", self.a1.pk)])
+        self.assertEqual(self.claves(origen="ausencias", justifica="pendiente"), [("Ausencia", self.a2.pk)])
+        self.assertEqual(self.claves(origen="ausencias", justifica="si"), [])
+
+    def test_paginacion_mezclada_sin_perder_ni_repetir_filas(self):
+        presente_inasist = MarcaAsistencia.objects.get(codigo="I")
+        for dia in range(1, 29):
+            RegistroAsistencia.objects.create(
+                designacion=self.d_benitez, fecha=date(2026, 10, dia), marca=presente_inasist,
+                horas_inasistidas=1, estado_justificacion="INJUSTIFICADA",
+            )
+        total = 4 + 28
+        p1 = self.claves()
+        p2 = self.claves(page=2)
+        self.assertEqual(len(p1), 25)
+        self.assertEqual(len(p2), total - 25)
+        self.assertEqual(len(set(p1) | set(p2)), total)
+        self.assertEqual(buscar_consulta().count(), total)
+
+    # --- exportación ---
+    def test_csv_incluye_ambos_origenes_y_materia(self):
+        respuesta = self.client.get(self.url, {"exportar": "csv"})
+        texto = respuesta.content.decode("utf-8-sig")
+        self.assertIn("Origen", texto.splitlines()[0])
+        self.assertIn("Materia", texto.splitlines()[0])
+        self.assertIn("Licencia,11111111", texto)
+        self.assertIn("Ausencia,22222222", texto)
+        self.assertIn("Formulario F-77", texto)
+        self.assertIn("Mat 11111111", texto)
+
+    def test_csv_respeta_filtro_de_materia(self):
+        respuesta = self.client.get(
+            self.url,
+            {"exportar": "csv", "espacio_curricular": self.d_benitez.espacio_curricular.pk},
+        )
+        texto = respuesta.content.decode("utf-8-sig")
+        self.assertIn("BENITEZ", texto)
+        self.assertNotIn("ACOSTA", texto)
+
+    def test_csv_neutraliza_formulas(self):
+        self.d_acosta.persona.apellido_nombre = "=CMD()"
+        self.d_acosta.persona.save()
+        texto = self.client.get(self.url, {"exportar": "csv"}).content.decode("utf-8-sig")
+        self.assertIn("'=CMD()", texto)
+        self.assertNotIn(",=CMD()", texto)
+
+
+class HistorialAsistenciasPorMateriaTests(TestCase):
+    """RF-17 también pide filtrar por materia el historial de asistencias."""
+
+    def setUp(self):
+        ConsultasTests.setUp(self)
+        inasistencia = MarcaAsistencia.objects.get(codigo="I")
+        self.r1 = RegistroAsistencia.objects.create(
+            designacion=self.d_acosta, fecha=date(2026, 9, 3), marca=inasistencia,
+            horas_inasistidas=4, estado_justificacion="INJUSTIFICADA",
+        )
+        self.r2 = RegistroAsistencia.objects.create(
+            designacion=self.d_benitez, fecha=date(2026, 9, 3), marca=inasistencia,
+            horas_inasistidas=4, estado_justificacion="INJUSTIFICADA",
+        )
+
+    def test_filtra_por_materia(self):
+        url = reverse("asistencia:historial")
+        respuesta = self.client.get(
+            url, {"espacio_curricular": self.d_benitez.espacio_curricular.pk}
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual([r.pk for r in respuesta.context["pagina"]], [self.r2.pk])
+
+
+# ───────────── RF-18: alertas de agotamiento ─────────────
+
+from .selectors import calcular_alertas
+
+
+class AlertasTests(TestCase):
+    def setUp(self):
+        cargo = Cargo.objects.create(codigo="166", descripcion="Hs cátedra")
+        carrera = Carrera.objects.create(nombre="Software")
+        espacio = EspacioCurricular.objects.create(nombre="Prog", carrera=carrera)
+        persona = Persona.objects.create(dni="33333333", apellido_nombre="CABRAL, ANA")
+        self.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, espacio_curricular=espacio, desde=date(2026, 3, 1)
+        )
+        self.url = reverse("reportes:alertas")
+        self.client.force_login(crear_usuario("bedel", "consultar_licencias"))
+
+    def articulo(self, codigo, tope):
+        return LicenciaArticulo.objects.create(
+            cod_licencia=f"X.{codigo}", articulo=codigo, tipo_licencia=f"Tipo {codigo}",
+            sit_rev="Titular", goce_haberes="Con goce", autoridad="Dirección",
+            plazo="-", tope_dias_anual=tope,
+        )
+
+    def licencia(self, articulo, desde, hasta):
+        return LicenciaOtorgada.objects.create(
+            designacion=self.designacion, articulo=articulo, sit_rev="TIT",
+            desde=desde, hasta=hasta,
+        )
+
+    def test_proximo_y_agotado(self):
+        # lun 1/6 a vie 5/6/2026 = 5 días hábiles
+        self.licencia(self.articulo("A1", 6), date(2026, 6, 1), date(2026, 6, 5))
+        self.licencia(self.articulo("A2", 5), date(2026, 6, 8), date(2026, 6, 12))
+        alertas = {a["articulo"]: a for a in calcular_alertas(2026, 80)}
+        self.assertEqual(alertas["A1"]["usados"], 5)
+        self.assertEqual(alertas["A1"]["restantes"], 1)
+        self.assertFalse(alertas["A1"]["agotado"])
+        self.assertTrue(alertas["A2"]["agotado"])
+        self.assertEqual(alertas["A2"]["restantes"], 0)
+
+    def test_no_avisa_bajo_el_umbral_ni_sin_tope(self):
+        self.licencia(self.articulo("B1", 20), date(2026, 6, 1), date(2026, 6, 5))  # 25 %
+        self.licencia(self.articulo("B2", None), date(2026, 6, 1), date(2026, 6, 5))  # sin tope
+        self.assertEqual(calcular_alertas(2026, 80), [])
+
+    def test_otro_anio_no_cuenta(self):
+        self.licencia(self.articulo("C1", 5), date(2025, 6, 2), date(2025, 6, 6))
+        self.assertEqual(calcular_alertas(2026, 80), [])
+        self.assertEqual(len(calcular_alertas(2025, 80)), 1)
+
+    def test_suma_varias_licencias_del_mismo_articulo(self):
+        art = self.articulo("D1", 6)
+        self.licencia(art, date(2026, 6, 1), date(2026, 6, 3))   # 3
+        self.licencia(art, date(2026, 6, 8), date(2026, 6, 10))  # 3
+        (alerta,) = calcular_alertas(2026, 80)
+        self.assertEqual(alerta["usados"], 6)
+        self.assertTrue(alerta["agotado"])
+
+    def test_vista_requiere_permiso_y_usa_ciclo_lectivo_por_defecto(self):
+        self.client.force_login(crear_usuario("sin"))
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+        self.client.force_login(crear_usuario("bedel2", "consultar_licencias"))
+        self.licencia(self.articulo("E1", 5), date(2026, 6, 1), date(2026, 6, 5))
+        parametros = ParametroSistema.obtener()
+        parametros.ciclo_lectivo = 2026
+        parametros.save()
+        respuesta = self.client.get(self.url)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.context["alertas"]), 1)
+
+    def test_vista_solo_agotados(self):
+        self.licencia(self.articulo("F1", 6), date(2026, 6, 1), date(2026, 6, 5))  # 83 %
+        respuesta = self.client.get(self.url, {"anio": 2026, "umbral": 100})
+        self.assertEqual(respuesta.context["alertas"], [])

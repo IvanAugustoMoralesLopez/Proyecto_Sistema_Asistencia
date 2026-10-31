@@ -18,25 +18,32 @@ Encabezado común de las planillas. Uso:
 
         <button type="button" class="btn btn-primario-suave" id="btnModificar" disabled>Modificar</button>
 
-        <button type="button" class="btn btn-primario" data-bs-toggle="offcanvas"
-                data-bs-target="#{{ panel_id }}" aria-controls="{{ panel_id }}">
-            <i class="bi bi-plus-lg"></i> Nuevo Registro
-        </button>
+        {% if nuevo_registro_url %}
+            <a class="btn btn-primario" href="{{ nuevo_registro_url }}">
+                <i class="bi bi-plus-lg"></i> Nuevo Registro
+            </a>
+        {% else %}
+            <button type="button" class="btn btn-primario" data-bs-toggle="offcanvas"
+                    data-bs-target="#{{ panel_id }}" aria-controls="{{ panel_id }}">
+                <i class="bi bi-plus-lg"></i> Nuevo Registro
+            </button>
+        {% endif %}
 
         <div class="dropdown">
             <button type="button" class="btn btn-filtro" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="bi bi-funnel"></i> Filtro
             </button>
-            <div class="dropdown-menu dropdown-menu-end p-3" style="min-width: 240px;">
-                {# TODO: agregar los filtros de cada pantalla #}
+            <form method="get" class="dropdown-menu dropdown-menu-end p-3" style="min-width: 240px;">
+                {% if request.GET.q %}<input type="hidden" name="q" value="{{ request.GET.q }}">{% endif %}
                 <label class="form-label small mb-1" for="filtroSitRev">Situación de revista</label>
-                <select class="form-select form-select-sm" id="filtroSitRev">
+                <select class="form-select form-select-sm mb-2" id="filtroSitRev" name="sit_revista">
                     <option value="">Todas</option>
-                    <option>Titular</option>
-                    <option>Interino</option>
-                    <option>Suplente</option>
+                    <option value="TIT" {% if request.GET.sit_revista == "TIT" %}selected{% endif %}>Titular</option>
+                    <option value="INT" {% if request.GET.sit_revista == "INT" %}selected{% endif %}>Interino</option>
+                    <option value="SUP" {% if request.GET.sit_revista == "SUP" %}selected{% endif %}>Suplente</option>
                 </select>
-            </div>
+                <button class="btn btn-primary btn-sm w-100" type="submit">Aplicar filtro</button>
+            </form>
         </div>
     </div>
 </div>

@@ -1,0 +1,138 @@
+
+{% extends "base.html" %}
+
+{% block title %}Licencias otorgadas{% endblock %}
+{% block seccion %}informe-licencias{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <p class="ruta mb-1">Administración / Licencias / Listado</p>
+        <h1 class="h3 mb-1">Licencias otorgadas</h1>
+        <p class="text-secondary mb-0">
+            Consulta de licencias históricas y actuales.
+        </p>
+    </div>
+
+    <a href="{% url 'licencias:nueva_licencia_otorgada' %}" class="btn btn-primary">
+        Nueva licencia
+    </a>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Registros de licencias</h2>
+    </div>
+
+    <div class="card-body">
+        <form method="GET" class="row g-3 mb-4">
+
+            <div class="col-md-4">
+                <label for="docente" class="form-label">Docente</label>
+                <input
+                    type="text"
+                    name="docente"
+                    id="docente"
+                    class="form-control"
+                    placeholder="Buscar por nombre o apellido"
+                    value="{{ request.GET.docente }}"
+                >
+            </div>
+
+            <div class="col-md-4">
+                <label for="articulo" class="form-label">Artículo</label>
+                <select name="articulo" id="articulo" class="form-select">
+                    <option value="">Todos los artículos</option>
+
+                    {% for item in articulos %}
+                        <option value="{{ item.id }}" {% if request.GET.articulo == item.id|stringformat:"s" %}selected{% endif %}>
+                            {{ item.articulo }} - {{ item.tipo_licencia }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label for="fecha_desde" class="form-label">Desde</label>
+                <input
+                    type="date"
+                    name="fecha_desde"
+                    id="fecha_desde"
+                    class="form-control"
+                    value="{{ request.GET.fecha_desde }}"
+                >
+            </div>
+
+            <div class="col-md-3">
+                <label for="fecha_hasta" class="form-label">Hasta</label>
+                <input
+                    type="date"
+                    name="fecha_hasta"
+                    id="fecha_hasta"
+                    class="form-control"
+                    value="{{ request.GET.fecha_hasta }}"
+                >
+            </div>
+
+            <div class="col-md-2 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary">
+                    Filtrar
+                </button>
+
+                <a href="{% url 'licencias:listado_licencias_otorgadas' %}"
+                   class="btn btn-outline-secondary">
+                    Limpiar filtros
+                </a>
+            </div>
+
+        </form>
+
+        {% if licencias %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Docente</th>
+                            <th>Cargo</th>
+                            <th>Artículo</th>
+                            <th>Desde</th>
+                            <th>Hasta</th>
+                            <th>Justificada</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for licencia in licencias %}
+                            <tr>
+                                <td>{{ licencia.designacion.persona.apellido_nombre }}</td>
+                                <td>{{ licencia.designacion.cargo }}</td>
+                                <td>{{ licencia.articulo }}</td>
+                                <td>{{ licencia.desde|date:"d/m/Y" }}</td>
+                                <td>
+                                    {% if licencia.hasta %}
+                                        {{ licencia.hasta|date:"d/m/Y" }}
+                                    {% else %}
+                                        Sin fecha
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if licencia.justifica is None %}
+                                        Sin especificar
+                                    {% elif licencia.justifica %}
+                                        Sí
+                                    {% else %}
+                                        No
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info mb-0">
+                No se encontraron licencias con los filtros seleccionados.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

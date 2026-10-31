@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, RequestFactory, TestCase
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.urls import reverse
 
 from .models import (
@@ -19,6 +20,14 @@ from .views import _procesar_csv, gestion_legajos
 
 
 class DesignacionTests(TestCase):
+    def otorgar_permiso(self, usuario, codename):
+        usuario.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="personal",
+                codename=codename,
+            )
+        )
+
     def setUp(self):
         self.persona = Persona.objects.create(
             dni="30123456",
@@ -94,14 +103,14 @@ class DesignacionTests(TestCase):
         form = PersonaForm(
             data={
                 "apellido_nombre": "Apellido actualizado, Docente",
-                "apellido": "Apellido actualizado",
-                "nombres": "Docente",
                 "sexo": "F",
                 "activa": "on",
             },
             instance=self.persona,
         )
 
+        self.assertNotIn("apellido", form.fields)
+        self.assertNotIn("nombres", form.fields)
         self.assertTrue(form.is_valid(), form.errors)
         persona = form.save()
         self.assertEqual(persona.pk, "30123456")
@@ -182,6 +191,7 @@ class DesignacionTests(TestCase):
         )
         request = RequestFactory().get("/personal/legajos/")
         request.user = usuario
+        self.otorgar_permiso(usuario, "change_persona")
 
         response = gestion_legajos(request)
 
@@ -205,10 +215,90 @@ class DesignacionTests(TestCase):
             password="test-password",
         )
         cliente.force_login(usuario)
+        self.otorgar_permiso(usuario, "change_persona")
         respuesta_autenticada = cliente.get(url)
 
         self.assertEqual(respuesta_autenticada.status_code, 200)
         self.assertContains(
             respuesta_autenticada,
             "Legajos del personal docente",
+        )
+
+    def test_planilla_muestra_designacion_guardada_y_links_de_creacion(self):
+        Designacion.objects.create(
+            persona=self.persona,
+            cargo=self.cargo,
+            situacion_revista=Designacion.Situacion.TITULAR,
+            desde=date(2026, 3, 1),
+        )
+        usuario = get_user_model().objects.create_user(
+            username="designaciones-list-test",
+            password="test-password",
+        )
+        cliente = Client()
+        cliente.force_login(usuario)
+
+        respuesta = cliente.get(reverse("pantalla_personal"), follow=True)
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "30123456")
+        self.assertContains(respuesta, "Profesor")
+        self.assertContains(respuesta, "/personal/legajos/")
+        self.assertContains(respuesta, "/personal/designaciones/nueva/")
+
+    def test_crear_designacion_desde_formulario_y_volver_a_planilla(self):
+        usuario = get_user_model().objects.create_user(
+            username="designaciones-create-test",
+            password="test-password",
+        )
+        cliente = Client()
+        cliente.force_login(usuario)
+        self.otorgar_permiso(usuario, "change_designacion")
+
+        respuesta = cliente.post(
+            reverse("personal:nueva_designacion"),
+            data={
+                "persona": self.persona.pk,
+                "cargo": self.cargo.pk,
+                "espacio_curricular": "",
+                "unidad_educativa": "",
+                "situacion_revista": Designacion.Situacion.INTERINO,
+                "anio_curso": "",
+                "division_seccion": "",
+                "turno": "",
+                "hs_catedra": "",
+                "jornada": "",
+                "especialidad": "",
+                "disp_alta_nro": "",
+                "sello_regional_as": "",
+                "motivo": "",
+                "norma_tipo": "",
+                "norma_numero": "",
+                "norma_anio": "",
+                "organismo_emisor": "",
+                "desde": "2026-03-01",
+                "hasta": "",
+                "pof": "",
+                "anio_pof": "",
+                "novedad": "",
+                "observaciones": "",
+                "horas_lun": "2",
+                "horas_mar": "0",
+                "horas_mie": "0",
+                "horas_jue": "0",
+                "horas_vie": "0",
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(respuesta, reverse("inicio_personal"))
+        self.assertContains(respuesta, "30123456")
+        self.assertContains(respuesta, "Profesor")
+        designacion = Designacion.objects.get(
+            persona=self.persona,
+            cargo=self.cargo,
+        )
+        self.assertEqual(
+            designacion.horarios.get(dia=Horario.Dia.LUNES).horas_catedra,
+            2,
         )
