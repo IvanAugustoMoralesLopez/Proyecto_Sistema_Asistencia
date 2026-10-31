@@ -32,7 +32,7 @@ def _horas_por_dia(designacion_id, cache):
         cache[designacion_id] = horas
     return cache[designacion_id]
 
-
+@permission_required("licencias.view_licenciaotorgada", raise_exception=True)
 def reporte_mensual_licencias(request, anio: int, mes: int):
     if not 1 <= mes <= 12:
         raise Http404("Mes inválido")
