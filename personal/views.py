@@ -7,7 +7,6 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
-from django.forms import modelform_factory
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
@@ -30,7 +29,7 @@ from .models import (
     Persona,
 )
 from licencias.models import LicenciaArticulo
-
+from licencias.forms import LicenciaArticuloForm
 
 MAX_CSV_BYTES = 5 * 1024 * 1024
 
@@ -408,14 +407,7 @@ def catalogos_personal(request):
         "licencias": {
             "titulo": "Tipos de licencia",
             "modelo": LicenciaArticulo,
-            "form": modelform_factory(
-                LicenciaArticulo,
-                fields=[
-                    "cod_licencia", "articulo", "clase", "tipo_licencia",
-                    "categoria_informe", "sit_rev", "goce_haberes",
-                    "autoridad", "plazo", "tope_dias_anual",
-                ],
-            ),
+            "form": LicenciaArticuloForm,
             "campo_activo": None,
         },
     }

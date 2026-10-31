@@ -9,13 +9,14 @@ from personal.models import Horario
 
 from .clasificacion import CategoriaSinPlanillaError
 from .dias import obtener_feriados
-from .models import LicenciaOtorgada
-from .services import clasificar_planilla_licencia 
+from .models import LicenciaArticulo, LicenciaOtorgada
+from .services import clasificar_planilla_licencia
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.shortcuts import redirect, reverse
 from django.views.decorators.http import require_http_methods
-from .forms import LicenciaOtorgadaForm
+from .forms import LicenciaOtorgadaForm  
+from django.db.models import Q
 
 # Mapeo de Python weekday() a formato varchar(3) de la DB
 MAPEO_DIAS = {
@@ -122,4 +123,46 @@ def nueva_licencia_otorgada(request):
         request,
         "licencias/nueva_licencia_otorgada.html",
         {"form": form}
+    )
+
+@permission_required("licencias.view_licenciaotorgada", raise_exception=True)
+def listado_licencias_otorgadas(request):
+    licencias = LicenciaOtorgada.objects.select_related(
+        "designacion__persona",
+        "designacion__cargo",
+        "articulo",
+    ).order_by("-desde", "-id")
+
+    docente = request.GET.get("docente", "").strip()
+
+    if docente:
+        licencias = licencias.filter(
+            Q(designacion__persona__apellido_nombre__icontains=docente)
+        )
+
+    articulo = request.GET.get("articulo", "").strip()
+
+    if articulo:
+        licencias = licencias.filter(articulo_id=articulo)
+
+    fecha_desde = request.GET.get("fecha_desde", "").strip()
+    fecha_hasta = request.GET.get("fecha_hasta", "").strip()
+
+    if fecha_desde:
+        licencias = licencias.filter(
+            Q(hasta__isnull=True) | Q(hasta__gte=fecha_desde)
+        )
+
+    if fecha_hasta:
+        licencias = licencias.filter(desde__lte=fecha_hasta)
+
+    articulos = LicenciaArticulo.objects.all().order_by("articulo")
+
+    return render(
+        request,
+        "licencias/listado_licencias_otorgadas.html",
+        {
+            "licencias": licencias,
+            "articulos": articulos,
+        },
     )
