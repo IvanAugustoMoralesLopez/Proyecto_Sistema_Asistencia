@@ -88,19 +88,18 @@ class LicenciaOtorgada(models.Model):
         if not tope:
             return
 
-        # TODO (paso 3 - RN-08): hoy solo se valida en altas. Falta validar
-        # ediciones (excluyendo esta misma licencia), el cruce de año y la
-        # excepción por resolución.
-        if self.pk:
-            return
+        # TODO (RN-08): faltan el cruce de año y la excepción por resolución.
 
         # Import local: services importa models, así que no puede ir arriba.
         from .services import dias_usados_en_anio
 
+        # Al editar (self.pk existe) se excluye esta misma licencia del conteo,
+        # para que no se cuente contra sí misma. En un alta, self.pk es None.
         dias_ya_usados = dias_usados_en_anio(
             self.designacion.persona.dni,
             self.articulo.articulo,
             self.desde.year,
+            excluir_id=self.pk,
         )
 
         # Licencia abierta: se calcula hasta hoy (igual criterio que services.py).
