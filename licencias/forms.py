@@ -1,7 +1,8 @@
+
 from django.db.models import Q
 from django import forms
 from personal.models import Designacion
-from .models import LicenciaArticulo, LicenciaOtorgada 
+from .models import LicenciaArticulo, LicenciaOtorgada
 from django.utils.dateparse import parse_date
 
 
@@ -19,8 +20,8 @@ class LicenciaArticuloForm(forms.ModelForm):
             "autoridad",
             "plazo",
             "tope_dias_anual",
-            ]
-          
+        ]
+
         widgets = {
             "cod_licencia": forms.TextInput(attrs={
                 "class": "form-control",
@@ -46,6 +47,7 @@ class LicenciaArticuloForm(forms.ModelForm):
                 "placeholder": "Dejar vacío si no tiene tope numérico",
             }),
         }
+
         labels = {
             "cod_licencia": "Código de licencia",
             "articulo": "Artículo",
@@ -97,6 +99,20 @@ class LicenciaOtorgadaForm(forms.ModelForm):
             ).order_by("persona__apellido_nombre")
         )
 
+    def clean(self):
+        cleaned_data = super().clean()
+
+        desde = cleaned_data.get("desde")
+        hasta = cleaned_data.get("hasta")
+
+        if desde and hasta and hasta < desde:
+            self.add_error(
+                "hasta",
+                "La fecha Hasta no puede ser anterior a la fecha Desde."
+            )
+
+        return cleaned_data
+
     class Meta:
         model = LicenciaOtorgada
         fields = [
@@ -113,6 +129,7 @@ class LicenciaOtorgadaForm(forms.ModelForm):
             "justifica",
             "observaciones",
         ]
+
         widgets = {
             "designacion": forms.Select(attrs={"class": "form-select"}),
             "articulo": forms.Select(attrs={"class": "form-select"}),
@@ -142,6 +159,7 @@ class LicenciaOtorgadaForm(forms.ModelForm):
                 "rows": 3,
             }),
         }
+
         labels = {
             "designacion": "Designación",
             "articulo": "Artículo de licencia",

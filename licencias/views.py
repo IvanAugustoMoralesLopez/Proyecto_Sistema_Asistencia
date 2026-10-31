@@ -1,23 +1,20 @@
 import calendar
 from datetime import date, timedelta
 
+from django.contrib import messages
+from django.contrib.auth.decorators import permission_required
+from django.db.models import Q
 from django.http import Http404
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, redirect, render, reverse
+from django.views.decorators.http import require_http_methods
 
-# Importá el modelo Horario desde la app donde esté definido
 from personal.models import Horario
 
 from .clasificacion import CategoriaSinPlanillaError
 from .dias import obtener_feriados
+from .forms import LicenciaOtorgadaForm
 from .models import LicenciaArticulo, LicenciaOtorgada
 from .services import clasificar_planilla_licencia
-from django.contrib import messages
-from django.contrib.auth.decorators import permission_required
-from django.shortcuts import redirect, reverse
-from django.views.decorators.http import require_http_methods
-from .forms import LicenciaOtorgadaForm  
-from django.db.models import Q
-
 # Mapeo de Python weekday() a formato varchar(3) de la DB
 MAPEO_DIAS = {
     0: 'LUN', 1: 'MAR', 2: 'MIE', 3: 'JUE', 4: 'VIE', 5: 'SAB', 6: 'DOM'
@@ -164,5 +161,45 @@ def listado_licencias_otorgadas(request):
         {
             "licencias": licencias,
             "articulos": articulos,
+        },
+    )
+
+@permission_required("licencias.change_licenciaotorgada", raise_exception=True)
+@require_http_methods(["GET", "POST"])
+def editar_licencia_otorgada(request, licencia_id):
+    licencia = get_object_or_404(LicenciaOtorgada, pk=licencia_id)
+
+    if request.method == "POST":
+        form = LicenciaOtorgadaForm(
+            request.POST,
+            instance=licencia,
+        )
+
+        if form.is_valid():
+            form.save()
+            messages.success(
+                request,
+                "La licencia se actualizó correctamente."
+            )
+
+            url_listado = reverse("licencias:listado_licencias_otorgadas")
+            filtros = request.GET.urlencode()
+
+            if filtros:
+                url_listado = f"{url_listado}?{filtros}"
+
+            return redirect(url_listado)
+
+        messages.error(request, "Revise los datos de la licencia.")
+
+    else:
+        form = LicenciaOtorgadaForm(instance=licencia)
+
+    return render(
+        request,
+        "licencias/editar_licencia_otorgada.html",
+        {
+            "form": form,
+            "licencia": licencia,
         },
     )
