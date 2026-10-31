@@ -57,26 +57,7 @@
                     <i class="bi bi-box-arrow-right"></i><span>Ingreso y egreso de los profesores</span>
                 </a>
 
-                <a class="sidebar__link sidebar__link--nueva" href="#">
-                    <i class="bi bi-plus-circle-fill"></i><span>Nueva tabla</span>
-                </a>
-
-                {# Planillas renovables #}
-                <div class="sidebar__sub">
-                    {% for p in planillas_recientes %}
-                        <a class="sidebar__link sidebar__link--sub" href="{{ p.url }}">
-                            <i class="bi bi-table"></i><span>{{ p.nombre }}</span>
-                        </a>
-                    {% empty %}
-                        <a class="sidebar__link sidebar__link--sub" href="#">
-                            <i class="bi bi-table"></i><span>Registro Docente 16/10</span>
-                        </a>
-                        <a class="sidebar__link sidebar__link--sub" href="#">
-                            <i class="bi bi-table"></i><span>Registro Docente 16/09</span>
-                        </a>
-                    {% endfor %}
-                </div>
-
+                
                 <p class="sidebar__titulo">Asistencia</p>
                 <a class="sidebar__link" data-seccion="asistencia-diaria" href="{% url 'asistencia:registro_diario' %}">
                     <i class="bi bi-calendar-check"></i><span>Registro diario</span>
@@ -89,29 +70,6 @@
                 </a>
 
                 {% if perms.reportes.consultar_licencias or perms.reportes.ver_bitacora or perms.reportes.gestionar_parametros or perms.reportes.gestionar_usuarios %}
-<<<<<<< HEAD
-                    <p class="sidebar__titulo">Administración</p>
-                    {% if perms.reportes.consultar_licencias %}
-                    <a class="sidebar__link" data-seccion="reportes-consultas" href="{% url 'reportes:consultas' %}">
-                        <i class="bi bi-search"></i><span>Consultas</span>
-                    </a>
-                    {% endif %}
-                    {% if perms.reportes.ver_bitacora %}
-                    <a class="sidebar__link" data-seccion="reportes-bitacora" href="{% url 'reportes:bitacora' %}">
-                        <i class="bi bi-journal-check"></i><span>Bitácora</span>
-                    </a>
-                    {% endif %}
-                    {% if perms.reportes.gestionar_usuarios %}
-                    <a class="sidebar__link" data-seccion="reportes-usuarios" href="{% url 'reportes:usuarios' %}">
-                        <i class="bi bi-people"></i><span>Usuarios y roles</span>
-                    </a>
-                    {% endif %}
-                    {% if perms.reportes.gestionar_parametros %}
-                    <a class="sidebar__link" data-seccion="reportes-parametros" href="{% url 'reportes:parametros' %}">
-                        <i class="bi bi-gear"></i><span>Parámetros</span>
-                    </a>
-                    {% endif %}
-=======
                 <p class="sidebar__titulo">Administración</p>
                 {% if perms.reportes.consultar_licencias %}
                 <a class="sidebar__link" data-seccion="reportes-consultas" href="{% url 'reportes:consultas' %}">
@@ -138,7 +96,6 @@
                     <i class="bi bi-gear"></i><span>Parámetros</span>
                 </a>
                 {% endif %}
->>>>>>> main
                 {% endif %}
             </nav>
         </aside>
