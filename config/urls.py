@@ -35,6 +35,5 @@ urlpatterns = [
     ),
     path("pantallas/licencias/", TemplateView.as_view(template_name="pantallas/codigos_licencia.html"), name="pantalla_licencias"),
     path("pantallas/informe/", TemplateView.as_view(template_name="pantallas/informe_licencias.html"), name="pantalla_informe"),
-    path("pantallas/ingreso-egreso/", TemplateView.as_view(template_name="pantallas/ingreso_egreso.html"), name="pantalla_ingreso_egreso"),
     path("", registro_designaciones, name="inicio_personal"),
 ]

@@ -1,45 +1,56 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Iniciar sesión{% endblock %}
 
-{# El login no muestra el menú lateral #}
+{# Oculta el menú lateral en el login #}
 {% block sidebar %}{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center pt-4">
-    <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm">
-            <div class="card-body p-4">
-                <h1 class="h4 mb-3">Iniciar sesión</h1>
-                <p class="text-secondary">
-                    Ingresá con tu usuario institucional.
-                </p>
+<div class="login-fullscreen-container">
+    <div class="row g-0 h-100">
+        <!-- Panel Izquierdo: Imagen institucional cubriendo todo el lateral -->
+        <div class="col-lg-7 login-image-side d-none d-lg-block p-0">
+            <img src="{% static 'img/fondo-login.jpg' %}" alt="IESETyFP" class="login-bg-img">
+        </div>
 
-                {% if form.errors %}
-                    <div class="alert alert-danger">
-                        Usuario o contraseña incorrectos.
+        <!-- Panel Derecho: Formulario de inicio de sesión centrado -->
+        <div class="col-12 col-lg-5 login-form-side">
+            <div class="login-card-wrapper">
+                <div class="card shadow-sm border-0 w-100">
+                    <div class="card-body p-4 p-md-5">
+                        <h1 class="h4 mb-3 fw-bold text-dark">Iniciar sesión</h1>
+                        <p class="text-secondary small mb-4">
+                            Ingresá con tu usuario institucional.
+                        </p>
+
+                        {% if form.errors %}
+                            <div class="alert alert-danger py-2 small" role="alert">
+                                Usuario o contraseña incorrectos.
+                            </div>
+                        {% endif %}
+
+                        <form method="post">
+                            {% csrf_token %}
+
+                            <div class="mb-3">
+                                <label class="form-label text-dark small fw-semibold" for="id_username">Usuario</label>
+                                <input class="form-control" id="id_username" type="text" name="username"
+                                       autocomplete="username" required autofocus placeholder="Ingrese su usuario">
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label text-dark small fw-semibold" for="id_password">Contraseña</label>
+                                <input class="form-control" id="id_password" type="password" name="password"
+                                       autocomplete="current-password" required placeholder="Ingrese su contraseña">
+                            </div>
+
+                            <input type="hidden" name="next" value="{{ next }}">
+
+                            <button class="btn btn-primary w-100 py-2 fw-semibold" type="submit">ingresar</button>
+                        </form>
                     </div>
-                {% endif %}
-
-                <form method="post">
-                    {% csrf_token %}
-
-                    <div class="mb-3">
-                        <label class="form-label" for="id_username">Usuario</label>
-                        <input class="form-control" id="id_username" type="text" name="username"
-                               autocomplete="username" required autofocus>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label" for="id_password">Contraseña</label>
-                        <input class="form-control" id="id_password" type="password" name="password"
-                               autocomplete="current-password" required>
-                    </div>
-
-                    <input type="hidden" name="next" value="{{ next }}">
-
-                    <button class="btn btn-primary w-100" type="submit">Ingresar</button>
-                </form>
+                </div>
             </div>
         </div>
     </div>

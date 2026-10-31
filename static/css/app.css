@@ -450,3 +450,51 @@ pre {
         font-size: 0.875rem;
     }
 }
+
+/* =================================================_*/
+/* ESTILOS PARA EL LOGIN EN PANTALLA PARTIDA          */
+/* =================================================_*/
+
+.login-fullscreen-container {
+    position: absolute;
+    top: 56px; /* Altura de la barra superior del sistema */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    height: calc(100vh - 56px);
+    background-color: #e4ebf5;
+    overflow: hidden;
+    margin: 0 !important;
+    padding: 0 !important;
+    z-index: 10;
+}
+
+.login-image-side {
+    height: 100%;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden;
+    background-color: #ffffff;
+}
+
+.login-bg-img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: left center !important;
+    display: block !important;
+}
+
+.login-form-side {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    height: 100%;
+}
+
+.login-card-wrapper {
+    width: 100%;
+    max-width: 420px;
+}
