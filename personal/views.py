@@ -4,8 +4,9 @@ from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -137,6 +138,17 @@ def _importar_fila_personal(fila):
             ) from exc
 
     designacion.full_clean()
+    if Designacion.objects.filter(
+        persona=persona,
+        cargo=cargo,
+        espacio_curricular=espacio,
+        situacion_revista=designacion.situacion_revista,
+        desde=designacion.desde,
+        hasta=designacion.hasta,
+    ).exists():
+        raise ValidationError(
+            "La fila duplica una designación ya registrada para el docente."
+        )
     designacion.save()
 
 
@@ -178,12 +190,15 @@ def _procesar_csv(archivo):
     return total, rechazadas
 
 
+@login_required
 @permission_required("personal.change_persona", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def gestion_legajos(request):
     if request.method == "POST":
         accion = request.POST.get("accion")
         if accion == "importar_csv":
+            if not request.user.has_perm("personal.change_persona"):
+                raise PermissionDenied
             archivo = request.FILES.get("archivo")
             if not archivo:
                 messages.error(request, "Seleccione un archivo CSV.")
@@ -198,7 +213,7 @@ def gestion_legajos(request):
                         f"Importación finalizada: {total - rechazadas} filas "
                         f"importadas y {rechazadas} rechazadas.",
                     )
-            return redirect("/personal/legajos/")
+            return redirect(reverse("personal:gestion_legajos"))
 
         if accion == "guardar_persona":
             dni = request.POST.get("dni", "").strip()
@@ -207,7 +222,9 @@ def gestion_legajos(request):
             if form.is_valid():
                 persona = form.save()
                 messages.success(request, "El legajo se guardó correctamente.")
-                return redirect(f"/personal/legajos/?dni={persona.pk}")
+                return redirect(
+                    f"{reverse('personal:gestion_legajos')}?dni={persona.pk}"
+                )
             messages.error(request, "Revise los datos personales indicados.")
             return render(
                 request,
@@ -216,6 +233,8 @@ def gestion_legajos(request):
             )
 
         if accion in {"guardar_designacion", "dar_baja_designacion"}:
+            if not request.user.has_perm("personal.change_designacion"):
+                raise PermissionDenied
             dni = request.POST.get("dni", "").strip()
             persona = get_object_or_404(Persona, pk=dni)
             designacion_id = request.POST.get("designacion_id")
@@ -235,14 +254,18 @@ def gestion_legajos(request):
                         request,
                         "La designación se dio de baja y se conservó en el historial.",
                     )
-                return redirect(f"/personal/legajos/?dni={persona.pk}")
+                return redirect(
+                    f"{reverse('personal:gestion_legajos')}?dni={persona.pk}"
+                )
 
             form = DesignacionForm(request.POST, instance=designacion)
             if form.is_valid():
                 form.instance.persona = persona
                 designacion = form.save()
                 messages.success(request, "La designación se guardó correctamente.")
-                return redirect(f"/personal/legajos/?dni={persona.pk}")
+                return redirect(
+                    f"{reverse('personal:gestion_legajos')}?dni={persona.pk}"
+                )
             messages.error(request, "Revise los datos de la designación.")
             return render(
                 request,
@@ -256,7 +279,7 @@ def gestion_legajos(request):
             )
 
         messages.error(request, "La acción solicitada no es válida.")
-        return redirect("/personal/legajos/")
+        return redirect(reverse("personal:gestion_legajos"))
 
     filtro = BuscarLegajoForm(request.GET or None)
     dni = (request.GET.get("dni") or "").strip()
@@ -383,7 +406,7 @@ def registro_designaciones(request):
     )
 
 
-@permission_required("personal.change_cargo", raise_exception=True)
+@login_required
 def catalogos_personal(request):
     configuracion = {
         "cargos": {
@@ -414,6 +437,14 @@ def catalogos_personal(request):
     seccion = request.GET.get("seccion", "cargos")
     if seccion not in configuracion:
         seccion = "cargos"
+    permisos_seccion = {
+        "cargos": "personal.change_cargo",
+        "carreras": "personal.change_carrera",
+        "espacios": "personal.change_espaciocurricular",
+        "licencias": "licencias.change_licenciaarticulo",
+    }
+    if not request.user.has_perm(permisos_seccion[seccion]):
+        raise PermissionDenied
 
     datos = configuracion[seccion]
     objeto_id = request.GET.get("editar")
@@ -437,8 +468,15 @@ def catalogos_personal(request):
                     objeto.save(update_fields=[campo_activo])
                     messages.success(request, "El catálogo se desactivó correctamente.")
                 else:
-                    objeto.delete()
-                    messages.success(request, "El registro se eliminó correctamente.")
+                    try:
+                        objeto.delete()
+                    except ProtectedError:
+                        messages.error(
+                            request,
+                            "El registro está en uso y no puede eliminarse.",
+                        )
+                    else:
+                        messages.success(request, "El registro se eliminó correctamente.")
                 return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
         else:
             form = datos["form"](request.POST)
@@ -462,6 +500,7 @@ def catalogos_personal(request):
     )
 
 
+@login_required
 @permission_required("personal.change_designacion", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def nueva_designacion(request):
