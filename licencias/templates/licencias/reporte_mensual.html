@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Reporte mensual de licencias{% endblock %}
+{% block seccion %}informe-licencias{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <p class="ruta mb-1">Administración / Licencias / Reporte mensual</p>
+    <h1 class="h3 mb-1">Reporte mensual de licencias: {{ mes|stringformat:"02d" }}/{{ anio }}</h1>
+    <p class="text-secondary mb-0">
+        Desglose por designación, planilla de destino (IL-01 / IL-02) y horas cátedra afectadas.
+    </p>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Licencias del mes</h2>
+    </div>
+
+    <div class="card-body">
+        {% if desglose %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>DNI</th>
+                            <th>Espacio curricular</th>
+                            <th>Licencia</th>
+                            <th>Planilla</th>
+                            <th>Desde</th>
+                            <th>Hasta</th>
+                            <th class="text-end">Días</th>
+                            <th class="text-end">Horas afectadas</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for fila in desglose %}
+                            <tr>
+                                <td>{{ fila.dni_docente }}</td>
+                                <td>{{ fila.espacio_curricular|default:"-" }}</td>
+                                <td>{{ fila.licencia_solicitada }}</td>
+                                <td>
+                                    {% if fila.requiere_revision %}
+                                        <span class="badge text-bg-warning">{{ fila.planilla }}</span>
+                                    {% elif fila.planilla == "IL-01" %}
+                                        <span class="badge text-bg-primary">{{ fila.planilla }}</span>
+                                    {% else %}
+                                        <span class="badge text-bg-success">{{ fila.planilla }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ fila.fecha_inicio|date:"d/m/Y" }}</td>
+                                <td>{{ fila.fecha_fin|date:"d/m/Y" }}</td>
+                                <td class="text-end">{{ fila.dias_totales }}</td>
+                                <td class="text-end">{{ fila.horas_descontadas }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info mb-0">
+                No hay licencias que afecten a este mes.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

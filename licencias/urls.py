@@ -1,10 +1,10 @@
-
 from django.urls import path
 
 from .views import (
     nueva_licencia_otorgada,
     listado_licencias_otorgadas,
     editar_licencia_otorgada,
+    reporte_mensual_licencias,
 )
 
 app_name = "licencias"
@@ -24,5 +24,10 @@ urlpatterns = [
         "editar/<int:licencia_id>/",
         editar_licencia_otorgada,
         name="editar_licencia_otorgada",
+    ),
+    path(
+        "reporte/<int:anio>/<int:mes>/",
+        reporte_mensual_licencias,
+        name="reporte_mensual_licencias",
     ),
 ]
