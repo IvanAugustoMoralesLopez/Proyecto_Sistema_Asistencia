@@ -613,3 +613,137 @@ class AlertasTests(TestCase):
         self.licencia(self.articulo("F1", 6), date(2026, 6, 1), date(2026, 6, 5))  # 83 %
         respuesta = self.client.get(self.url, {"anio": 2026, "umbral": 100})
         self.assertEqual(respuesta.context["alertas"], [])
+
+
+# ───────────── Correcciones de la revisión técnica (A2, M11, B5, B6) ─────────────
+
+from django.contrib import admin as django_admin
+from django.test import RequestFactory
+
+from .admin import ParametroSistemaAdmin
+from .exportaciones import _texto_seguro, filas_consulta
+from .selectors import FilaConsulta
+
+
+class RolesPersonalLicenciasTests(TestCase):
+    """A2: los roles pueden operar las pantallas de Personal y Licencias."""
+
+    def usuario_con_rol(self, nombre_rol):
+        usuario = User.objects.create_user(f"u_{nombre_rol}", password="x")
+        usuario.groups.add(Group.objects.get(name=nombre_rol))
+        self.client.force_login(usuario)
+        return usuario
+
+    def codenames(self, nombre):
+        return set(Group.objects.get(name=nombre).permissions.values_list("codename", flat=True))
+
+    def test_matriz_por_rol(self):
+        bedelia, secretaria, sub = (self.codenames(n) for n in (BEDELIA, SECRETARIA, SUBSECRETARIA))
+        self.assertIn("add_licenciaotorgada", bedelia)
+        self.assertNotIn("change_persona", bedelia)
+        self.assertIn("change_designacion", secretaria)
+        self.assertNotIn("change_cargo", secretaria)
+        self.assertIn("change_licenciaarticulo", sub)
+
+    def test_bedelia_opera_licencias_pero_no_personal(self):
+        self.usuario_con_rol(BEDELIA)
+        self.assertEqual(self.client.get(reverse("licencias:listado_licencias_otorgadas")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("licencias:nueva_licencia_otorgada")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("personal:gestion_legajos")).status_code, 403)
+
+    def test_secretaria_opera_legajos_y_designaciones(self):
+        self.usuario_con_rol(SECRETARIA)
+        self.assertEqual(self.client.get(reverse("personal:gestion_legajos")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("inicio_personal")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("personal:catalogos")).status_code, 403)
+
+    def test_subsecretaria_opera_catalogos(self):
+        self.usuario_con_rol(SUBSECRETARIA)
+        self.assertEqual(self.client.get(reverse("personal:catalogos")).status_code, 200)
+
+    def test_sincronizar_roles_restituye_permisos_de_personal(self):
+        grupo = Group.objects.get(name=SECRETARIA)
+        grupo.permissions.clear()
+        call_command("sincronizar_roles", verbosity=0)
+        self.assertIn("change_persona", grupo.permissions.values_list("codename", flat=True))
+
+
+class AdminParametrosAuditoriaTests(TestCase):
+    """M11: editar parámetros desde el admin deja usuario y evento."""
+
+    def test_save_model_completa_usuario_y_registra_evento(self):
+        superusuario = User.objects.create_superuser("root", password="x")
+        parametros = ParametroSistema.obtener()
+        anio_anterior = parametros.ciclo_lectivo
+        parametros.ciclo_lectivo = 2031
+
+        peticion = RequestFactory().post("/admin/")
+        peticion.user = superusuario
+        ParametroSistemaAdmin(ParametroSistema, django_admin.site).save_model(
+            peticion, parametros, form=None, change=True
+        )
+
+        parametros.refresh_from_db()
+        self.assertEqual(parametros.ciclo_lectivo, 2031)
+        self.assertEqual(parametros.actualizado_por, superusuario)
+        evento = EventoAsistencia.objects.get(accion="PARAMETROS")
+        self.assertEqual(evento.usuario, superusuario)
+        self.assertIn("admin", evento.motivo)
+        self.assertEqual(evento.antes["ciclo_lectivo"], anio_anterior)
+        self.assertEqual(evento.despues["ciclo_lectivo"], 2031)
+
+
+class ExportacionSeguraTests(TestCase):
+    """B6: todas las columnas de texto se neutralizan, con todos los prefijos."""
+
+    def test_prefijos_peligrosos(self):
+        for valor in ("=1+1", "+1", "-1", "@x", "\tx", "\rx"):
+            self.assertEqual(_texto_seguro(valor), "'" + valor)
+        self.assertEqual(_texto_seguro("normal"), "normal")
+        self.assertEqual(_texto_seguro(None), "")
+
+    def test_codigo_articulo_y_situacion_tambien_se_neutralizan(self):
+        fila = FilaConsulta(
+            origen="Licencia", pk=1, dni="1", docente="X", cargo="C", carrera="K",
+            materia="M", codigo="=A1", articulo="+B2", tipo="T", sit_rev="@TIT",
+            desde=date(2026, 1, 1), hasta=None, instrumento="-", justifica="Sí",
+        )
+        salida = next(filas_consulta([fila]))
+        self.assertEqual(salida[6], "'=A1")
+        self.assertEqual(salida[7], "'+B2")
+        self.assertEqual(salida[9], "'@TIT")
+        self.assertEqual(salida[12], "'-")
+
+
+class OrdenConsultaCombinadaTests(TestCase):
+    """B5: el orden es el mismo en toda la paginación, también con empates de fecha."""
+
+    def setUp(self):
+        ConsultaUnificadaTests.setUp(self)
+
+    def test_cortes_consecutivos_reconstruyen_el_orden_completo(self):
+        inasistencia = MarcaAsistencia.objects.get(codigo="I")
+        # Varias ausencias el mismo día que la licencia l2 (empate de fecha entre fuentes).
+        for designacion in (self.d_acosta, self.d_benitez):
+            for dia in (10, 10, 11):
+                RegistroAsistencia.objects.get_or_create(
+                    designacion=designacion, fecha=date(2026, 8, dia), marca=inasistencia,
+                    defaults={"horas_inasistidas": 1, "estado_justificacion": "INJUSTIFICADA"},
+                )
+        consulta = buscar_consulta()
+        completo = [(f.origen, f.pk) for f in consulta]
+        por_paginas = []
+        for inicio in range(0, len(consulta), 2):
+            por_paginas += [(f.origen, f.pk) for f in consulta[inicio:inicio + 2]]
+        self.assertEqual(por_paginas, completo)
+        self.assertEqual(len(set(completo)), len(completo))
+
+    def test_empate_de_fecha_entre_fuentes_pone_primero_la_licencia(self):
+        inasistencia = MarcaAsistencia.objects.get(codigo="I")
+        RegistroAsistencia.objects.create(
+            designacion=self.d_acosta, fecha=self.l2.desde, marca=inasistencia,
+            horas_inasistidas=1, estado_justificacion="INJUSTIFICADA",
+        )
+        filas = list(buscar_consulta())
+        mismas_fechas = [f.origen for f in filas if f.desde == self.l2.desde]
+        self.assertEqual(mismas_fechas, ["Licencia", "Ausencia"])

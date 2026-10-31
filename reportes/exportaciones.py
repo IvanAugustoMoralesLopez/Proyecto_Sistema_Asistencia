@@ -5,28 +5,37 @@ ENCABEZADO_CONSULTA = [
 ]
 
 
+# Caracteres con los que Excel/LibreOffice interpretan una celda como fórmula
+# (incluye TAB y CR, que algunas versiones ignoran antes del signo).
+_PREFIJOS_FORMULA = ("=", "+", "-", "@", "\t", "\r")
+
+
 def _texto_seguro(valor):
-    """Evita que Excel interprete como fórmula un texto que empieza con = + - @."""
+    """Evita que una planilla interprete como fórmula un texto que empieza con = + - @ TAB o CR."""
     valor = "" if valor is None else str(valor)
-    return "'" + valor if valor[:1] in ("=", "+", "-", "@") else valor
+    return "'" + valor if valor.startswith(_PREFIJOS_FORMULA) else valor
 
 
 def filas_consulta(filas):
-    """Genera una fila de CSV por cada FilaConsulta (ya filtrada y ordenada)."""
+    """
+    Genera una fila de CSV por cada FilaConsulta (ya filtrada y ordenada).
+    Todas las columnas de texto pasan por _texto_seguro; las fechas se
+    formatean aparte.
+    """
     for fila in filas:
         yield [
-            fila.origen,
-            fila.dni,
+            _texto_seguro(fila.origen),
+            _texto_seguro(fila.dni),
             _texto_seguro(fila.docente),
             _texto_seguro(fila.cargo),
             _texto_seguro(fila.carrera),
             _texto_seguro(fila.materia),
-            fila.codigo,
-            fila.articulo,
+            _texto_seguro(fila.codigo),
+            _texto_seguro(fila.articulo),
             _texto_seguro(fila.tipo),
-            fila.sit_rev,
+            _texto_seguro(fila.sit_rev),
             fila.desde.strftime("%d/%m/%Y"),
             fila.hasta.strftime("%d/%m/%Y") if fila.hasta else "",
             _texto_seguro(fila.instrumento),
-            fila.justifica,
+            _texto_seguro(fila.justifica),
         ]
