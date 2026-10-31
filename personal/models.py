@@ -269,10 +269,6 @@ class Designacion(models.Model):
             models.Index(fields=["desde", "hasta"], name="ix_desig_vigencia"),
         ]
 
-    @property
-    def sitacion_revista(self):
-        return self.situacion_revista
-
     def vigente_en(self, fecha):
         return (
             self.activo
