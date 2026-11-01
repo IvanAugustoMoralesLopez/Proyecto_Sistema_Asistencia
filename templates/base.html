@@ -67,6 +67,25 @@
                     <i class="bi bi-lock"></i><span>Cierres</span>
                 </a>
 
+                {# ── Licencias (Pantalla 3): agregado para poder llegar a las pantallas nuevas ── #}
+                {% if perms.licencias.add_licenciaotorgada or perms.licencias.view_licenciaotorgada %}
+                <p class="sidebar__titulo">Licencias</p>
+                {% if perms.licencias.add_licenciaotorgada %}
+                <a class="sidebar__link" data-seccion="nueva-licencia" href="{% url 'licencias:nueva_licencia_otorgada' %}">
+                    <i class="bi bi-file-earmark-plus"></i><span>Nueva licencia</span>
+                </a>
+                {% endif %}
+                {% if perms.licencias.view_licenciaotorgada %}
+                <a class="sidebar__link" data-seccion="listado-licencias" href="{% url 'licencias:listado_licencias_otorgadas' %}">
+                    <i class="bi bi-list-ul"></i><span>Licencias otorgadas</span>
+                </a>
+                {% now "Y" as anio_actual %}{% now "n" as mes_actual %}
+                <a class="sidebar__link" data-seccion="reporte-licencias" href="{% url 'licencias:reporte_mensual_licencias' anio=anio_actual mes=mes_actual %}">
+                    <i class="bi bi-clipboard2-pulse"></i><span>Reporte mensual</span>
+                </a>
+                {% endif %}
+                {% endif %}
+
                 {% if perms.reportes.consultar_licencias or perms.reportes.ver_bitacora or perms.reportes.gestionar_parametros or perms.reportes.gestionar_usuarios %}
                 <p class="sidebar__titulo">Administración</p>
                 {% if perms.reportes.consultar_licencias %}

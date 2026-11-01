@@ -1,0 +1,212 @@
+/* ==========================================================
+   Reporte mensual de licencias — estilos propios
+   Ubicación: static/css/reporte.css
+   (se carga solo desde licencias/reporte_mensual.html)
+   ========================================================== */
+
+.reporte-barra {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* Selector de período */
+.selector-periodo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem;
+}
+
+.selector-periodo label {
+    display: block;
+    margin-bottom: 0.2rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #5d6b82;
+    text-transform: uppercase;
+}
+
+.selector-periodo .form-select,
+.selector-periodo .form-control {
+    min-width: 0;
+}
+
+.selector-periodo .campo-anio {
+    width: 6.5rem;
+}
+
+.selector-periodo .campo-mes {
+    width: 10rem;
+}
+
+/* Resumen del período */
+.reporte-resumen {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.reporte-resumen__item {
+    padding: 0.6rem 0.9rem;
+    background: #fff;
+    border: 1px solid var(--color-borde);
+    border-radius: 0.75rem;
+}
+
+.reporte-resumen__valor {
+    display: block;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--azul);
+    line-height: 1.2;
+}
+
+.reporte-resumen__etiqueta {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #5d6b82;
+    text-transform: uppercase;
+}
+
+/* Un bloque por planilla (IL-01 / IL-02 / sin clasificar) */
+.reporte-grupo {
+    margin-bottom: 1.5rem;
+    break-inside: avoid-page;
+}
+
+.reporte-grupo__cabecera {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: #fff;
+    border: 1px solid var(--color-borde);
+    border-bottom: 0;
+    border-radius: 0.75rem 0.75rem 0 0;
+}
+
+.reporte-grupo__titulo {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #17253b;
+}
+
+.reporte-grupo__detalle {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #5d6b82;
+}
+
+.reporte-grupo .planilla {
+    border-radius: 0 0 0.75rem 0.75rem;
+    max-height: none; /* el reporte se lee completo, sin scroll interno vertical */
+}
+
+.reporte-grupo--il01 .reporte-grupo__cabecera { border-top: 4px solid #0d6efd; }
+.reporte-grupo--il02 .reporte-grupo__cabecera { border-top: 4px solid #198754; }
+.reporte-grupo--revision .reporte-grupo__cabecera { border-top: 4px solid #ffc107; }
+
+.reporte-grupo tfoot td {
+    padding: 0.65rem 0.75rem;
+    background: var(--azul-suave);
+    font-weight: 700;
+    border-top: 2px solid var(--azul);
+}
+
+.tabla-planilla td.num,
+.tabla-planilla th.num {
+    text-align: right;
+}
+
+/* Encabezado que solo aparece al imprimir */
+.solo-impresion {
+    display: none;
+}
+
+/* ───────── Impresión ───────── */
+@media print {
+    @page {
+        size: A4 landscape;
+        margin: 12mm;
+    }
+
+    body {
+        background: #fff !important;
+        min-height: 0;
+    }
+
+    /* Se oculta todo lo que no es el reporte */
+    .topbar,
+    .sidebar,
+    .no-imprimir,
+    .alert {
+        display: none !important;
+    }
+
+    .app-shell {
+        display: block;
+        min-height: 0;
+    }
+
+    .app-content {
+        padding: 0;
+    }
+
+    .solo-impresion {
+        display: block;
+        margin-bottom: 0.75rem;
+    }
+
+    .planilla {
+        overflow: visible;
+        max-height: none;
+        border: 0;
+    }
+
+    .tabla-planilla {
+        font-size: 9pt;
+    }
+
+    .tabla-planilla th {
+        position: static;
+    }
+
+    .tabla-planilla tbody tr,
+    .tabla-planilla tfoot tr {
+        background: #fff !important;
+        break-inside: avoid;
+    }
+
+    .reporte-grupo {
+        break-inside: auto;
+    }
+
+    .reporte-grupo__cabecera {
+        border-radius: 0;
+    }
+
+    .reporte-resumen__item {
+        border-radius: 0;
+    }
+
+    .badge {
+        border: 1px solid #000;
+        color: #000 !important;
+        background: #fff !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .selector-periodo .campo-mes,
+    .selector-periodo .campo-anio {
+        width: 100%;
+    }
+}

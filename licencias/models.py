@@ -116,7 +116,7 @@ class LicenciaOtorgada(models.Model):
         if dias_ya_usados + dias_pedidos > tope:
             raise ValidationError({
                 'hasta': (
-                    f"Tope excedido (RN-08). El límite del artículo es {tope} días. "
+                    f"Se superó el límite anual de este artículo: {tope} días. "
                     f"El docente ya usó {dias_ya_usados} días y ahora solicita "
                     f"{dias_pedidos} más."
                 )

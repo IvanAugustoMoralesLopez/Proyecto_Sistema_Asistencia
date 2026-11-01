@@ -97,8 +97,20 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
         'mes': mes,
         'desglose': desglose,
         })
+def _articulos_info():
+    """Datos de cada artículo para mostrar su tope y plazo al elegirlo en el formulario."""
+    return {
+        a.pk: {
+            'tope': a.tope_dias_anual,
+            'plazo': a.plazo,
+            'haberes': a.goce_haberes,
+            'planilla': a.get_categoria_informe_display(),
+        }
+        for a in LicenciaArticulo.objects.all()
+    }
 
-@login_required 
+
+@login_required
 @permission_required("licencias.add_licenciaotorgada", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def nueva_licencia_otorgada(request):
@@ -121,7 +133,7 @@ def nueva_licencia_otorgada(request):
     return render(
         request,
         "licencias/nueva_licencia_otorgada.html",
-        {"form": form}
+        {"form": form, "articulos_info": _articulos_info()}
     )
 
 @login_required
@@ -217,5 +229,6 @@ def editar_licencia_otorgada(request, licencia_id):
         {
             "form": form,
             "licencia": licencia,
+            "articulos_info": _articulos_info(),
         },
     )
