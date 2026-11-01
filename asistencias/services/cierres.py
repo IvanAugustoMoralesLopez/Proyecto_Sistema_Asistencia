@@ -7,7 +7,13 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..models import CierreDiario, CierreMensual, EventoAsistencia, RegistroAsistencia
-from .reglas import MOTIVO_MINIMO, _exigir_permiso, _validar_periodo_abierto, motivo_dia_no_laborable
+from .reglas import (
+    MOTIVO_MINIMO,
+    _exigir_permiso,
+    _validar_motivo_maximo,
+    _validar_periodo_abierto,
+    motivo_dia_no_laborable,
+)
 from .sesiones import _obtener_control_bloqueado, _validar_sesion_edicion
 
 
@@ -131,10 +137,15 @@ def reabrir_mes(*, usuario, anio, mes, motivo, token):
             f"{MOTIVO_MINIMO} caracteres."
         )
 
-    cierre = CierreMensual.objects.select_for_update().get(
-        anio=anio,
-        mes=mes,
-    )
+    _validar_motivo_maximo(motivo)
+
+    try:
+        cierre = CierreMensual.objects.select_for_update().get(
+            anio=anio,
+            mes=mes,
+        )
+    except CierreMensual.DoesNotExist as exc:
+        raise ValidationError("El período no está cerrado.") from exc
 
     if cierre.estado != CierreMensual.Estado.CERRADO:
         raise ValidationError("El período no está cerrado.")

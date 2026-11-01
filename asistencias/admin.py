@@ -132,6 +132,14 @@ class CierreMensualAdmin(admin.ModelAdmin):
         "version",
     )
 
+    # Solo consulta: cerrar y reabrir un período pasan por los servicios,
+    # que exigen permiso y motivo y dejan el evento en la bitácora (RN-06).
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
     def has_delete_permission(self, request, obj=None):
         return False
 

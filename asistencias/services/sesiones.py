@@ -52,36 +52,39 @@ def adquirir_sesion_edicion(usuario, token):
         expira_en__lte=ahora,
     ).update(activa=False)
 
-    sesion_existente = SesionEdicion.objects.filter(
-        token=token,
-        activa=True,
-    ).first()
+    # El token es único y se conserva en la sesión de Django: una sesión
+    # vencida o liberada sigue existiendo con ese token, así que se busca sin
+    # filtrar por `activa` para reutilizarla en lugar de crear otra fila.
+    sesion_existente = SesionEdicion.objects.filter(token=token).first()
 
-    if sesion_existente:
-        if sesion_existente.usuario_id != usuario.pk:
-            raise PermissionDenied(
-                "El token de edición pertenece a otro usuario."
+    if sesion_existente and sesion_existente.usuario_id != usuario.pk:
+        raise PermissionDenied(
+            "El token de edición pertenece a otro usuario."
+        )
+
+    # Una sesión que ya está activa conserva su lugar; el resto necesita uno.
+    if not (sesion_existente and sesion_existente.activa):
+        cantidad = SesionEdicion.objects.filter(
+            activa=True,
+            expira_en__gt=ahora,
+        ).count()
+
+        if cantidad >= MAX_OPERADORES:
+            raise ValidationError(
+                "Ya hay dos operadores activos en asistencia. "
+                "Intentá nuevamente más tarde."
             )
 
+    if sesion_existente:
+        sesion_existente.activa = True
         sesion_existente.heartbeat_en = ahora
         sesion_existente.expira_en = (
             ahora + timedelta(minutes=MINUTOS_EXPIRACION_SESION)
         )
         sesion_existente.save(
-            update_fields=["heartbeat_en", "expira_en"]
+            update_fields=["activa", "heartbeat_en", "expira_en"]
         )
         return sesion_existente
-
-    cantidad = SesionEdicion.objects.filter(
-        activa=True,
-        expira_en__gt=ahora,
-    ).count()
-
-    if cantidad >= MAX_OPERADORES:
-        raise ValidationError(
-            "Ya hay dos operadores activos en asistencia. "
-            "Intentá nuevamente más tarde."
-        )
 
     return SesionEdicion.objects.create(
         usuario=usuario,
