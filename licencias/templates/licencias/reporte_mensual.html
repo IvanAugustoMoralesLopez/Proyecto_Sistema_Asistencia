@@ -1,68 +1,211 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}Reporte mensual de licencias{% endblock %}
-{% block seccion %}informe-licencias{% endblock %}
+{% block title %}Reporte mensual de licencias {{ mes|stringformat:"02d" }}/{{ anio }}{% endblock %}
+{% block seccion %}reporte-licencias{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/reporte.css' %}">
+{% endblock %}
 
 {% block content %}
-<div class="mb-4">
-    <p class="ruta mb-1">Administración / Licencias / Reporte mensual</p>
-    <h1 class="h3 mb-1">Reporte mensual de licencias: {{ mes|stringformat:"02d" }}/{{ anio }}</h1>
-    <p class="text-secondary mb-0">
-        Desglose por designación, planilla de destino (IL-01 / IL-02) y horas cátedra afectadas.
-    </p>
-</div>
 
-<div class="card shadow-sm border-0">
-    <div class="card-header bg-dark text-white">
-        <h2 class="h5 mb-0">Licencias del mes</h2>
+{# ───────── Encabezado y selector de período ───────── #}
+<div class="reporte-barra no-imprimir">
+    <div>
+        <p class="ruta">Administración / Licencias / Reporte mensual</p>
+        <h1 class="encabezado-planilla__titulo">Reporte mensual de licencias</h1>
+        <p class="encabezado-planilla__subtitulo">
+            Desglose por designación, planilla de destino (IL-01 / IL-02) y horas cátedra afectadas.
+        </p>
     </div>
 
-    <div class="card-body">
-        {% if desglose %}
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
+    <div class="d-flex flex-wrap align-items-end gap-2">
+        <form class="selector-periodo" id="selectorPeriodo"
+              data-url="{% url 'licencias:reporte_mensual_licencias' 0 1 %}">
+            <div>
+                <label for="selMes">Mes</label>
+                <select class="form-select campo-mes" id="selMes">
+                    <option value="1"  {% if mes == 1 %}selected{% endif %}>Enero</option>
+                    <option value="2"  {% if mes == 2 %}selected{% endif %}>Febrero</option>
+                    <option value="3"  {% if mes == 3 %}selected{% endif %}>Marzo</option>
+                    <option value="4"  {% if mes == 4 %}selected{% endif %}>Abril</option>
+                    <option value="5"  {% if mes == 5 %}selected{% endif %}>Mayo</option>
+                    <option value="6"  {% if mes == 6 %}selected{% endif %}>Junio</option>
+                    <option value="7"  {% if mes == 7 %}selected{% endif %}>Julio</option>
+                    <option value="8"  {% if mes == 8 %}selected{% endif %}>Agosto</option>
+                    <option value="9"  {% if mes == 9 %}selected{% endif %}>Septiembre</option>
+                    <option value="10" {% if mes == 10 %}selected{% endif %}>Octubre</option>
+                    <option value="11" {% if mes == 11 %}selected{% endif %}>Noviembre</option>
+                    <option value="12" {% if mes == 12 %}selected{% endif %}>Diciembre</option>
+                </select>
+            </div>
+            <div>
+                <label for="selAnio">Año</label>
+                <input class="form-control campo-anio" id="selAnio" type="number"
+                       min="2000" max="2100" value="{{ anio }}">
+            </div>
+            <button type="submit" class="btn btn-primario">Ver</button>
+        </form>
+
+        <button type="button" class="btn btn-primario-suave" id="btnAnterior" title="Mes anterior">
+            <i class="bi bi-chevron-left"></i>
+        </button>
+        <button type="button" class="btn btn-primario-suave" id="btnSiguiente" title="Mes siguiente">
+            <i class="bi bi-chevron-right"></i>
+        </button>
+        <button type="button" class="btn btn-primario" id="btnImprimir">
+            <i class="bi bi-printer"></i> Imprimir
+        </button>
+    </div>
+</div>
+
+{# Encabezado que solo se ve al imprimir #}
+<div class="solo-impresion">
+    <h1 class="h4 mb-0">Reporte mensual de licencias: {{ mes|stringformat:"02d" }}/{{ anio }}</h1>
+    <p class="mb-0">Sistema Asistencia · Planillas IL-01 / IL-02</p>
+</div>
+
+{% if desglose %}
+
+    {# Resumen del período #}
+    <div class="reporte-resumen no-imprimir">
+        <div class="reporte-resumen__item">
+            <span class="reporte-resumen__valor">{{ desglose|length }}</span>
+            <span class="reporte-resumen__etiqueta">Licencias del mes</span>
+        </div>
+        <div class="reporte-resumen__item">
+            <span class="reporte-resumen__valor" id="totalHorasGeneral">0</span>
+            <span class="reporte-resumen__etiqueta">Horas afectadas</span>
+        </div>
+    </div>
+
+    {# Un bloque por planilla: IL-01, IL-02 y (si hubiera) SIN CLASIFICAR #}
+    {% regroup desglose|dictsort:"planilla" by planilla as grupos %}
+    {% for grupo in grupos %}
+        <section class="reporte-grupo
+            {% if grupo.grouper == 'IL-01' %}reporte-grupo--il01
+            {% elif grupo.grouper == 'IL-02' %}reporte-grupo--il02
+            {% else %}reporte-grupo--revision{% endif %}">
+
+            <div class="reporte-grupo__cabecera">
+                <div>
+                    {% if grupo.grouper == 'IL-01' %}
+                        <h2 class="reporte-grupo__titulo">Planilla IL-01: licencias por enfermedad</h2>
+                        <p class="reporte-grupo__detalle">Licencias de salud (RN-04).</p>
+                    {% elif grupo.grouper == 'IL-02' %}
+                        <h2 class="reporte-grupo__titulo">Planilla IL-02: otras licencias</h2>
+                        <p class="reporte-grupo__detalle">Licencias administrativas (RN-05).</p>
+                    {% else %}
+                        <h2 class="reporte-grupo__titulo">Sin clasificar: requieren revisión</h2>
+                        <p class="reporte-grupo__detalle">
+                            El artículo pertenece a una categoría que no corresponde a IL-01 ni a IL-02.
+                        </p>
+                    {% endif %}
+                </div>
+                <span class="badge text-bg-secondary">
+                    {{ grupo.list|length }} licencia{{ grupo.list|length|pluralize }}
+                </span>
+            </div>
+
+            <div class="planilla">
+                <table class="tabla-planilla" data-grupo>
                     <thead>
                         <tr>
-                            <th>DNI</th>
+                            <th>Docente</th>
                             <th>Espacio curricular</th>
                             <th>Licencia</th>
-                            <th>Planilla</th>
                             <th>Desde</th>
                             <th>Hasta</th>
-                            <th class="text-end">Días</th>
-                            <th class="text-end">Horas afectadas</th>
+                            <th class="num">Días</th>
+                            <th class="num">Horas afectadas</th>
                         </tr>
                     </thead>
-
                     <tbody>
-                        {% for fila in desglose %}
+                        {% for fila in grupo.list %}
                             <tr>
-                                <td>{{ fila.dni_docente }}</td>
-                                <td>{{ fila.espacio_curricular|default:"-" }}</td>
-                                <td>{{ fila.licencia_solicitada }}</td>
                                 <td>
-                                    {% if fila.requiere_revision %}
-                                        <span class="badge text-bg-warning">{{ fila.planilla }}</span>
-                                    {% elif fila.planilla == "IL-01" %}
-                                        <span class="badge text-bg-primary">{{ fila.planilla }}</span>
+                                    {# Cuando backend pase 'docente' se muestra el nombre; hoy muestra el DNI #}
+                                    {% if fila.docente %}
+                                        {{ fila.docente }}
+                                        <span class="text-secondary">({{ fila.dni_docente }})</span>
                                     {% else %}
-                                        <span class="badge text-bg-success">{{ fila.planilla }}</span>
+                                        {{ fila.dni_docente }}
                                     {% endif %}
                                 </td>
+                                <td>{{ fila.materia|default:fila.espacio_curricular|default:"-" }}</td>
+                                <td>{{ fila.licencia_solicitada }}</td>
                                 <td>{{ fila.fecha_inicio|date:"d/m/Y" }}</td>
                                 <td>{{ fila.fecha_fin|date:"d/m/Y" }}</td>
-                                <td class="text-end">{{ fila.dias_totales }}</td>
-                                <td class="text-end">{{ fila.horas_descontadas }}</td>
+                                <td class="num">{{ fila.dias_totales }}</td>
+                                <td class="num" data-horas="{{ fila.horas_descontadas }}">{{ fila.horas_descontadas }}</td>
                             </tr>
                         {% endfor %}
                     </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="6" class="num">Total de horas afectadas</td>
+                            <td class="num" data-total-grupo>0</td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
-        {% else %}
-            <div class="alert alert-info mb-0">
-                No hay licencias que afecten a este mes.
-            </div>
-        {% endif %}
+        </section>
+    {% endfor %}
+
+{% else %}
+    <div class="alert alert-info">
+        No hay licencias que afecten a este mes.
     </div>
-</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        // ── Totales de horas por planilla y general ──
+        var general = 0;
+        document.querySelectorAll('table[data-grupo]').forEach(function (tabla) {
+            var suma = 0;
+            tabla.querySelectorAll('td[data-horas]').forEach(function (celda) {
+                suma += parseInt(celda.dataset.horas, 10) || 0;
+            });
+            tabla.querySelector('[data-total-grupo]').textContent = suma;
+            general += suma;
+        });
+        var totalGeneral = document.getElementById('totalHorasGeneral');
+        if (totalGeneral) totalGeneral.textContent = general;
+
+        // ── Selector de período ──
+        var form = document.getElementById('selectorPeriodo');
+        var selMes = document.getElementById('selMes');
+        var selAnio = document.getElementById('selAnio');
+
+        function ir(anio, mes) {
+            // data-url trae la URL del reporte con 0/1 al final: se reemplazan por el año y el mes elegidos
+            window.location.href = form.dataset.url.replace(/0\/1\/$/, anio + '/' + mes + '/');
+        }
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var anio = parseInt(selAnio.value, 10);
+            if (!anio || anio < 2000 || anio > 2100) { selAnio.focus(); return; }
+            ir(anio, parseInt(selMes.value, 10));
+        });
+
+        function mover(delta) {
+            var mes = parseInt(selMes.value, 10) + delta;
+            var anio = parseInt(selAnio.value, 10) || {{ anio }};
+            if (mes < 1)  { mes = 12; anio -= 1; }
+            if (mes > 12) { mes = 1;  anio += 1; }
+            ir(anio, mes);
+        }
+        document.getElementById('btnAnterior').addEventListener('click', function () { mover(-1); });
+        document.getElementById('btnSiguiente').addEventListener('click', function () { mover(1); });
+
+        // ── Imprimir ──
+        document.getElementById('btnImprimir').addEventListener('click', function () { window.print(); });
+    })();
+</script>
 {% endblock %}
