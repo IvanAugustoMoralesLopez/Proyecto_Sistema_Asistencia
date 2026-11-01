@@ -7,6 +7,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.urls import reverse
 
+from asistencias.models import EventoAsistencia
+from reportes.auditoria import AccionesReportes
+
 from .models import (
     Persona,
     Cargo,
@@ -197,6 +200,38 @@ class DesignacionTests(TestCase):
         self.assertEqual(total, 2)
         self.assertEqual(rechazadas, 1)
         self.assertEqual(Designacion.objects.filter(persona=self.persona).count(), 1)
+
+    def test_importacion_csv_registra_auditoria(self):
+        usuario = get_user_model().objects.create_user(
+            username="csv-audit-test",
+            password="test-password",
+        )
+        self.otorgar_permiso(usuario, "change_persona")
+        cliente = Client()
+        cliente.force_login(usuario)
+        archivo = SimpleUploadedFile(
+            "personal.csv",
+            (
+                "dni,apellido_nombre,cargo_codigo,desde\n"
+                "30123457,Docente auditado,PROF,2026-03-01\n"
+            ).encode("utf-8"),
+        )
+
+        respuesta = cliente.post(
+            reverse("personal:gestion_legajos"),
+            {"accion": "importar_csv", "archivo": archivo},
+            follow=True,
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        evento = EventoAsistencia.objects.get(
+            usuario=usuario,
+            accion=AccionesReportes.IMPORTACION,
+        )
+        self.assertEqual(evento.motivo, "Archivo personal.csv")
+        self.assertEqual(evento.despues["filas"], 1)
+        self.assertEqual(evento.despues["importadas"], 1)
+        self.assertEqual(evento.despues["rechazadas"], 0)
 
     def test_catalogo_id_inexistente_no_causa_error_500(self):
         usuario = get_user_model().objects.create_user(
