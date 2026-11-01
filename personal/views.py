@@ -12,6 +12,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
+from reportes.auditoria import AccionesReportes, registrar_evento
+
 from .forms import (
     BuscarLegajoForm,
     CarreraForm,
@@ -208,6 +210,16 @@ def gestion_legajos(request):
                 except ValidationError as exc:
                     messages.error(request, _mensaje_errores(exc))
                 else:
+                    registrar_evento(
+                        request.user,
+                        AccionesReportes.IMPORTACION,
+                        motivo=f"Archivo {archivo.name}"[:500],
+                        despues={
+                            "filas": total,
+                            "importadas": total - rechazadas,
+                            "rechazadas": rechazadas,
+                        },
+                    )
                     messages.success(
                         request,
                         f"Importación finalizada: {total - rechazadas} filas "
@@ -449,16 +461,36 @@ def catalogos_personal(request):
     datos = configuracion[seccion]
     objeto_id = request.GET.get("editar")
     objeto = datos["modelo"].objects.filter(pk=objeto_id).first() if objeto_id else None
+    if objeto_id and objeto is None:
+        messages.error(request, "El registro solicitado no existe.")
+        return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
 
     if request.method == "POST":
         accion = request.POST.get("accion")
         if accion == "guardar":
             objeto = datos["modelo"].objects.filter(pk=request.POST.get("objeto_id")).first()
+            objeto_id_enviado = (request.POST.get("objeto_id") or "").strip()
+            if objeto_id_enviado and objeto is None:
+                messages.error(request, "El registro solicitado no existe.")
+                return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
             form = datos["form"](request.POST, instance=objeto)
             if form.is_valid():
-                form.save()
-                messages.success(request, f"{datos['titulo']} guardado correctamente.")
-                return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
+                try:
+                    with transaction.atomic():
+                        form.save()
+                except IntegrityError:
+                    messages.error(
+                        request,
+                        "No se pudo guardar: ya existe otro registro con esos datos.",
+                    )
+                except (ProtectedError, ValidationError):
+                    messages.error(
+                        request,
+                        "No se pudo guardar el registro por datos relacionados.",
+                    )
+                else:
+                    messages.success(request, f"{datos['titulo']} guardado correctamente.")
+                    return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
         elif accion == "eliminar":
             objeto = datos["modelo"].objects.filter(pk=request.POST.get("objeto_id")).first()
             if objeto:
@@ -478,6 +510,8 @@ def catalogos_personal(request):
                     else:
                         messages.success(request, "El registro se eliminó correctamente.")
                 return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
+            messages.error(request, "El registro solicitado no existe.")
+            return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
         else:
             form = datos["form"](request.POST)
     else:

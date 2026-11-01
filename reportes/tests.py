@@ -9,7 +9,23 @@ from asistencias.models import EventoAsistencia
 
 from .models import ParametroSistema
 from .roles import BEDELIA, SECRETARIA, SUBSECRETARIA
+from .auditoria import AccionesReportes
+from .selectors import resumir_cambios
 from .signals import BitacoraInalterable
+from .usuario_actual import fijar_usuario_actual, restaurar_usuario_actual
+
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def usuario_actual(usuario):
+    """Simula el usuario de una petición para probar las señales de auditoría."""
+    token = fijar_usuario_actual(usuario)
+    try:
+        yield
+    finally:
+        restaurar_usuario_actual(token)
 
 
 def crear_usuario(username, *codenames):
@@ -296,7 +312,9 @@ class ConsultasTests(TestCase):
             designacion=self.d_benitez, articulo=art_part, sit_rev="TIT",
             desde=date(2026, 8, 10), hasta=None,  # licencia abierta
         )
-        self.client.force_login(crear_usuario("bedel", "consultar_licencias"))
+        self.client.force_login(
+            crear_usuario("bedel", "consultar_licencias", "view_registroasistencia")
+        )
 
     def ids(self, **filtros):
         respuesta = self.client.get(self.url, filtros)
@@ -747,3 +765,231 @@ class OrdenConsultaCombinadaTests(TestCase):
         filas = list(buscar_consulta())
         mismas_fechas = [f.origen for f in filas if f.desde == self.l2.desde]
         self.assertEqual(mismas_fechas, ["Licencia", "Ausencia"])
+
+
+class AuditoriaLicenciasYCatalogosTests(TestCase):
+    """RF-20: licencias y catálogos dejan evento con usuario (alta, cambio y baja)."""
+
+    def setUp(self):
+        from datetime import date
+
+        from licencias.models import LicenciaArticulo
+        from personal.models import Cargo, Designacion, Persona
+
+        self.persona = Persona.objects.create(dni="30123456", apellido_nombre="PEREZ, ANA")
+        self.cargo = Cargo.objects.create(codigo="PROF", descripcion="Profesor")
+        self.designacion = Designacion.objects.create(
+            persona=self.persona, cargo=self.cargo, desde=date(2026, 3, 1)
+        )
+        self.articulo = LicenciaArticulo.objects.create(
+            cod_licencia="01.01.04",
+            articulo="149-A",
+            tipo_licencia="Enfermedad común",
+            categoria_informe=LicenciaArticulo.CATEGORIA_CHOICES[0][0],
+            sit_rev="Titular",
+            goce_haberes="Con goce de haberes",
+            autoridad="Director",
+            plazo="15 días",
+            tope_dias_anual=30,
+        )
+        self.operador = crear_usuario(
+            "bedel",
+            "add_licenciaotorgada",
+            "view_licenciaotorgada",
+            "change_licenciaotorgada",
+        )
+        EventoAsistencia.objects.all()  # la tabla arranca sin eventos de licencias
+        self.baseline = EventoAsistencia.objects.count()
+
+    def eventos(self, *acciones):
+        return EventoAsistencia.objects.filter(accion__in=acciones).order_by("pk")
+
+    def datos_licencia(self, **cambios):
+        datos = {
+            "designacion": self.designacion.pk,
+            "articulo": self.articulo.pk,
+            "sit_rev": "Titular",
+            "desde": "2026-05-04",
+            "hasta": "2026-05-05",
+            "disp_tipo": "",
+            "disp_oficina": "",
+            "disp_numero": "",
+            "disp_anio": "",
+            "sello_regional_as": "",
+            "justifica": "",
+            "observaciones": "",
+        }
+        datos.update(cambios)
+        return datos
+
+    def test_alta_por_la_vista_registra_el_usuario(self):
+        self.client.force_login(self.operador)
+        respuesta = self.client.post(
+            reverse("licencias:nueva_licencia_otorgada"), self.datos_licencia()
+        )
+        self.assertEqual(respuesta.status_code, 302)
+
+        evento = self.eventos(AccionesReportes.LICENCIA_ALTA).get()
+        self.assertEqual(evento.usuario, self.operador)
+        self.assertIsNone(evento.antes)
+        self.assertEqual(evento.despues["dni"], "30123456")
+        self.assertEqual(evento.despues["articulo"], "149-A")
+        self.assertIn("PEREZ, ANA", evento.motivo)
+
+    def test_edicion_por_la_vista_guarda_antes_y_despues(self):
+        from licencias.models import LicenciaOtorgada
+
+        self.client.force_login(self.operador)
+        self.client.post(reverse("licencias:nueva_licencia_otorgada"), self.datos_licencia())
+        licencia = LicenciaOtorgada.objects.get()
+
+        respuesta = self.client.post(
+            reverse("licencias:editar_licencia_otorgada", args=[licencia.pk]),
+            self.datos_licencia(hasta="2026-05-06", observaciones="Se extiende un día"),
+        )
+        self.assertEqual(respuesta.status_code, 302)
+
+        evento = self.eventos(AccionesReportes.LICENCIA_EDITAR).get()
+        self.assertEqual(evento.usuario, self.operador)
+        self.assertEqual(evento.antes["hasta"], "2026-05-05")
+        self.assertEqual(evento.despues["hasta"], "2026-05-06")
+        campos = {campo for campo, _, _ in resumir_cambios(evento)}
+        self.assertEqual(campos, {"hasta", "observaciones"})
+
+    def test_guardar_sin_cambios_no_genera_evento(self):
+        from licencias.models import LicenciaOtorgada
+
+        with usuario_actual(self.operador):
+            licencia = LicenciaOtorgada.objects.create(
+                designacion=self.designacion, articulo=self.articulo,
+                sit_rev="Titular", desde="2026-05-04", hasta="2026-05-05",
+            )
+            licencia.save()
+        self.assertEqual(self.eventos(AccionesReportes.LICENCIA_EDITAR).count(), 0)
+
+    def test_baja_registra_lo_que_habia(self):
+        from licencias.models import LicenciaOtorgada
+
+        with usuario_actual(self.operador):
+            licencia = LicenciaOtorgada.objects.create(
+                designacion=self.designacion, articulo=self.articulo,
+                sit_rev="Titular", desde="2026-05-04", hasta="2026-05-05",
+            )
+            licencia.delete()
+
+        evento = self.eventos(AccionesReportes.LICENCIA_BAJA).get()
+        self.assertEqual(evento.usuario, self.operador)
+        self.assertEqual(evento.antes["dni"], "30123456")
+        self.assertIsNone(evento.despues)
+        self.assertTrue(resumir_cambios(evento))  # la bitácora muestra lo borrado
+
+    def test_cambio_desde_el_admin_tambien_deja_usuario(self):
+        from licencias.models import LicenciaOtorgada
+
+        admin = User.objects.create_superuser("root", "r@r.com", "x")
+        licencia = LicenciaOtorgada.objects.create(
+            designacion=self.designacion, articulo=self.articulo,
+            sit_rev="Titular", desde="2026-05-04", hasta="2026-05-05",
+        )
+        self.client.force_login(admin)
+        url = reverse("admin:licencias_licenciaotorgada_delete", args=[licencia.pk])
+        self.assertEqual(self.client.post(url, {"post": "yes"}).status_code, 302)
+
+        evento = self.eventos(AccionesReportes.LICENCIA_BAJA).get()
+        self.assertEqual(evento.usuario, admin)
+
+    def test_catalogos_dejan_evento(self):
+        from personal.models import Cargo
+
+        with usuario_actual(self.operador):
+            cargo = Cargo.objects.create(codigo="PRECEP", descripcion="Preceptor")
+            cargo.descripcion = "Preceptor/a"
+            cargo.save()
+            cargo.delete()
+
+        acciones = list(
+            self.eventos(
+                AccionesReportes.CATALOGO_ALTA,
+                AccionesReportes.CATALOGO_EDITAR,
+                AccionesReportes.CATALOGO_BAJA,
+            )
+            .filter(usuario=self.operador)
+            .values_list("accion", flat=True)
+        )
+        self.assertEqual(acciones, ["CATALOGO_ALTA", "CATALOGO_EDITAR", "CATALOGO_BAJA"])
+        editar = self.eventos(AccionesReportes.CATALOGO_EDITAR).get()
+        self.assertEqual(editar.usuario, self.operador)
+        self.assertEqual(editar.antes["descripcion"], "Preceptor")
+        self.assertEqual(editar.despues["descripcion"], "Preceptor/a")
+
+    def test_sin_usuario_de_peticion_el_evento_queda_sin_usuario(self):
+        from personal.models import Cargo
+
+        Cargo.objects.create(codigo="X", descripcion="Sin request")
+        evento = self.eventos(AccionesReportes.CATALOGO_ALTA).last()
+        self.assertIsNone(evento.usuario)
+
+    def test_bitacora_muestra_y_filtra_licencias_por_dni(self):
+        self.client.force_login(self.operador)
+        self.client.post(reverse("licencias:nueva_licencia_otorgada"), self.datos_licencia())
+
+        lector = crear_usuario("auditor", "ver_bitacora")
+        self.client.force_login(lector)
+        url = reverse("reportes:bitacora")
+
+        # (El texto "Alta de licencia" también está en el desplegable de
+        # acciones del filtro, por eso se miran columnas de la tabla.)
+        pagina = self.client.get(url, {"dni": "30123456"})
+        self.assertContains(pagina, "Licencia otorgada")
+        self.assertContains(pagina, "PEREZ, ANA (DNI 30123456)")
+        self.assertContains(pagina, "<td>bedel</td>", html=False)
+
+        otra = self.client.get(url, {"dni": "11111111"})
+        self.assertNotContains(otra, "Licencia otorgada")
+
+    def test_el_evento_de_auditoria_es_inalterable(self):
+        from personal.models import Cargo
+
+        Cargo.objects.create(codigo="Z", descripcion="Z")
+        evento = self.eventos(AccionesReportes.CATALOGO_ALTA).last()
+        evento.motivo = "otro"
+        with self.assertRaises(BitacoraInalterable):
+            evento.save()
+
+
+class RolLecturaAsistenciasTests(TestCase):
+    """M5: los tres roles reciben el permiso de lectura de asistencias."""
+
+    def test_los_tres_roles_pueden_ver_asistencias(self):
+        for rol in (BEDELIA, SECRETARIA, SUBSECRETARIA):
+            permisos = set(
+                Group.objects.get(name=rol).permissions.values_list("codename", flat=True)
+            )
+            self.assertIn("view_registroasistencia", permisos, rol)
+
+    def test_usuario_con_rol_ve_el_registro_diario(self):
+        usuario = User.objects.create_user("bedel_lector", password="x")
+        usuario.groups.add(Group.objects.get(name=BEDELIA))
+        self.client.force_login(usuario)
+        self.assertEqual(self.client.get(reverse("asistencia:registro_diario")).status_code, 200)
+
+
+class MigracionLecturaAsistenciasTests(TestCase):
+    """La migración actualiza los grupos de bases que ya existían."""
+
+    def test_agrega_el_permiso_a_grupos_existentes(self):
+        import importlib
+
+        from django.apps import apps as django_apps
+
+        migracion = importlib.import_module("reportes.migrations.0003_rol_lectura_asistencias")
+        permiso = Permission.objects.get(
+            content_type__app_label="asistencias", codename="view_registroasistencia"
+        )
+        for grupo in Group.objects.all():
+            grupo.permissions.remove(permiso)
+
+        migracion.dar_lectura_de_asistencias(django_apps, None)
+
+        for rol in (BEDELIA, SECRETARIA, SUBSECRETARIA):
+            self.assertTrue(Group.objects.get(name=rol).permissions.filter(pk=permiso.pk).exists())

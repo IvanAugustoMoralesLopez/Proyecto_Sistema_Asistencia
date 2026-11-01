@@ -7,6 +7,7 @@ from asistencias.models import EventoAsistencia
 from licencias.models import LicenciaArticulo
 from personal.models import Carrera, EspacioCurricular
 
+from .auditoria import opciones_de_accion
 from .models import ParametroSistema
 from .selectors import ORIGEN_AUSENCIAS, ORIGEN_LICENCIAS, ORIGEN_TODOS
 from .roles import ROLES
@@ -35,7 +36,7 @@ class FiltroBitacoraForm(forms.Form):
     accion = forms.ChoiceField(
         label="Acción",
         required=False,
-        choices=[("", "Todas")] + list(EventoAsistencia.Accion.choices),
+        choices=[("", "Todas")] + opciones_de_accion(),
         widget=forms.Select(attrs={"class": "form-select"}),
     )
     dni = forms.CharField(

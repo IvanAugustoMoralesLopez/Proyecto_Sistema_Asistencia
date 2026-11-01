@@ -84,6 +84,13 @@ class LicenciaOtorgada(models.Model):
         if not (self.articulo_id and self.designacion_id and self.desde):
             return
 
+        # Hasta no puede ser anterior a Desde. Se valida acá, antes del tope, para
+        # que un rango invertido no genere además un error de tope engañoso.
+        if self.hasta and self.hasta < self.desde:
+            raise ValidationError({
+                'hasta': 'La fecha Hasta no puede ser anterior a la fecha Desde.'
+            })
+
         tope = self.articulo.tope_dias_anual
         if not tope:
             return

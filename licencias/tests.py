@@ -1,5 +1,7 @@
 from datetime import date
 
+from django.contrib.auth.models import Permission, User
+
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase
 
@@ -131,4 +133,150 @@ class TopeAnualEdicionTests(TestCase):
 
     def test_edicion_dentro_del_tope_se_acepta(self):
         self.licencia.observaciones = 'Duelo familiar'
-        self.licencia.full_clean()  # no debe lanzar ValidationError
+        self.licencia.full_clean()  # no debe lanzar ValidationError 
+
+class ListadoFiltrosTests(TestCase):
+    """M4: un filtro inválido en la URL no debe romper el listado."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni=99000098, apellido_nombre='Gomez, Ana')
+        otra = Persona.objects.create(dni=99000097, apellido_nombre='Ruiz, Luis')
+        d1 = Designacion.objects.create(persona=persona, cargo=cargo, desde=date(2026, 1, 1))
+        d2 = Designacion.objects.create(persona=otra, cargo=cargo, desde=date(2026, 1, 1))
+        cls.art1 = LicenciaArticulo.objects.create(
+            cod_licencia='A-1', articulo='1', tipo_licencia='Uno',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo',
+        )
+        cls.art2 = LicenciaArticulo.objects.create(
+            cod_licencia='A-2', articulo='2', tipo_licencia='Dos',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo',
+        )
+        LicenciaOtorgada.objects.create(
+            designacion=d1, articulo=cls.art1, sit_rev='Titular',
+            desde=date(2026, 3, 2), hasta=date(2026, 3, 4),
+        )
+        LicenciaOtorgada.objects.create(
+            designacion=d2, articulo=cls.art2, sit_rev='Titular',
+            desde=date(2026, 6, 1), hasta=date(2026, 6, 3),
+        )
+        usuario = User.objects.create_user('lector', password='x')
+        usuario.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label='licencias', codename='view_licenciaotorgada',
+            )
+        )
+
+    def setUp(self):
+        self.client.login(username='lector', password='x')
+
+    def _cantidad(self, parametros=''):
+        respuesta = self.client.get('/licencias/listado/' + parametros)
+        self.assertEqual(respuesta.status_code, 200)
+        return len(respuesta.context['licencias'])
+
+    def test_sin_filtros_muestra_todas(self):
+        self.assertEqual(self._cantidad(), 2)
+
+    def test_filtros_invalidos_no_rompen_y_se_ignoran(self):
+        for parametros in ('?articulo=abc', '?fecha_desde=xx', '?fecha_hasta=xx'):
+            with self.subTest(parametros=parametros):
+                self.assertEqual(self._cantidad(parametros), 2)
+
+    def test_filtros_invalidos_muestran_aviso(self):
+        respuesta = self.client.get('/licencias/listado/?articulo=abc', follow=True)
+        self.assertContains(respuesta, 'ignoraron')
+
+    def test_filtro_por_articulo(self):
+        self.assertEqual(self._cantidad('?articulo=%d' % self.art1.pk), 1)
+
+    def test_filtro_por_docente(self):
+        self.assertEqual(self._cantidad('?docente=gomez'), 1)
+        self.assertEqual(self._cantidad('?docente=nadie'), 0)
+
+    def test_filtro_por_fechas(self):
+        self.assertEqual(self._cantidad('?fecha_desde=2026-05-01'), 1)
+        self.assertEqual(self._cantidad('?fecha_hasta=2026-04-01'), 1) 
+
+
+class FechasInvertidasTests(TestCase):
+    """N4: Hasta anterior a Desde da un único error, sin un error de tope engañoso."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni=99000096, apellido_nombre='Diaz, Eva')
+        cls.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='A-3', articulo='3', tipo_licencia='Tres',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo', tope_dias_anual=5,
+        )
+        usuario = User.objects.create_user('cargador', password='x')
+        usuario.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label='licencias', codename='add_licenciaotorgada',
+            )
+        )
+
+    def setUp(self):
+        self.client.login(username='cargador', password='x')
+
+    def test_hasta_anterior_a_desde_da_un_solo_error(self):
+        respuesta = self.client.post('/licencias/nueva/', {
+            'designacion': self.designacion.pk,
+            'articulo': self.articulo.pk,
+            'sit_rev': 'Titular',
+            'desde': '2026-10-20',
+            'hasta': '2026-10-10',
+            'justifica': '',
+        })
+        self.assertEqual(respuesta.status_code, 200)
+        errores = respuesta.context['form'].errors['hasta']
+        self.assertEqual(len(errores), 1)
+        self.assertIn('anterior', errores[0])
+        self.assertEqual(LicenciaOtorgada.objects.count(), 0)
+
+    def test_hasta_anterior_a_desde_se_rechaza_en_el_modelo(self):
+        licencia = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 10, 20), hasta=date(2026, 10, 10),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            licencia.full_clean()
+        self.assertIn('hasta', ctx.exception.message_dict) 
+
+class AccesoALasVistasTests(TestCase):
+    """A4: un anónimo va al login; un usuario sin permiso recibe 403."""
+
+    URLS = (
+        '/licencias/listado/',
+        '/licencias/nueva/',
+        '/licencias/editar/1/',
+        '/licencias/reporte/2026/10/',
+    )
+
+    @classmethod
+    def setUpTestData(cls):
+        User.objects.create_user('sinpermisos', password='x')
+
+    def test_anonimo_es_redirigido_al_login(self):
+        for url in self.URLS:
+            with self.subTest(url=url):
+                respuesta = self.client.get(url)
+                self.assertEqual(respuesta.status_code, 302)
+                self.assertTrue(respuesta.url.startswith('/accounts/login/'))
+
+    def test_usuario_sin_permiso_recibe_403(self):
+        self.client.login(username='sinpermisos', password='x')
+        for url in self.URLS:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 403)

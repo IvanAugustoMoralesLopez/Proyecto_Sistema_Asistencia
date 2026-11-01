@@ -16,6 +16,8 @@ from asistencias.models import EventoAsistencia, RegistroAsistencia
 from licencias.models import LicenciaOtorgada
 from licencias.services import dias_usados_en_anio
 
+from .auditoria import AccionesReportes
+
 
 # ───────────── Bitácora (RF-20) ─────────────
 
@@ -38,8 +40,13 @@ def buscar_eventos(filtros=None):
     if filtros.get("accion"):
         eventos = eventos.filter(accion=filtros["accion"])
     if filtros.get("dni"):
+        dni = filtros["dni"].strip()
+        # Los eventos de asistencia se ligan por el registro; los de licencias
+        # guardan el DNI dentro de antes/después.
         eventos = eventos.filter(
-            asistencia__designacion__persona__dni=filtros["dni"].strip()
+            Q(asistencia__designacion__persona__dni=dni)
+            | Q(despues__dni=dni)
+            | Q(antes__dni=dni)
         )
     # Se comparan datetimes (y no __date) para no depender de las tablas
     # de zonas horarias de MySQL/MariaDB.
@@ -50,6 +57,18 @@ def buscar_eventos(filtros=None):
             creado_en__lt=_inicio_del_dia(filtros["hasta"] + timedelta(days=1))
         )
     return eventos
+
+
+_A = AccionesReportes
+_OBJETIVO_FIJO = {
+    _A.LICENCIA_ALTA: "Licencia otorgada",
+    _A.LICENCIA_EDITAR: "Licencia otorgada",
+    _A.LICENCIA_BAJA: "Licencia otorgada",
+    _A.CATALOGO_ALTA: "Catálogo",
+    _A.CATALOGO_EDITAR: "Catálogo",
+    _A.CATALOGO_BAJA: "Catálogo",
+    _A.IMPORTACION: "Importación de personal",
+}
 
 
 def describir_objetivo(evento):
@@ -64,6 +83,8 @@ def describir_objetivo(evento):
         return f"Jornada {evento.cierre_diario.fecha:%d/%m/%Y}"
     if evento.accion == EventoAsistencia.Accion.PARAMETROS:
         return "Parámetros del sistema"
+    if evento.accion in _OBJETIVO_FIJO:
+        return _OBJETIVO_FIJO[evento.accion]
     if evento.accion in (
         EventoAsistencia.Accion.USUARIO_ALTA,
         EventoAsistencia.Accion.USUARIO_EDITAR,
@@ -77,6 +98,8 @@ def resumir_cambios(evento):
     """Lista de (campo, antes, después) con lo que cambió en el evento."""
     antes = evento.antes if isinstance(evento.antes, dict) else {}
     despues = evento.despues if isinstance(evento.despues, dict) else {}
+    if not despues and antes:  # baja: se muestra lo que había
+        return [(campo, valor, "—") for campo, valor in antes.items()]
     return [
         (campo, antes.get(campo, "—"), despues.get(campo, "—"))
         for campo in despues
