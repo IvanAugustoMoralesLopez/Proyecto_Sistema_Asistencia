@@ -184,6 +184,20 @@ class DesignacionTests(TestCase):
             3,
         )
 
+    def test_csv_rechaza_designacion_duplicada(self):
+        contenido = (
+            "dni,apellido_nombre,cargo_codigo,desde\n"
+            "30123456,Docente de prueba,PROF,2026-03-01\n"
+            "30123456,Docente de prueba,PROF,2026-03-01\n"
+        ).encode("utf-8")
+        archivo = SimpleUploadedFile("designaciones.csv", contenido)
+
+        total, rechazadas = _procesar_csv(archivo)
+
+        self.assertEqual(total, 2)
+        self.assertEqual(rechazadas, 1)
+        self.assertEqual(Designacion.objects.filter(persona=self.persona).count(), 1)
+
     def test_pantalla_renderiza_para_usuario_autenticado(self):
         usuario = get_user_model().objects.create_user(
             username="personal-test",
@@ -235,6 +249,7 @@ class DesignacionTests(TestCase):
             username="designaciones-list-test",
             password="test-password",
         )
+        self.otorgar_permiso(usuario, "change_designacion")
         cliente = Client()
         cliente.force_login(usuario)
 

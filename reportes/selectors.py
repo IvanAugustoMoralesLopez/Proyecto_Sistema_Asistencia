@@ -284,6 +284,13 @@ class ConsultaCombinada:
     Sirve para el Paginator (len + slicing) sin cargar todo en memoria:
     para una página se piden a cada fuente solo las primeras `stop` filas,
     se mezclan por fecha descendente y se corta la página.
+
+    Orden: cada fuente ya viene ordenada por la base (fecha descendente,
+    apellido, id). La mezcla solo compara la fecha entre fuentes y respeta
+    el orden de la base dentro de cada una; si hay empate de fecha entre
+    una licencia y una ausencia, va primero la licencia. Como Python no
+    vuelve a ordenar por apellido, el criterio es el mismo (el de la base)
+    en todas las páginas y no se repiten ni se omiten filas entre ellas.
     """
 
     def __init__(self, licencias=None, ausencias=None):
@@ -291,8 +298,12 @@ class ConsultaCombinada:
         self.ausencias = ausencias
 
     @staticmethod
-    def _clave(fila):
-        return (-fila.desde.toordinal(), fila.docente, fila.origen, fila.pk)
+    def _mezclar(licencias, ausencias):
+        """Une dos listas ya ordenadas por fecha descendente, de forma estable."""
+        filas = [(-f.desde.toordinal(), 0, i, f) for i, f in enumerate(licencias)]
+        filas += [(-f.desde.toordinal(), 1, i, f) for i, f in enumerate(ausencias)]
+        filas.sort(key=lambda t: t[:3])
+        return [t[3] for t in filas]
 
     def count(self):
         total = 0
@@ -306,13 +317,13 @@ class ConsultaCombinada:
         return self.count()
 
     def _primeras(self, cantidad):
-        filas = []
+        licencias = []
+        ausencias = []
         if self.licencias is not None:
-            filas += [_fila_de_licencia(x) for x in self.licencias[:cantidad]]
+            licencias = [_fila_de_licencia(x) for x in self.licencias[:cantidad]]
         if self.ausencias is not None:
-            filas += [_fila_de_ausencia(x) for x in self.ausencias[:cantidad]]
-        filas.sort(key=self._clave)
-        return filas
+            ausencias = [_fila_de_ausencia(x) for x in self.ausencias[:cantidad]]
+        return self._mezclar(licencias, ausencias)
 
     def __getitem__(self, indice):
         if isinstance(indice, slice):
@@ -324,13 +335,13 @@ class ConsultaCombinada:
 
     def __iter__(self):
         """Recorre todo (para exportar): une ambas fuentes sin repetir consultas."""
-        filas = []
+        licencias = []
+        ausencias = []
         if self.licencias is not None:
-            filas += [_fila_de_licencia(x) for x in self.licencias.iterator()]
+            licencias = [_fila_de_licencia(x) for x in self.licencias.iterator()]
         if self.ausencias is not None:
-            filas += [_fila_de_ausencia(x) for x in self.ausencias.iterator()]
-        filas.sort(key=self._clave)
-        return iter(filas)
+            ausencias = [_fila_de_ausencia(x) for x in self.ausencias.iterator()]
+        return iter(self._mezclar(licencias, ausencias))
 
 
 def buscar_consulta(filtros=None):

@@ -23,7 +23,7 @@ def crear_roles(sender, **kwargs):
 
     # Los permisos se crean en su propio post_migrate; los generamos acá
     # para no depender del orden en que se ejecutan las señales.
-    for label in ("asistencias", "reportes"):
+    for label in ("asistencias", "reportes", "personal", "licencias"):
         create_permissions(
             global_apps.get_app_config(label),
             verbosity=0,

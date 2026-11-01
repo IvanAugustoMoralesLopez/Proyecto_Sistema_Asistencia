@@ -1,6 +1,9 @@
 from datetime import date
 
-from django.test import SimpleTestCase
+from django.core.exceptions import ValidationError
+from django.test import SimpleTestCase, TestCase
+
+from personal.models import Cargo, Designacion, Persona
 
 from .clasificacion import (
     CATEGORIAS_POR_PLANILLA,
@@ -10,7 +13,8 @@ from .clasificacion import (
     planilla_para_categoria,
 )
 from .dias import contar_dias_habiles, listar_dias_habiles, rango_en_anio
-
+from .models import LicenciaArticulo, LicenciaOtorgada
+from .services import dias_usados_en_anio
 
 class DiasHabilesTests(SimpleTestCase):
     # 26/10/2026 es lunes; 31/10 sábado; 01/11 domingo.
@@ -78,3 +82,53 @@ class ClasificacionTests(SimpleTestCase):
         il01 = set(CATEGORIAS_POR_PLANILLA[PLANILLA_IL01])
         il02 = set(CATEGORIAS_POR_PLANILLA[PLANILLA_IL02])
         self.assertFalse(il01 & il02)
+
+
+class TopeAnualEdicionTests(TestCase):
+    """RN-08: el tope anual también se valida al editar una licencia."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni=99000099, apellido_nombre='Prueba, Docente')
+        cls.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='T-25', articulo='25', tipo_licencia='Duelo',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo', tope_dias_anual=5,
+        )
+        # Lunes 13/07/2026 a viernes 17/07/2026: 5 días hábiles (justo el tope).
+        cls.licencia = LicenciaOtorgada.objects.create(
+            designacion=cls.designacion, articulo=cls.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 13), hasta=date(2026, 7, 17),
+        )
+
+    def test_dias_usados_cuenta_todas_las_licencias(self):
+        self.assertEqual(dias_usados_en_anio('99000099', '25', 2026), 5)
+
+    def test_dias_usados_puede_excluir_una_licencia(self):
+        self.assertEqual(
+            dias_usados_en_anio('99000099', '25', 2026, excluir_id=self.licencia.pk), 0,
+        )
+
+    def test_alta_que_supera_el_tope_se_rechaza(self):
+        nueva = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 20), hasta=date(2026, 7, 20),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            nueva.full_clean()
+        self.assertIn('hasta', ctx.exception.message_dict)
+
+    def test_edicion_que_supera_el_tope_se_rechaza(self):
+        self.licencia.hasta = date(2026, 7, 24)  # 10 días hábiles
+        with self.assertRaises(ValidationError) as ctx:
+            self.licencia.full_clean()
+        self.assertIn('hasta', ctx.exception.message_dict)
+
+    def test_edicion_dentro_del_tope_se_acepta(self):
+        self.licencia.observaciones = 'Duelo familiar'
+        self.licencia.full_clean()  # no debe lanzar ValidationError

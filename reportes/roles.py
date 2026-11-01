@@ -5,6 +5,12 @@ Cada rol es un grupo de Django con un conjunto de permisos. Los permisos
 de Secretaría incluyen los de Bedelía, y los de Subsecretaría los de
 Secretaría (RN-06: reabrir o modificar lo cerrado requiere nivel Secretaría
 o superior).
+
+Matriz propuesta para Personal y Licencias (ajustarla con el equipo):
+Bedelía carga y corrige licencias; Secretaría suma legajos y designaciones;
+Subsecretaría suma los catálogos. Después de cambiar esta matriz hay que
+ejecutar `python manage.py sincronizar_roles`: los grupos que ya existen en
+la base no se modifican solos.
 """
 
 from django.contrib.auth.models import Group, Permission
@@ -20,6 +26,10 @@ _BEDELIA = [
     ("asistencias", "recepcionar_formulario"),
     ("asistencias", "cerrar_jornada"),
     ("reportes", "consultar_licencias"),
+    # Licencias otorgadas: cargar, consultar y corregir (pantallas de licencias).
+    ("licencias", "add_licenciaotorgada"),
+    ("licencias", "view_licenciaotorgada"),
+    ("licencias", "change_licenciaotorgada"),
 ]
 _SECRETARIA = _BEDELIA + [
     ("asistencias", "validar_registro"),
@@ -27,10 +37,25 @@ _SECRETARIA = _BEDELIA + [
     ("asistencias", "cerrar_periodo"),
     ("asistencias", "change_cierremensual"),
     ("reportes", "ver_bitacora"),
+    # Legajos y designaciones (pantalla de legajos, alta de designaciones y
+    # planilla de designaciones de la página de inicio).
+    ("personal", "add_persona"),
+    ("personal", "change_persona"),
+    ("personal", "add_designacion"),
+    ("personal", "change_designacion"),
 ]
 _SUBSECRETARIA = _SECRETARIA + [
     ("reportes", "gestionar_parametros"),
     ("reportes", "gestionar_usuarios"),
+    # Catálogos: cargos, carreras, espacios curriculares y tipos de licencia.
+    ("personal", "add_cargo"),
+    ("personal", "change_cargo"),
+    ("personal", "add_carrera"),
+    ("personal", "change_carrera"),
+    ("personal", "add_espaciocurricular"),
+    ("personal", "change_espaciocurricular"),
+    ("licencias", "add_licenciaarticulo"),
+    ("licencias", "change_licenciaarticulo"),
 ]
 
 PERMISOS_POR_ROL = {
