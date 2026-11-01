@@ -1,13 +1,7 @@
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-from .models import LicenciaOtorgada, RegistroBitacora 
+"""
+La auditoría de licencias (alta, modificación y baja, con usuario) vive en la
+bitácora única de reportes: ver `reportes/signals.py` (RF-20).
 
-@receiver(post_save, sender=LicenciaOtorgada)
-def registrar_movimiento_licencia(sender, instance, created, **kwargs):
-    tipo_accion = "ALTA" if created else "MODIFICACIÓN"
-    detalle = f"{tipo_accion} - Licencia {instance.articulo.articulo} (DNI {instance.designacion.persona.dni}) desde {instance.desde}"
-
-    RegistroBitacora.objects.create(
-        accion=tipo_accion,
-        descripcion=detalle
-    )
+`RegistroBitacora` se conserva solo como historial de lo registrado antes de
+unificar la auditoría; ya no se escribe en él.
+"""
