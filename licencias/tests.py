@@ -201,4 +201,55 @@ class ListadoFiltrosTests(TestCase):
 
     def test_filtro_por_fechas(self):
         self.assertEqual(self._cantidad('?fecha_desde=2026-05-01'), 1)
-        self.assertEqual(self._cantidad('?fecha_hasta=2026-04-01'), 1)
+        self.assertEqual(self._cantidad('?fecha_hasta=2026-04-01'), 1) 
+
+
+class FechasInvertidasTests(TestCase):
+    """N4: Hasta anterior a Desde da un único error, sin un error de tope engañoso."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni=99000096, apellido_nombre='Diaz, Eva')
+        cls.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='A-3', articulo='3', tipo_licencia='Tres',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo', tope_dias_anual=5,
+        )
+        usuario = User.objects.create_user('cargador', password='x')
+        usuario.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label='licencias', codename='add_licenciaotorgada',
+            )
+        )
+
+    def setUp(self):
+        self.client.login(username='cargador', password='x')
+
+    def test_hasta_anterior_a_desde_da_un_solo_error(self):
+        respuesta = self.client.post('/licencias/nueva/', {
+            'designacion': self.designacion.pk,
+            'articulo': self.articulo.pk,
+            'sit_rev': 'Titular',
+            'desde': '2026-10-20',
+            'hasta': '2026-10-10',
+            'justifica': '',
+        })
+        self.assertEqual(respuesta.status_code, 200)
+        errores = respuesta.context['form'].errors['hasta']
+        self.assertEqual(len(errores), 1)
+        self.assertIn('anterior', errores[0])
+        self.assertEqual(LicenciaOtorgada.objects.count(), 0)
+
+    def test_hasta_anterior_a_desde_se_rechaza_en_el_modelo(self):
+        licencia = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 10, 20), hasta=date(2026, 10, 10),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            licencia.full_clean()
+        self.assertIn('hasta', ctx.exception.message_dict)

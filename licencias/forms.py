@@ -99,19 +99,6 @@ class LicenciaOtorgadaForm(forms.ModelForm):
             ).order_by("persona__apellido_nombre")
         )
 
-    def clean(self):
-        cleaned_data = super().clean()
-
-        desde = cleaned_data.get("desde")
-        hasta = cleaned_data.get("hasta")
-
-        if desde and hasta and hasta < desde:
-            self.add_error(
-                "hasta",
-                "La fecha Hasta no puede ser anterior a la fecha Desde."
-            )
-
-        return cleaned_data
 
     class Meta:
         model = LicenciaOtorgada
