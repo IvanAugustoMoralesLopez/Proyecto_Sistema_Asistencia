@@ -63,4 +63,12 @@ def rango_en_anio(desde: date, hasta, anio: int, hoy: date = None):
     fin = min(hasta if hasta else hoy, date(anio, 12, 31))
     if fin < inicio:
         return None
-    return inicio, fin
+    return inicio, fin 
+
+def mes_vecino(anio, mes, desplazamiento):
+    """(anio, mes) desplazado esa cantidad de meses; puede ser negativa.
+
+    Resuelve el cruce de año: enero - 1 = diciembre del año anterior.
+    """
+    indice = anio * 12 + (mes - 1) + desplazamiento
+    return indice // 12, indice % 12 + 1

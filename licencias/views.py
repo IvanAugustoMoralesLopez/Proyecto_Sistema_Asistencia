@@ -11,7 +11,7 @@ from django.views.decorators.http import require_http_methods
 from personal.models import Horario
 
 from .clasificacion import CategoriaSinPlanillaError
-from .dias import obtener_feriados
+from .dias import mes_vecino, obtener_feriados
 from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm
 from .models import LicenciaArticulo, LicenciaOtorgada
 from .services import clasificar_planilla_licencia
@@ -103,11 +103,16 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
 
     total_horas = sum(fila['horas_descontadas'] for fila in desglose)
 
+    anio_anterior, mes_anterior = mes_vecino(anio, mes, -1)
+    anio_siguiente, mes_siguiente = mes_vecino(anio, mes, 1)
+
     return render(request, 'licencias/reporte_mensual.html', {
         'anio': anio,
         'mes': mes,
         'desglose': desglose,
         'total_horas': total_horas,
+        'mes_anterior': {'anio': anio_anterior, 'mes': mes_anterior},
+        'mes_siguiente': {'anio': anio_siguiente, 'mes': mes_siguiente},
     })
 
 @login_required 

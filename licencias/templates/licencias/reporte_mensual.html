@@ -4,12 +4,15 @@
 {% block seccion %}informe-licencias{% endblock %}
 
 {% block content %}
-<div class="mb-4">
-    <p class="ruta mb-1">Administración / Licencias / Reporte mensual</p>
-    <h1 class="h3 mb-1">Reporte mensual de licencias: {{ mes|stringformat:"02d" }}/{{ anio }}</h1>
-    <p class="text-secondary mb-0">
-        Desglose por designación, planilla de destino (IL-01 / IL-02) y horas cátedra afectadas.
-    </p>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a class="btn btn-outline-primary btn-sm"
+       href="{% url 'licencias:reporte_mensual_licencias' mes_anterior.anio mes_anterior.mes %}">
+        &laquo; Mes anterior
+    </a>
+    <a class="btn btn-outline-primary btn-sm"
+       href="{% url 'licencias:reporte_mensual_licencias' mes_siguiente.anio mes_siguiente.mes %}">
+        Mes siguiente &raquo;
+    </a>
 </div>
 
 <div class="card shadow-sm border-0">

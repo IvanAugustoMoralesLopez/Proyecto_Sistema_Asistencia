@@ -21,7 +21,7 @@ from .clasificacion import (
     PLANILLA_IL02,
     planilla_para_categoria,
 )
-from .dias import contar_dias_habiles, listar_dias_habiles, rango_en_anio
+from .dias import contar_dias_habiles, listar_dias_habiles, mes_vecino, rango_en_anio
 from .models import LicenciaArticulo, LicenciaOtorgada
 from .services import dias_usados_en_anio
 
@@ -71,6 +71,21 @@ class RangoEnAnioTests(SimpleTestCase):
     def test_licencia_abierta_que_empieza_en_el_futuro_da_none(self):
         self.assertIsNone(rango_en_anio(date(2027, 1, 1), None, 2026, date(2026, 10, 28)))
 
+class MesVecinoTests(SimpleTestCase):
+    def test_mes_siguiente_dentro_del_anio(self):
+        self.assertEqual(mes_vecino(2026, 5, 1), (2026, 6))
+
+    def test_mes_anterior_dentro_del_anio(self):
+        self.assertEqual(mes_vecino(2026, 5, -1), (2026, 4))
+
+    def test_diciembre_pasa_a_enero_del_anio_siguiente(self):
+        self.assertEqual(mes_vecino(2026, 12, 1), (2027, 1))
+
+    def test_enero_vuelve_a_diciembre_del_anio_anterior(self):
+        self.assertEqual(mes_vecino(2026, 1, -1), (2025, 12))
+
+    def test_sin_desplazamiento_devuelve_el_mismo_mes(self):
+        self.assertEqual(mes_vecino(2026, 3, 0), (2026, 3))
 
 class ClasificacionTests(SimpleTestCase):
     def test_rn04_salud_va_a_il01(self):
@@ -356,7 +371,22 @@ class ReporteMensualTests(TestCase):
 
     def test_mes_sin_licencias_tiene_total_cero(self):
         respuesta = self.client.get('/licencias/reporte/2026/11/')
-        self.assertEqual(respuesta.context['total_horas'], 0)
+        self.assertEqual(respuesta.context['total_horas'], 0) 
+
+    def test_navegacion_de_enero_vuelve_a_diciembre(self):
+        respuesta = self.client.get('/licencias/reporte/2026/1/')
+        self.assertEqual(respuesta.context['mes_anterior'], {'anio': 2025, 'mes': 12})
+        self.assertEqual(respuesta.context['mes_siguiente'], {'anio': 2026, 'mes': 2})
+
+    def test_navegacion_de_diciembre_pasa_al_anio_siguiente(self):
+        respuesta = self.client.get('/licencias/reporte/2026/12/')
+        self.assertEqual(respuesta.context['mes_anterior'], {'anio': 2026, 'mes': 11})
+        self.assertEqual(respuesta.context['mes_siguiente'], {'anio': 2027, 'mes': 1})
+
+    def test_los_botones_apuntan_a_los_meses_vecinos(self):
+        respuesta = self.client.get('/licencias/reporte/2026/10/')
+        self.assertContains(respuesta, '/licencias/reporte/2026/9/')
+        self.assertContains(respuesta, '/licencias/reporte/2026/11/')
 
     def test_mes_invalido_da_404(self):
         respuesta = self.client.get('/licencias/reporte/2026/13/')
