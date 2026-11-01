@@ -59,6 +59,12 @@
                             </tr>
                         {% endfor %}
                     </tbody>
+                     <tfoot>
+                        <tr class="table-light fw-semibold">
+                            <td colspan="7" class="text-end">Total de horas afectadas del mes</td>
+                            <td class="text-end">{{ total_horas }}</td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         {% else %}

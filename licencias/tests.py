@@ -348,7 +348,15 @@ class ReporteMensualTests(TestCase):
         desglose = respuesta.context['desglose']
         self.assertEqual(len(desglose), 1)
         self.assertEqual(desglose[0]['dias_totales'], 5)
-        self.assertEqual(desglose[0]['horas_descontadas'], 4)
+        self.assertEqual(desglose[0]['horas_descontadas'], 4) 
+
+    def test_calcula_el_total_de_horas_del_mes(self):
+        respuesta = self.client.get('/licencias/reporte/2026/10/')
+        self.assertEqual(respuesta.context['total_horas'], 4)
+
+    def test_mes_sin_licencias_tiene_total_cero(self):
+        respuesta = self.client.get('/licencias/reporte/2026/11/')
+        self.assertEqual(respuesta.context['total_horas'], 0)
 
     def test_mes_invalido_da_404(self):
         respuesta = self.client.get('/licencias/reporte/2026/13/')

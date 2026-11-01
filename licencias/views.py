@@ -101,11 +101,14 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
             'horas_descontadas': horas_afectadas,
         })
 
+    total_horas = sum(fila['horas_descontadas'] for fila in desglose)
+
     return render(request, 'licencias/reporte_mensual.html', {
         'anio': anio,
         'mes': mes,
         'desglose': desglose,
-        })
+        'total_horas': total_horas,
+    })
 
 @login_required 
 @permission_required("licencias.add_licenciaotorgada", raise_exception=True)
