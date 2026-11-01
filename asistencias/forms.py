@@ -8,11 +8,14 @@ from personal.models import Designacion, EspacioCurricular
 from licencias.models import LicenciaOtorgada
 
 from .models import (
+    DiaNoLaborable,
     RegistroAsistencia,
     MarcaAsistencia,
     licencia_cubre_fecha,
 )
 from .services import (
+    ANIO_MAXIMO,
+    ANIO_MINIMO,
     MOTIVO_MINIMO,
     TRANSICIONES_JUSTIFICACION,
     validar_dia_laborable,
@@ -316,6 +319,45 @@ class RecepcionFormularioForm(forms.Form):
 class CierreMensualForm(forms.Form):
     anio = forms.IntegerField(min_value=2000, max_value=2100)
     mes = forms.IntegerField(min_value=1, max_value=12)
+
+
+class DiaNoLaborableForm(forms.ModelForm):
+    """Alta y edición de un día del calendario escolar (RF-10)."""
+
+    class Meta:
+        model = DiaNoLaborable
+        fields = ["fecha", "tipo", "descripcion"]
+        widgets = {
+            # type="date" solo muestra el valor si viene en formato ISO.
+            "fecha": forms.DateInput(
+                attrs={"type": "date"},
+                format="%Y-%m-%d",
+            ),
+        }
+        error_messages = {
+            "fecha": {"unique": "Ya hay un día cargado en esa fecha."},
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for field in self.fields.values():
+            clase = (
+                "form-select"
+                if isinstance(field.widget, forms.Select)
+                else "form-control"
+            )
+            field.widget.attrs.setdefault("class", clase)
+
+    def clean_fecha(self):
+        fecha = self.cleaned_data["fecha"]
+
+        if not ANIO_MINIMO <= fecha.year <= ANIO_MAXIMO:
+            raise ValidationError(
+                f"El año debe estar entre {ANIO_MINIMO} y {ANIO_MAXIMO}."
+            )
+
+        return fecha
 
 
 class ReaperturaMensualForm(forms.Form):

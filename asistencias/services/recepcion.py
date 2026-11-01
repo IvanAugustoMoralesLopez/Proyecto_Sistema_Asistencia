@@ -7,7 +7,14 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..models import EventoAsistencia, RegistroAsistencia
-from .reglas import MOTIVO_MINIMO, _datos_registro, _exigir_permiso, _validar_licencia, _validar_periodo_abierto
+from .reglas import (
+    MOTIVO_MINIMO,
+    _datos_registro,
+    _exigir_permiso,
+    _validar_licencia,
+    _validar_motivo_maximo,
+    _validar_periodo_abierto,
+)
 from .sesiones import _validar_sesion_edicion
 
 
@@ -80,6 +87,17 @@ def recepcionar_formulario(
 
     nro_formulario = nro_formulario.strip()
     motivo = motivo.strip()
+    _validar_motivo_maximo(motivo)
+
+    maximo_formulario = RegistroAsistencia._meta.get_field(
+        "nro_formulario"
+    ).max_length
+
+    if len(nro_formulario) > maximo_formulario:
+        raise ValidationError(
+            "El número de formulario no puede superar los "
+            f"{maximo_formulario} caracteres."
+        )
 
     if nuevo_estado == Justificacion.INJUSTIFICADA:
         if len(motivo) < MOTIVO_MINIMO:
@@ -135,11 +153,20 @@ def validar_asistencia(*, usuario, token, registro_id):
     )
     _validar_sesion_edicion(usuario, token)
 
-    registro = (
-        RegistroAsistencia.objects.select_for_update()
-        .select_related("designacion", "marca")
-        .get(pk=registro_id)
-    )
+    try:
+        registro = (
+            RegistroAsistencia.objects.select_for_update()
+            .select_related("designacion", "marca")
+            .get(pk=registro_id)
+        )
+    except RegistroAsistencia.DoesNotExist as exc:
+        raise ValidationError(
+            "El registro que intentás validar no existe."
+        ) from exc
+
+    # Validar de nuevo no cambia nada y dejaría un evento VALIDAR de más.
+    if registro.estado_registro == RegistroAsistencia.Estado.VALIDADO:
+        raise ValidationError("El registro ya está validado.")
 
     _validar_periodo_abierto(registro.fecha)
 

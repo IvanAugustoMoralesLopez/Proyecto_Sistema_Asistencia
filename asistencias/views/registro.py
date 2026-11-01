@@ -20,10 +20,14 @@ from ._comun import _aplicar_filtros, _asegurar_sesion_edicion, _mensaje_error, 
 
 
 @login_required
+@permission_required(
+    "asistencias.view_registroasistencia",
+    raise_exception=True,
+)
 def registro_diario(request):
     fecha_seleccionada = request.GET.get(
         "fecha",
-        date.today().isoformat(),
+        timezone.localdate().isoformat(),
     )
 
     try:
@@ -36,7 +40,7 @@ def registro_diario(request):
         RegistroAsistencia.objects.select_related(
             "designacion__persona",
             "designacion__cargo",
-            "designacion__espacio_curricular",
+            "designacion__espacio_curricular__carrera",
             "marca",
             "licencia",
         )
@@ -115,7 +119,7 @@ def crear_asistencia(request):
                 )
     else:
         form = RegistroAsistenciaForm(
-            initial={"fecha": date.today()}
+            initial={"fecha": timezone.localdate()}
         )
 
     return render(
@@ -153,7 +157,7 @@ def editar_asistencia(request, pk):
         if form.is_valid():
             try:
                 token = _asegurar_sesion_edicion(request)
-                actualizado = guardar_asistencia(
+                guardar_asistencia(
                     usuario=request.user,
                     token=token,
                     datos=form.cleaned_data,
@@ -183,6 +187,10 @@ def editar_asistencia(request, pk):
 
 
 @login_required
+@permission_required(
+    "asistencias.view_registroasistencia",
+    raise_exception=True,
+)
 def historial(request):
     form = FiltroAsistenciaForm(request.GET or None)
 
@@ -220,6 +228,10 @@ def historial(request):
 
 
 @login_required
+@permission_required(
+    "asistencias.view_registroasistencia",
+    raise_exception=True,
+)
 def detalle_asistencia(request, pk):
     registro = get_object_or_404(
         RegistroAsistencia.objects.select_related(

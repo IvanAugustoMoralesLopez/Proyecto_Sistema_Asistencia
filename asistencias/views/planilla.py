@@ -106,7 +106,7 @@ def _leer_planilla(post, fecha):
         int(clave[len(prefijo):])
         for clave in post
         if clave.startswith(prefijo)
-        and clave[len(prefijo):].isdigit()
+        and clave[len(prefijo):].isdecimal()
         and post[clave]
     )
 
@@ -139,7 +139,7 @@ def _leer_planilla(post, fecha):
             errores[pk] = "La designación no está vigente en esta fecha."
             continue
 
-        marca = marcas.get(int(marca_texto)) if marca_texto.isdigit() else None
+        marca = marcas.get(int(marca_texto)) if marca_texto.isdecimal() else None
 
         if marca is None:
             errores[pk] = "La marca elegida no es válida."
@@ -165,7 +165,7 @@ def _leer_planilla(post, fecha):
                 LicenciaOtorgada.objects.filter(
                     pk=int(licencia_texto), designacion=designacion
                 ).first()
-                if licencia_texto.isdigit()
+                if licencia_texto.isdecimal()
                 else None
             )
 
