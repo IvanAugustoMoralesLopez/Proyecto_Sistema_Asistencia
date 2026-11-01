@@ -23,7 +23,7 @@
                 <table class="table table-hover align-middle">
                     <thead>
                         <tr>
-                            <th>DNI</th>
+                            <th>Docente</th>
                             <th>Espacio curricular</th>
                             <th>Licencia</th>
                             <th>Planilla</th>
@@ -37,7 +37,10 @@
                     <tbody>
                         {% for fila in desglose %}
                             <tr>
-                                <td>{{ fila.dni_docente }}</td>
+                                 <td>
+                                    {{ fila.docente }}
+                                    <br><small class="text-secondary">DNI {{ fila.dni_docente }}</small>
+                                </td>
                                 <td>{{ fila.espacio_curricular|default:"-" }}</td>
                                 <td>{{ fila.licencia_solicitada }}</td>
                                 <td>

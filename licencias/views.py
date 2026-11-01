@@ -49,7 +49,11 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
         desde__lte=ultimo_dia
     ).exclude(
         hasta__lt=primer_dia
-    ).select_related('designacion', 'articulo')
+    ).select_related(
+        'designacion__persona',
+        'designacion__espacio_curricular',
+        'articulo',
+    )
 
     desglose = []
     cache_horarios = {}
@@ -82,7 +86,12 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
 
         desglose.append({
             'dni_docente': lic.designacion.persona_id,
-            'espacio_curricular': lic.designacion.espacio_curricular_id,
+            'docente': lic.designacion.persona.apellido_nombre,
+            'espacio_curricular': (
+                lic.designacion.espacio_curricular.nombre
+                if lic.designacion.espacio_curricular
+                else None
+            ),
             'licencia_solicitada': f"{lic.articulo.articulo} - {lic.articulo.tipo_licencia}",
             'planilla': planilla_destino,
             'requiere_revision': requiere_revision,
