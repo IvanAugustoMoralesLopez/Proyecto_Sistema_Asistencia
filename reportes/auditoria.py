@@ -1,3 +1,7 @@
+import json
+
+from django.core.serializers.json import DjangoJSONEncoder
+
 from asistencias.models import EventoAsistencia
 
 
@@ -26,3 +30,14 @@ def datos_usuario(usuario, rol):
         "activo": usuario.is_active,
         "rol": rol,
     }
+
+
+def a_json(valores):
+    """Pasa fechas, decimales, etc. a tipos que acepta un JSONField."""
+    return json.loads(json.dumps(valores, cls=DjangoJSONEncoder))
+
+
+def foto_en_base(modelo, pk):
+    """Valores actuales de un registro tal como están en la base (o None)."""
+    fila = modelo.objects.filter(pk=pk).values().first()
+    return a_json(fila) if fila else None

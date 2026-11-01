@@ -21,6 +21,9 @@ SUBSECRETARIA = "Subsecretaría"
 ROLES = (BEDELIA, SECRETARIA, SUBSECRETARIA)
 
 _BEDELIA = [
+    # Lectura de asistencias (registro diario, historial, detalle, cierres y
+    # recepción de formularios): solo para usuarios con algún rol (M5).
+    ("asistencias", "view_registroasistencia"),
     ("asistencias", "add_registroasistencia"),
     ("asistencias", "change_registroasistencia"),
     ("asistencias", "recepcionar_formulario"),
