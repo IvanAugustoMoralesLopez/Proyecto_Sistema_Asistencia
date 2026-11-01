@@ -12,6 +12,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
+from reportes.auditoria import AccionesReportes, registrar_evento
+
 from .forms import (
     BuscarLegajoForm,
     CarreraForm,
@@ -208,6 +210,16 @@ def gestion_legajos(request):
                 except ValidationError as exc:
                     messages.error(request, _mensaje_errores(exc))
                 else:
+                    registrar_evento(
+                        request.user,
+                        AccionesReportes.IMPORTACION,
+                        motivo=f"Archivo {archivo.name}"[:500],
+                        despues={
+                            "filas": total,
+                            "importadas": total - rechazadas,
+                            "rechazadas": rechazadas,
+                        },
+                    )
                     messages.success(
                         request,
                         f"Importación finalizada: {total - rechazadas} filas "
