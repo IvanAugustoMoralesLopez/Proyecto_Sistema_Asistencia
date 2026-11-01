@@ -5,7 +5,14 @@ from django.contrib.auth.models import Permission, User
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase
 
-from personal.models import Cargo, Designacion, Persona
+from personal.models import (
+    Carrera,
+    Cargo,
+    Designacion,
+    EspacioCurricular,
+    Horario,
+    Persona,
+)
 
 from .clasificacion import (
     CATEGORIAS_POR_PLANILLA,
@@ -279,4 +286,70 @@ class AccesoALasVistasTests(TestCase):
         self.client.login(username='sinpermisos', password='x')
         for url in self.URLS:
             with self.subTest(url=url):
-                self.assertEqual(self.client.get(url).status_code, 403)
+                self.assertEqual(self.client.get(url).status_code, 403) 
+
+class ReporteMensualTests(TestCase):
+    """RF-12/RF-13: el reporte muestra nombres y calcula las horas afectadas."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        carrera = Carrera.objects.create(nombre='Tecnicatura de prueba')
+        materia = EspacioCurricular.objects.create(nombre='Matematica I', carrera=carrera)
+        perez = Persona.objects.create(dni='99000096', apellido_nombre='Perez, Marta')
+        ruiz = Persona.objects.create(dni='99000095', apellido_nombre='Ruiz, Luis')
+        d_perez = Designacion.objects.create(
+            persona=perez, cargo=cargo, espacio_curricular=materia,
+            desde=date(2026, 1, 1),
+        )
+        d_ruiz = Designacion.objects.create(
+            persona=ruiz, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        # Perez tiene 4 horas cátedra los lunes.
+        Horario.objects.create(designacion=d_perez, dia='LUN', horas_catedra=4)
+        articulo = LicenciaArticulo.objects.create(
+            cod_licencia='A-1', articulo='1', tipo_licencia='Uno',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo',
+        )
+        # Lunes 05/10/2026 a viernes 09/10/2026: 5 días, un solo lunes.
+        LicenciaOtorgada.objects.create(
+            designacion=d_perez, articulo=articulo, sit_rev='Titular',
+            desde=date(2026, 10, 5), hasta=date(2026, 10, 9),
+        )
+        # Licencia de otro mes: no debe aparecer en el reporte de octubre.
+        LicenciaOtorgada.objects.create(
+            designacion=d_ruiz, articulo=articulo, sit_rev='Titular',
+            desde=date(2026, 3, 2), hasta=date(2026, 3, 4),
+        )
+        usuario = User.objects.create_user('lector', password='x')
+        usuario.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label='licencias', codename='view_licenciaotorgada',
+            )
+        )
+
+    def setUp(self):
+        self.client.login(username='lector', password='x')
+
+    def test_muestra_nombre_del_docente_y_de_la_materia(self):
+        respuesta = self.client.get('/licencias/reporte/2026/10/')
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'Perez, Marta')
+        self.assertContains(respuesta, 'Matematica I')
+
+    def test_no_incluye_licencias_de_otros_meses(self):
+        respuesta = self.client.get('/licencias/reporte/2026/10/')
+        self.assertNotContains(respuesta, 'Ruiz, Luis')
+
+    def test_calcula_dias_y_horas_afectadas(self):
+        respuesta = self.client.get('/licencias/reporte/2026/10/')
+        desglose = respuesta.context['desglose']
+        self.assertEqual(len(desglose), 1)
+        self.assertEqual(desglose[0]['dias_totales'], 5)
+        self.assertEqual(desglose[0]['horas_descontadas'], 4)
+
+    def test_mes_invalido_da_404(self):
+        respuesta = self.client.get('/licencias/reporte/2026/13/')
+        self.assertEqual(respuesta.status_code, 404)
