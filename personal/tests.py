@@ -198,6 +198,56 @@ class DesignacionTests(TestCase):
         self.assertEqual(rechazadas, 1)
         self.assertEqual(Designacion.objects.filter(persona=self.persona).count(), 1)
 
+    def test_catalogo_id_inexistente_no_causa_error_500(self):
+        usuario = get_user_model().objects.create_user(
+            username="catalogo-id-test",
+            password="test-password",
+        )
+        self.otorgar_permiso(usuario, "change_cargo")
+        cliente = Client()
+        cliente.force_login(usuario)
+
+        respuesta_get = cliente.get(
+            reverse("personal:catalogos"),
+            {"seccion": "cargos", "editar": "INEXISTENTE"},
+        )
+        respuesta_post = cliente.post(
+            reverse("personal:catalogos"),
+            {
+                "seccion": "cargos",
+                "accion": "eliminar",
+                "objeto_id": "INEXISTENTE",
+            },
+        )
+
+        self.assertNotEqual(respuesta_get.status_code, 500)
+        self.assertNotEqual(respuesta_post.status_code, 500)
+        self.assertRedirects(
+            respuesta_post,
+            f"{reverse('personal:catalogos')}?seccion=cargos",
+        )
+
+    def test_persona_rechaza_dni_invalido_sin_error_500(self):
+        usuario = get_user_model().objects.create_user(
+            username="dni-validation-test",
+            password="test-password",
+        )
+        self.otorgar_permiso(usuario, "change_persona")
+        cliente = Client()
+        cliente.force_login(usuario)
+
+        respuesta = cliente.post(
+            reverse("personal:gestion_legajos"),
+            {
+                "accion": "guardar_persona",
+                "dni": "ABC123",
+                "apellido_nombre": "Docente inválido",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "DNI")
+
     def test_pantalla_renderiza_para_usuario_autenticado(self):
         usuario = get_user_model().objects.create_user(
             username="personal-test",
