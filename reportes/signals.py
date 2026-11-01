@@ -14,7 +14,7 @@ from asistencias.models import EventoAsistencia
 from licencias.models import LicenciaArticulo, LicenciaOtorgada
 from personal.models import Cargo, Carrera, EspacioCurricular
 
-from .auditoria import a_json, foto_en_base
+from .auditoria import AccionesReportes, a_json, foto_en_base
 from .roles import crear_grupos
 from .usuario_actual import obtener_usuario_actual
 
@@ -61,7 +61,7 @@ def impedir_borrado_de_eventos(sender, instance, **kwargs):
 # petición, ya venga de una vista o del admin. El evento se crea dentro de la
 # misma transacción que el cambio: si el cambio se revierte, el evento también.
 
-Accion = EventoAsistencia.Accion
+Accion = AccionesReportes
 
 _AUDITADOS = {
     LicenciaOtorgada: (Accion.LICENCIA_ALTA, Accion.LICENCIA_EDITAR, Accion.LICENCIA_BAJA),

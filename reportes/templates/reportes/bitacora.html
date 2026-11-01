@@ -45,7 +45,7 @@
                 <tr>
                     <td class="text-nowrap">{{ evento.creado_en|date:"d/m/Y H:i:s" }}</td>
                     <td>{{ evento.usuario|default:"—" }}</td>
-                    <td>{{ evento.get_accion_display }}</td>
+                    <td>{{ evento.accion_texto }}</td>
                     <td>{{ evento.objetivo }}</td>
                     <td>{{ evento.motivo|default:"—" }}</td>
                     <td class="small">

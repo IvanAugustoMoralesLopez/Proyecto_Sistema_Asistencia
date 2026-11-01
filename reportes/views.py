@@ -12,7 +12,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from asistencias.models import EventoAsistencia
 
-from .auditoria import datos_usuario, registrar_evento
+from .auditoria import datos_usuario, etiqueta_de_accion, registrar_evento
 from .exportaciones import ENCABEZADO_CONSULTA, filas_consulta
 from .forms import (
     FiltroAlertasForm,
@@ -53,6 +53,7 @@ def bitacora(request):
 
     pagina = Paginator(buscar_eventos(filtros), 25).get_page(request.GET.get("page"))
     for evento in pagina:
+        evento.accion_texto = etiqueta_de_accion(evento.accion)
         evento.objetivo = describir_objetivo(evento)
         evento.cambios = resumir_cambios(evento)
 
