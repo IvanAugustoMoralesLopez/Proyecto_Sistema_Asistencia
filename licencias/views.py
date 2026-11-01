@@ -12,7 +12,7 @@ from personal.models import Horario
 
 from .clasificacion import CategoriaSinPlanillaError
 from .dias import obtener_feriados
-from .forms import LicenciaOtorgadaForm
+from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm
 from .models import LicenciaArticulo, LicenciaOtorgada
 from .services import clasificar_planilla_licencia
 # Mapeo de Python weekday() a formato varchar(3) de la DB
@@ -130,20 +130,31 @@ def listado_licencias_otorgadas(request):
         "articulo",
     ).order_by("-desde", "-id")
 
-    docente = request.GET.get("docente", "").strip()
+    filtros = FiltroLicenciasForm(request.GET)
+    filtros.is_valid()
+    # Si algún parámetro es inválido, queda fuera de cleaned_data y se ignora.
+    datos = filtros.cleaned_data
+
+    if filtros.errors:
+        messages.warning(
+            request,
+            "Algunos filtros no son válidos y se ignoraron.",
+        )
+
+    docente = (datos.get("docente") or "").strip()
 
     if docente:
         licencias = licencias.filter(
             Q(designacion__persona__apellido_nombre__icontains=docente)
         )
 
-    articulo = request.GET.get("articulo", "").strip()
+    articulo = datos.get("articulo")
 
     if articulo:
-        licencias = licencias.filter(articulo_id=articulo)
+        licencias = licencias.filter(articulo=articulo)
 
-    fecha_desde = request.GET.get("fecha_desde", "").strip()
-    fecha_hasta = request.GET.get("fecha_hasta", "").strip()
+    fecha_desde = datos.get("fecha_desde")
+    fecha_hasta = datos.get("fecha_hasta")
 
     if fecha_desde:
         licencias = licencias.filter(
@@ -152,6 +163,7 @@ def listado_licencias_otorgadas(request):
 
     if fecha_hasta:
         licencias = licencias.filter(desde__lte=fecha_hasta)
+
 
     articulos = LicenciaArticulo.objects.all().order_by("articulo")
 

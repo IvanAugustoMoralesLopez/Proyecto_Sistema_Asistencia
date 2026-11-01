@@ -174,3 +174,17 @@ class LicenciaOtorgadaForm(forms.ModelForm):
             "justifica": "¿Está justificada?",
             "observaciones": "Observaciones",
         }
+
+
+class FiltroLicenciasForm(forms.Form):
+    """
+    Filtros del listado de licencias (GET). Valida los parámetros de la URL
+    para que un valor inválido (ej. ?articulo=abc) no rompa la página.
+    """
+
+    docente = forms.CharField(required=False)
+    articulo = forms.ModelChoiceField(
+        queryset=LicenciaArticulo.objects.all(), required=False,
+    )
+    fecha_desde = forms.DateField(required=False)
+    fecha_hasta = forms.DateField(required=False)
