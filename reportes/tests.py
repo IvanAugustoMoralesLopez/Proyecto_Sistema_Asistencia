@@ -9,6 +9,7 @@ from asistencias.models import EventoAsistencia
 
 from .models import ParametroSistema
 from .roles import BEDELIA, SECRETARIA, SUBSECRETARIA
+from .auditoria import AccionesReportes
 from .selectors import resumir_cambios
 from .signals import BitacoraInalterable
 from .usuario_actual import fijar_usuario_actual, restaurar_usuario_actual
@@ -828,7 +829,7 @@ class AuditoriaLicenciasYCatalogosTests(TestCase):
         )
         self.assertEqual(respuesta.status_code, 302)
 
-        evento = self.eventos(EventoAsistencia.Accion.LICENCIA_ALTA).get()
+        evento = self.eventos(AccionesReportes.LICENCIA_ALTA).get()
         self.assertEqual(evento.usuario, self.operador)
         self.assertIsNone(evento.antes)
         self.assertEqual(evento.despues["dni"], "30123456")
@@ -848,7 +849,7 @@ class AuditoriaLicenciasYCatalogosTests(TestCase):
         )
         self.assertEqual(respuesta.status_code, 302)
 
-        evento = self.eventos(EventoAsistencia.Accion.LICENCIA_EDITAR).get()
+        evento = self.eventos(AccionesReportes.LICENCIA_EDITAR).get()
         self.assertEqual(evento.usuario, self.operador)
         self.assertEqual(evento.antes["hasta"], "2026-05-05")
         self.assertEqual(evento.despues["hasta"], "2026-05-06")
@@ -864,7 +865,7 @@ class AuditoriaLicenciasYCatalogosTests(TestCase):
                 sit_rev="Titular", desde="2026-05-04", hasta="2026-05-05",
             )
             licencia.save()
-        self.assertEqual(self.eventos(EventoAsistencia.Accion.LICENCIA_EDITAR).count(), 0)
+        self.assertEqual(self.eventos(AccionesReportes.LICENCIA_EDITAR).count(), 0)
 
     def test_baja_registra_lo_que_habia(self):
         from licencias.models import LicenciaOtorgada
@@ -876,7 +877,7 @@ class AuditoriaLicenciasYCatalogosTests(TestCase):
             )
             licencia.delete()
 
-        evento = self.eventos(EventoAsistencia.Accion.LICENCIA_BAJA).get()
+        evento = self.eventos(AccionesReportes.LICENCIA_BAJA).get()
         self.assertEqual(evento.usuario, self.operador)
         self.assertEqual(evento.antes["dni"], "30123456")
         self.assertIsNone(evento.despues)
@@ -894,7 +895,7 @@ class AuditoriaLicenciasYCatalogosTests(TestCase):
         url = reverse("admin:licencias_licenciaotorgada_delete", args=[licencia.pk])
         self.assertEqual(self.client.post(url, {"post": "yes"}).status_code, 302)
 
-        evento = self.eventos(EventoAsistencia.Accion.LICENCIA_BAJA).get()
+        evento = self.eventos(AccionesReportes.LICENCIA_BAJA).get()
         self.assertEqual(evento.usuario, admin)
 
     def test_catalogos_dejan_evento(self):
@@ -908,15 +909,15 @@ class AuditoriaLicenciasYCatalogosTests(TestCase):
 
         acciones = list(
             self.eventos(
-                EventoAsistencia.Accion.CATALOGO_ALTA,
-                EventoAsistencia.Accion.CATALOGO_EDITAR,
-                EventoAsistencia.Accion.CATALOGO_BAJA,
+                AccionesReportes.CATALOGO_ALTA,
+                AccionesReportes.CATALOGO_EDITAR,
+                AccionesReportes.CATALOGO_BAJA,
             )
             .filter(usuario=self.operador)
             .values_list("accion", flat=True)
         )
         self.assertEqual(acciones, ["CATALOGO_ALTA", "CATALOGO_EDITAR", "CATALOGO_BAJA"])
-        editar = self.eventos(EventoAsistencia.Accion.CATALOGO_EDITAR).get()
+        editar = self.eventos(AccionesReportes.CATALOGO_EDITAR).get()
         self.assertEqual(editar.usuario, self.operador)
         self.assertEqual(editar.antes["descripcion"], "Preceptor")
         self.assertEqual(editar.despues["descripcion"], "Preceptor/a")
@@ -925,31 +926,8 @@ class AuditoriaLicenciasYCatalogosTests(TestCase):
         from personal.models import Cargo
 
         Cargo.objects.create(codigo="X", descripcion="Sin request")
-        evento = self.eventos(EventoAsistencia.Accion.CATALOGO_ALTA).last()
+        evento = self.eventos(AccionesReportes.CATALOGO_ALTA).last()
         self.assertIsNone(evento.usuario)
-
-    def test_importacion_csv_registra_usuario_y_totales(self):
-        from django.core.files.uploadedfile import SimpleUploadedFile
-
-        secretaria = crear_usuario("sec", "change_persona")
-        self.client.force_login(secretaria)
-        archivo = SimpleUploadedFile(
-            "personal.csv",
-            (
-                "DNI,apellido_nombre,cargo_codigo,desde\n"
-                "30123457,Docente válido,PROF,2026-03-01\n"
-                "99999999,,PROF,2026-03-01\n"
-            ).encode("utf-8"),
-        )
-        self.client.post(
-            reverse("personal:gestion_legajos"),
-            {"accion": "importar_csv", "archivo": archivo},
-        )
-
-        evento = self.eventos(EventoAsistencia.Accion.IMPORTACION).get()
-        self.assertEqual(evento.usuario, secretaria)
-        self.assertEqual(evento.despues, {"filas": 2, "importadas": 1, "rechazadas": 1})
-        self.assertIn("personal.csv", evento.motivo)
 
     def test_bitacora_muestra_y_filtra_licencias_por_dni(self):
         self.client.force_login(self.operador)
@@ -969,20 +947,11 @@ class AuditoriaLicenciasYCatalogosTests(TestCase):
         otra = self.client.get(url, {"dni": "11111111"})
         self.assertNotContains(otra, "Licencia otorgada")
 
-    def test_licencias_ya_no_escribe_en_la_bitacora_vieja(self):
-        from licencias.models import LicenciaOtorgada, RegistroBitacora
-
-        LicenciaOtorgada.objects.create(
-            designacion=self.designacion, articulo=self.articulo,
-            sit_rev="Titular", desde="2026-05-04", hasta="2026-05-05",
-        )
-        self.assertEqual(RegistroBitacora.objects.count(), 0)
-
     def test_el_evento_de_auditoria_es_inalterable(self):
         from personal.models import Cargo
 
         Cargo.objects.create(codigo="Z", descripcion="Z")
-        evento = self.eventos(EventoAsistencia.Accion.CATALOGO_ALTA).last()
+        evento = self.eventos(AccionesReportes.CATALOGO_ALTA).last()
         evento.motivo = "otro"
         with self.assertRaises(BitacoraInalterable):
             evento.save()

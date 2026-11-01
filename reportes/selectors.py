@@ -16,6 +16,8 @@ from asistencias.models import EventoAsistencia, RegistroAsistencia
 from licencias.models import LicenciaOtorgada
 from licencias.services import dias_usados_en_anio
 
+from .auditoria import AccionesReportes
+
 
 # ───────────── Bitácora (RF-20) ─────────────
 
@@ -57,7 +59,7 @@ def buscar_eventos(filtros=None):
     return eventos
 
 
-_A = EventoAsistencia.Accion
+_A = AccionesReportes
 _OBJETIVO_FIJO = {
     _A.LICENCIA_ALTA: "Licencia otorgada",
     _A.LICENCIA_EDITAR: "Licencia otorgada",
