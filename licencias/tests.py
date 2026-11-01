@@ -252,4 +252,31 @@ class FechasInvertidasTests(TestCase):
         )
         with self.assertRaises(ValidationError) as ctx:
             licencia.full_clean()
-        self.assertIn('hasta', ctx.exception.message_dict)
+        self.assertIn('hasta', ctx.exception.message_dict) 
+
+class AccesoALasVistasTests(TestCase):
+    """A4: un anónimo va al login; un usuario sin permiso recibe 403."""
+
+    URLS = (
+        '/licencias/listado/',
+        '/licencias/nueva/',
+        '/licencias/editar/1/',
+        '/licencias/reporte/2026/10/',
+    )
+
+    @classmethod
+    def setUpTestData(cls):
+        User.objects.create_user('sinpermisos', password='x')
+
+    def test_anonimo_es_redirigido_al_login(self):
+        for url in self.URLS:
+            with self.subTest(url=url):
+                respuesta = self.client.get(url)
+                self.assertEqual(respuesta.status_code, 302)
+                self.assertTrue(respuesta.url.startswith('/accounts/login/'))
+
+    def test_usuario_sin_permiso_recibe_403(self):
+        self.client.login(username='sinpermisos', password='x')
+        for url in self.URLS:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 403)

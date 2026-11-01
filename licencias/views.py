@@ -2,7 +2,7 @@ import calendar
 from datetime import date, timedelta
 
 from django.contrib import messages
-from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render, reverse
@@ -32,6 +32,7 @@ def _horas_por_dia(designacion_id, cache):
         cache[designacion_id] = horas
     return cache[designacion_id]
 
+@login_required
 @permission_required("licencias.view_licenciaotorgada", raise_exception=True)
 def reporte_mensual_licencias(request, anio: int, mes: int):
     if not 1 <= mes <= 12:
@@ -96,7 +97,8 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
         'mes': mes,
         'desglose': desglose,
         })
- 
+
+@login_required 
 @permission_required("licencias.add_licenciaotorgada", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def nueva_licencia_otorgada(request):
@@ -122,6 +124,7 @@ def nueva_licencia_otorgada(request):
         {"form": form}
     )
 
+@login_required
 @permission_required("licencias.view_licenciaotorgada", raise_exception=True)
 def listado_licencias_otorgadas(request):
     licencias = LicenciaOtorgada.objects.select_related(
@@ -176,6 +179,7 @@ def listado_licencias_otorgadas(request):
         },
     )
 
+@login_required
 @permission_required("licencias.change_licenciaotorgada", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def editar_licencia_otorgada(request, licencia_id):
