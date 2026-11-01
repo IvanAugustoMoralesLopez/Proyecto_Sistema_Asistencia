@@ -15,66 +15,75 @@
     </a>
 </div>
 
-<div class="card shadow-sm border-0">
-    <div class="card-header bg-dark text-white">
-        <h2 class="h5 mb-0">Licencias del mes</h2>
-    </div>
+{% if desglose %}
+    {% for grupo in grupos %}
+        {% if grupo.filas or grupo.planilla != "SIN CLASIFICAR" %}
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-dark text-white">
+                    <h2 class="h5 mb-0">{{ grupo.titulo }}</h2>
+                </div>
 
-    <div class="card-body">
-        {% if desglose %}
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>Docente</th>
-                            <th>Espacio curricular</th>
-                            <th>Licencia</th>
-                            <th>Planilla</th>
-                            <th>Desde</th>
-                            <th>Hasta</th>
-                            <th class="text-end">Días</th>
-                            <th class="text-end">Horas afectadas</th>
-                        </tr>
-                    </thead>
+                <div class="card-body">
+                    {% if grupo.filas %}
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Docente</th>
+                                        <th>Espacio curricular</th>
+                                        <th>Licencia</th>
+                                        <th>Desde</th>
+                                        <th>Hasta</th>
+                                        <th class="text-end">Días</th>
+                                        <th class="text-end">Horas afectadas</th>
+                                    </tr>
+                                </thead>
 
-                    <tbody>
-                        {% for fila in desglose %}
-                            <tr>
-                                 <td>
-                                    {{ fila.docente }}
-                                    <br><small class="text-secondary">DNI {{ fila.dni_docente }}</small>
-                                </td>
-                                <td>{{ fila.espacio_curricular|default:"-" }}</td>
-                                <td>{{ fila.licencia_solicitada }}</td>
-                                <td>
-                                    {% if fila.requiere_revision %}
-                                        <span class="badge text-bg-warning">{{ fila.planilla }}</span>
-                                    {% elif fila.planilla == "IL-01" %}
-                                        <span class="badge text-bg-primary">{{ fila.planilla }}</span>
-                                    {% else %}
-                                        <span class="badge text-bg-success">{{ fila.planilla }}</span>
-                                    {% endif %}
-                                </td>
-                                <td>{{ fila.fecha_inicio|date:"d/m/Y" }}</td>
-                                <td>{{ fila.fecha_fin|date:"d/m/Y" }}</td>
-                                <td class="text-end">{{ fila.dias_totales }}</td>
-                                <td class="text-end">{{ fila.horas_descontadas }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                     <tfoot>
-                        <tr class="table-light fw-semibold">
-                            <td colspan="7" class="text-end">Total de horas afectadas del mes</td>
-                            <td class="text-end">{{ total_horas }}</td>
-                        </tr>
-                    </tfoot>
-                </table>
+                                <tbody>
+                                    {% for fila in grupo.filas %}
+                                        <tr>
+                                            <td>
+                                                {{ fila.docente }}
+                                                <br><small class="text-secondary">DNI {{ fila.dni_docente }}</small>
+                                            </td>
+                                            <td>{{ fila.espacio_curricular|default:"-" }}</td>
+                                            <td>{{ fila.licencia_solicitada }}</td>
+                                            <td>{{ fila.fecha_inicio|date:"d/m/Y" }}</td>
+                                            <td>{{ fila.fecha_fin|date:"d/m/Y" }}</td>
+                                            <td class="text-end">{{ fila.dias_totales }}</td>
+                                            <td class="text-end">{{ fila.horas_descontadas }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+
+                                <tfoot>
+                                    <tr class="table-light fw-semibold">
+                                        <td colspan="6" class="text-end">Subtotal de horas afectadas</td>
+                                        <td class="text-end">{{ grupo.total_horas }}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info mb-0">
+                            No hay licencias de esta planilla en el mes.
+                        </div>
+                    {% endif %}
+                </div>
             </div>
-        {% else %}
+        {% endif %}
+    {% endfor %}
+
+    <p class="text-end fw-semibold">
+        Total de horas afectadas del mes (todas las planillas): {{ total_horas }}
+    </p>
+{% else %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
             <div class="alert alert-info mb-0">
                 No hay licencias que afecten a este mes.
             </div>
-        {% endif %}
+        </div>
     </div>
-</div>
+{% endif %}
 {% endblock %}

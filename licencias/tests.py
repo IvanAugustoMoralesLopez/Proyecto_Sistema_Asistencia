@@ -383,6 +383,22 @@ class ReporteMensualTests(TestCase):
         self.assertEqual(respuesta.context['mes_anterior'], {'anio': 2026, 'mes': 11})
         self.assertEqual(respuesta.context['mes_siguiente'], {'anio': 2027, 'mes': 1})
 
+    def test_agrupa_por_planilla_y_los_subtotales_suman_el_total(self):
+        respuesta = self.client.get('/licencias/reporte/2026/10/')
+        grupos = respuesta.context['grupos']
+        self.assertEqual(
+            [g['planilla'] for g in grupos],
+            ['IL-01', 'IL-02', 'SIN CLASIFICAR'],
+        )
+        self.assertEqual(sum(len(g['filas']) for g in grupos), 1)
+        self.assertEqual(
+            sum(g['total_horas'] for g in grupos),
+            respuesta.context['total_horas'],
+        )
+        for grupo in grupos:
+            for fila in grupo['filas']:
+                self.assertEqual(fila['planilla'], grupo['planilla'])
+
     def test_los_botones_apuntan_a_los_meses_vecinos(self):
         respuesta = self.client.get('/licencias/reporte/2026/10/')
         self.assertContains(respuesta, '/licencias/reporte/2026/9/')

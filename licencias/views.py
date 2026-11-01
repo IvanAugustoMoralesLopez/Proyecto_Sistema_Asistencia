@@ -10,7 +10,7 @@ from django.views.decorators.http import require_http_methods
 
 from personal.models import Horario
 
-from .clasificacion import CategoriaSinPlanillaError
+from .clasificacion import CategoriaSinPlanillaError, PLANILLA_IL01, PLANILLA_IL02
 from .dias import mes_vecino, obtener_feriados
 from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm
 from .models import LicenciaArticulo, LicenciaOtorgada
@@ -103,6 +103,21 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
 
     total_horas = sum(fila['horas_descontadas'] for fila in desglose)
 
+    # Una tabla por planilla: IL-01, IL-02 y las que no se pudieron clasificar.
+    grupos = []
+    for planilla, titulo in (
+        (PLANILLA_IL01, 'IL-01: licencias por salud (enfermedad, tratamiento y enfermedad familiar)'),
+        (PLANILLA_IL02, 'IL-02: razones particulares, exámenes, duelo, matrimonio y otras'),
+        (SIN_CLASIFICAR, 'Sin clasificar (requieren revisión)'),
+    ):
+        filas = [fila for fila in desglose if fila['planilla'] == planilla]
+        grupos.append({
+            'planilla': planilla,
+            'titulo': titulo,
+            'filas': filas,
+            'total_horas': sum(fila['horas_descontadas'] for fila in filas),
+        })
+
     anio_anterior, mes_anterior = mes_vecino(anio, mes, -1)
     anio_siguiente, mes_siguiente = mes_vecino(anio, mes, 1)
 
@@ -111,6 +126,7 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
         'mes': mes,
         'desglose': desglose,
         'total_horas': total_horas,
+        'grupos': grupos,
         'mes_anterior': {'anio': anio_anterior, 'mes': mes_anterior},
         'mes_siguiente': {'anio': anio_siguiente, 'mes': mes_siguiente},
     })
