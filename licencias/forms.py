@@ -115,6 +115,7 @@ class LicenciaOtorgadaForm(forms.ModelForm):
             "sello_regional_as",
             "justifica",
             "nro_formulario",
+            "resolucion_excepcion",
             "observaciones",
         ]
 
@@ -142,11 +143,17 @@ class LicenciaOtorgadaForm(forms.ModelForm):
                 "max": 2100,
             }),
             "sello_regional_as": forms.TextInput(attrs={"class": "form-control"}),
+            "nro_formulario": forms.TextInput(attrs={"class": "form-control"}),
+            "resolucion_excepcion": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "N° y fecha de la resolución",
+            }),
             "observaciones": forms.Textarea(attrs={
                 "class": "form-control",
                 "rows": 3,
             }),
         }
+
 
         labels = {
             "designacion": "Designación",
