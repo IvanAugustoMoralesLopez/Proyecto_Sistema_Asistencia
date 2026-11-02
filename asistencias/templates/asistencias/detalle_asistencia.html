@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load asistencias_extras %}
 
 {% block title %}Detalle de asistencia{% endblock %}
 
@@ -43,7 +44,11 @@
             </dd>
 
             <dt class="col-sm-3">Estado del registro</dt>
-            <dd class="col-sm-9">{{ registro.get_estado_registro_display }}</dd>
+            <dd class="col-sm-9">
+                <span class="badge text-bg-{% if registro.estado_registro == 'VALIDADO' %}success{% else %}secondary{% endif %}">
+                    {{ registro.get_estado_registro_display }}
+                </span>
+            </dd>
 
             <dt class="col-sm-3">Justificación</dt>
             <dd class="col-sm-9">
@@ -104,8 +109,13 @@
                     <td>{{ evento.usuario|default:"—" }}</td>
                     <td>{{ evento.get_accion_display }}</td>
                     <td>{{ evento.motivo|default:"—" }}</td>
-                    <td><pre class="small mb-0">{{ evento.antes|pprint }}</pre></td>
-                    <td><pre class="small mb-0">{{ evento.despues|pprint }}</pre></td>
+                    {# Mejora 24: JSON legible con diff #}
+                    <td>
+                        <div class="small">{{ evento.antes|json_legible }}</div>
+                    </td>
+                    <td>
+                        <div class="small">{{ evento.antes|diff_legible:evento.despues }}</div>
+                    </td>
                 </tr>
             {% empty %}
                 <tr>
@@ -118,8 +128,15 @@
     </table>
 </div>
 
-<a class="btn btn-outline-secondary"
-   href="{% url 'asistencia:historial' %}">
-    Volver al historial
-</a>
+{# Mejora 25: botón de volver inteligente #}
+{% if volver %}
+    <a class="btn btn-outline-secondary" href="{{ volver }}">
+        Volver
+    </a>
+{% else %}
+    <a class="btn btn-outline-secondary"
+       href="{% url 'asistencia:historial' %}">
+        Volver al historial
+    </a>
+{% endif %}
 {% endblock %}

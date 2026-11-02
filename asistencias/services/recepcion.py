@@ -187,3 +187,45 @@ def validar_asistencia(*, usuario, token, registro_id):
     )
 
     return registro
+
+
+@transaction.atomic
+def validar_multiples(*, usuario, token, registro_ids):
+    _exigir_permiso(
+        usuario,
+        "asistencias.validar_registro",
+        "No tenés permiso para validar registros.",
+    )
+    _validar_sesion_edicion(usuario, token)
+
+    registros = (
+        RegistroAsistencia.objects.select_for_update()
+        .select_related("designacion", "marca")
+        .filter(
+            pk__in=registro_ids,
+            estado_registro=RegistroAsistencia.Estado.BORRADOR,
+        )
+    )
+
+    validados = 0
+
+    for registro in registros:
+        _validar_periodo_abierto(registro.fecha)
+        registro.full_clean()
+        _validar_licencia(registro)
+
+        antes = _datos_registro(registro)
+        registro.estado_registro = RegistroAsistencia.Estado.VALIDADO
+        registro.actualizado_por = usuario
+        registro.save()
+
+        EventoAsistencia.objects.create(
+            asistencia=registro,
+            usuario=usuario,
+            accion=EventoAsistencia.Accion.VALIDAR,
+            antes=antes,
+            despues=_datos_registro(registro),
+        )
+        validados += 1
+
+    return validados

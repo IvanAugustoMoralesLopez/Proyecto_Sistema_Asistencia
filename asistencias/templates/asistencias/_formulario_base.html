@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-{{ ancho|default:'8' }}">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h3 mb-4">{{ titulo }}</h1>
+
+                {% block antes_form %}{% endblock %}
+
+                <form method="post">
+                    {% csrf_token %}
+                    {% block campos_ocultos %}{% endblock %}
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors }}
+                        </div>
+                    {% endif %}
+
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label"
+                                   for="{{ field.id_for_label }}">
+                                {{ field.label }}
+                            </label>
+
+                            {{ field }}
+
+                            {% if field.help_text %}
+                                <div class="form-text">
+                                    {{ field.help_text }}
+                                </div>
+                            {% endif %}
+
+                            {% for error in field.errors %}
+                                <div class="text-danger small">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+
+                    {% block despues_campos %}{% endblock %}
+
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-{{ btn_clase|default:'primary' }}"
+                                type="submit">
+                            {{ btn_texto|default:"Guardar" }}
+                        </button>
+
+                        <a class="btn btn-outline-secondary"
+                           href="{{ url_cancelar }}">
+                            Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

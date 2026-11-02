@@ -1,9 +1,22 @@
 {% extends "base.html" %}
+{% load asistencias_extras %}
 
 {% block title %}Historial de asistencia{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-4">Historial de asistencia</h1>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3">Historial de asistencia</h1>
+
+    <div class="d-flex gap-2">
+        {# Mejora 18: botón de exportación CSV #}
+        {% if perms.asistencias.view_registroasistencia %}
+            <a class="btn btn-outline-success"
+               href="{% url 'asistencia:exportar_csv' %}{% if querystring %}?{{ querystring }}{% endif %}">
+                Exportar CSV
+            </a>
+        {% endif %}
+    </div>
+</div>
 
 <form method="get" class="card card-body mb-4">
     <div class="row g-3">
@@ -33,10 +46,23 @@
     </div>
 </form>
 
+{# Mejora 2: validación masiva con checkboxes #}
+{% if perms.asistencias.validar_registro %}
+<form method="post" action="{% url 'asistencia:validar_multiples' %}" id="form-validar-masivo">
+    {% csrf_token %}
+{% endif %}
+
 <div class="table-responsive">
     <table class="table table-striped align-middle">
         <thead class="table-dark">
             <tr>
+                {% if perms.asistencias.validar_registro %}
+                    <th style="width: 2.5rem;">
+                        <input type="checkbox" id="seleccionar-todos"
+                               class="form-check-input"
+                               title="Seleccionar todos los borradores">
+                    </th>
+                {% endif %}
                 <th>Fecha</th>
                 <th>DNI</th>
                 <th>Docente</th>
@@ -50,11 +76,25 @@
         <tbody>
             {% for registro in pagina %}
                 <tr>
+                    {% if perms.asistencias.validar_registro %}
+                        <td>
+                            {% if registro.estado_registro == "BORRADOR" %}
+                                <input type="checkbox"
+                                       class="form-check-input check-validar"
+                                       name="registro_ids"
+                                       value="{{ registro.pk }}">
+                            {% endif %}
+                        </td>
+                    {% endif %}
                     <td>{{ registro.fecha|date:"d/m/Y" }}</td>
                     <td>{{ registro.designacion.persona.dni }}</td>
                     <td>{{ registro.designacion.persona.apellido_nombre }}</td>
                     <td>{{ registro.marca.codigo }}</td>
-                    <td>{{ registro.get_estado_registro_display }}</td>
+                    <td>
+                        <span class="badge text-bg-{% if registro.estado_registro == 'VALIDADO' %}success{% else %}secondary{% endif %}">
+                            {{ registro.get_estado_registro_display }}
+                        </span>
+                    </td>
                     <td>
                         {% include "asistencias/includes/badge_justificacion.html" %}
                     </td>
@@ -63,12 +103,12 @@
                     </td>
                     <td class="text-nowrap">
                         <a class="btn btn-sm btn-outline-primary"
-                           href="{% url 'asistencia:detalle_asistencia' registro.pk %}">
+                           href="{% url 'asistencia:detalle_asistencia' registro.pk %}?desde={% url 'asistencia:historial' %}{% if querystring %}%3F{{ querystring }}{% endif %}">
                             Ver
                         </a>
                         {% if perms.asistencias.change_registroasistencia %}
                             <a class="btn btn-sm btn-outline-secondary"
-                               href="{% url 'asistencia:editar_asistencia' registro.pk %}">
+                               href="{% url 'asistencia:editar_asistencia' registro.pk %}?volver={% url 'asistencia:historial' %}{% if querystring %}%3F{{ querystring }}{% endif %}">
                                 Editar
                             </a>
                         {% endif %}
@@ -92,7 +132,7 @@
                 </tr>
             {% empty %}
                 <tr>
-                    <td colspan="8" class="text-center py-4">
+                    <td colspan="{% if perms.asistencias.validar_registro %}9{% else %}8{% endif %}" class="text-center py-4">
                         No se encontraron registros.
                     </td>
                 </tr>
@@ -101,31 +141,57 @@
     </table>
 </div>
 
-<nav aria-label="Paginación del historial">
-    <ul class="pagination">
-        {% if pagina.has_previous %}
-            <li class="page-item">
-                <a class="page-link"
-                   href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.previous_page_number }}">
-                    Anterior
-                </a>
-            </li>
-        {% endif %}
+{% if perms.asistencias.validar_registro %}
+    <div class="mb-3" id="barra-validacion-masiva" style="display: none;">
+        <button class="btn btn-success" type="submit">
+            Validar seleccionados
+        </button>
+        <span class="text-secondary ms-2" id="cantidad-seleccionados"></span>
+    </div>
+</form>
+{% endif %}
 
-        <li class="page-item active">
-            <span class="page-link">
-                Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}
-            </span>
-        </li>
+{# Mejora 20: paginación con números #}
+{% include "asistencias/includes/paginacion.html" %}
+{% endblock %}
 
-        {% if pagina.has_next %}
-            <li class="page-item">
-                <a class="page-link"
-                   href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.next_page_number }}">
-                    Siguiente
-                </a>
-            </li>
-        {% endif %}
-    </ul>
-</nav>
+{% block extra_js %}
+<script>
+(function () {
+    var masterCheckbox = document.getElementById("seleccionar-todos");
+    var barra = document.getElementById("barra-validacion-masiva");
+    var contadorSpan = document.getElementById("cantidad-seleccionados");
+
+    if (!masterCheckbox) return;
+
+    function checkboxes() {
+        return document.querySelectorAll(".check-validar");
+    }
+
+    function actualizarBarra() {
+        var seleccionados = document.querySelectorAll(".check-validar:checked").length;
+
+        if (barra) {
+            barra.style.display = seleccionados > 0 ? "block" : "none";
+        }
+
+        if (contadorSpan) {
+            contadorSpan.textContent = seleccionados + " registro(s) seleccionado(s)";
+        }
+    }
+
+    masterCheckbox.addEventListener("change", function () {
+        checkboxes().forEach(function (cb) {
+            cb.checked = masterCheckbox.checked;
+        });
+        actualizarBarra();
+    });
+
+    document.addEventListener("change", function (e) {
+        if (e.target.classList.contains("check-validar")) {
+            actualizarBarra();
+        }
+    });
+})();
+</script>
 {% endblock %}

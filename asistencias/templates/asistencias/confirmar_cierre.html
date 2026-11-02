@@ -14,6 +14,38 @@
                     hasta que una persona autorizada lo reabra.
                 </div>
 
+                {# Mejora 15: resumen antes de cerrar #}
+                {% if resumen %}
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h6 class="card-title">Resumen del período</h6>
+                            <div class="row text-center">
+                                <div class="col">
+                                    <div class="fw-bold fs-5">{{ resumen.total }}</div>
+                                    <small class="text-secondary">Total</small>
+                                </div>
+                                <div class="col">
+                                    <div class="fw-bold fs-5 text-success">{{ resumen.validados }}</div>
+                                    <small class="text-secondary">Validados</small>
+                                </div>
+                                <div class="col">
+                                    <div class="fw-bold fs-5 {% if resumen.borradores %}text-warning{% endif %}">
+                                        {{ resumen.borradores }}
+                                    </div>
+                                    <small class="text-secondary">Borradores</small>
+                                </div>
+                            </div>
+                            {% if resumen.borradores %}
+                                <div class="alert alert-info mt-3 mb-0 small">
+                                    Hay {{ resumen.borradores }} registro(s)
+                                    sin validar. Podés cerrar igual, pero
+                                    conviene revisarlos primero.
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+
                 <p>
                     Verificá que todos los registros del período estén
                     revisados y validados antes de continuar.
@@ -37,7 +69,8 @@
                         </div>
                     {% endfor %}
 
-                    <button class="btn btn-danger" type="submit">
+                    <button class="btn btn-danger" type="submit"
+                            onclick="return confirm('¿Confirmar el cierre del período?');">
                         Confirmar cierre
                     </button>
 

@@ -32,6 +32,8 @@ se sigue importando igual: este archivo reexporta la misma API pública.
 from .calendario import (
     ANIO_MAXIMO,
     ANIO_MINIMO,
+    cargar_calendario_masivo,
+    copiar_calendario,
     eliminar_dia_no_laborable,
     guardar_dia_no_laborable,
     registros_cargados,
@@ -41,6 +43,7 @@ from .recepcion import (
     TRANSICIONES_JUSTIFICACION,
     recepcionar_formulario,
     validar_asistencia,
+    validar_multiples,
 )
 from .registro import PlanillaConErrores, guardar_asistencia, guardar_planilla
 from .reglas import (
@@ -81,4 +84,7 @@ __all__ = [
     "guardar_dia_no_laborable",
     "eliminar_dia_no_laborable",
     "registros_cargados",
+    "copiar_calendario",
+    "cargar_calendario_masivo",
+    "validar_multiples",
 ]

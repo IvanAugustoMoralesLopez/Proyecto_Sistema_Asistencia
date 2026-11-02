@@ -26,15 +26,24 @@
                 Planilla rápida
             </a>
             <a class="btn btn-outline-primary"
-               href="{% url 'asistencia:crear_asistencia' %}">
+               href="{% url 'asistencia:crear_asistencia' %}?fecha={{ fecha_seleccionada }}">
                 Nueva asistencia
             </a>
         {% endif %}
     </div>
 </div>
 
+{# Mejora 3: navegación rápida entre días #}
 <form method="get" class="card card-body mb-3">
     <div class="row align-items-end g-3">
+        <div class="col-auto">
+            <a class="btn btn-outline-secondary"
+               href="?fecha={{ fecha_anterior }}"
+               title="Día anterior">
+                &laquo;
+            </a>
+        </div>
+
         <div class="col-md-4">
             <label class="form-label" for="fecha">
                 Fecha
@@ -49,6 +58,14 @@
             >
         </div>
 
+        <div class="col-auto">
+            <a class="btn btn-outline-secondary"
+               href="?fecha={{ fecha_siguiente }}"
+               title="Día siguiente">
+                &raquo;
+            </a>
+        </div>
+
         <div class="col-md-3">
             <button class="btn btn-secondary" type="submit">
                 Consultar
@@ -56,6 +73,46 @@
         </div>
     </div>
 </form>
+
+{# Mejora 4: resumen visual del día #}
+{% if registros %}
+    <div class="row g-3 mb-3">
+        <div class="col-auto">
+            <div class="card text-center p-2 px-3">
+                <div class="fw-bold fs-5">{{ total }}</div>
+                <small class="text-secondary">Total</small>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card text-center p-2 px-3 border-success">
+                <div class="fw-bold fs-5 text-success">{{ presentes }}</div>
+                <small class="text-secondary">Presentes</small>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card text-center p-2 px-3 border-danger">
+                <div class="fw-bold fs-5 text-danger">{{ inasistencias }}</div>
+                <small class="text-secondary">Inasistencias</small>
+            </div>
+        </div>
+        {% if sin_validar %}
+            <div class="col-auto">
+                <div class="card text-center p-2 px-3 border-warning">
+                    <div class="fw-bold fs-5 text-warning">{{ sin_validar }}</div>
+                    <small class="text-secondary">Sin validar</small>
+                </div>
+            </div>
+        {% endif %}
+        {% if pendientes_formulario %}
+            <div class="col-auto">
+                <div class="card text-center p-2 px-3 border-info">
+                    <div class="fw-bold fs-5 text-info">{{ pendientes_formulario }}</div>
+                    <small class="text-secondary">Pendientes formulario</small>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endif %}
 
 {% if jornada_cerrada %}
     <div class="alert alert-secondary">
@@ -65,9 +122,11 @@
         motivo.
     </div>
 {% elif puede_cerrar_jornada %}
+    {# Mejora 5: confirmación antes de cerrar jornada #}
     <form method="post"
           action="{% url 'asistencia:cerrar_jornada' %}"
-          class="mb-3">
+          class="mb-3"
+          onsubmit="return confirm('¿Cerrar la jornada del {{ fecha_seleccionada }}? Esta acción no se puede deshacer.');">
         {% csrf_token %}
         <input type="hidden" name="fecha" value="{{ fecha_seleccionada }}">
         <button class="btn btn-outline-dark" type="submit">
@@ -119,7 +178,7 @@
                     </td>
                     <td>{{ registro.marca.codigo }} — {{ registro.marca.descripcion }}</td>
                     <td>
-                        <span class="badge text-bg-secondary">
+                        <span class="badge text-bg-{% if registro.estado_registro == 'VALIDADO' %}success{% else %}secondary{% endif %}">
                             {{ registro.get_estado_registro_display }}
                         </span>
                     </td>
@@ -128,14 +187,22 @@
                     </td>
                     <td class="text-nowrap">
                         <a class="btn btn-sm btn-outline-primary"
-                           href="{% url 'asistencia:detalle_asistencia' registro.pk %}">
+                           href="{% url 'asistencia:detalle_asistencia' registro.pk %}?desde={% url 'asistencia:registro_diario' %}%3Ffecha%3D{{ fecha_seleccionada }}">
                             Ver
                         </a>
 
                         {% if perms.asistencias.change_registroasistencia %}
                             <a class="btn btn-sm btn-outline-secondary"
-                               href="{% url 'asistencia:editar_asistencia' registro.pk %}">
+                               href="{% url 'asistencia:editar_asistencia' registro.pk %}?volver={% url 'asistencia:registro_diario' %}%3Ffecha%3D{{ fecha_seleccionada }}">
                                 Editar
+                            </a>
+                        {% endif %}
+
+                        {# Mejora 11: recepcionar directo desde el registro diario #}
+                        {% if registro.marca.computa_inasistencia and registro.estado_justificacion != "JUSTIFICADA" and registro.estado_justificacion != "NO_APLICA" and perms.asistencias.recepcionar_formulario %}
+                            <a class="btn btn-sm btn-outline-success"
+                               href="{% url 'asistencia:recepcionar_formulario' registro.pk %}">
+                                Recepcionar
                             </a>
                         {% endif %}
                     </td>

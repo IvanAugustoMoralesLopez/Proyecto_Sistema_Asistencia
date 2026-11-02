@@ -1,0 +1,10 @@
+{% extends "asistencias/_formulario_base.html" %}
+
+{% block antes_form %}
+<p class="text-secondary">
+    Copia todos los días no laborables de un año a otro.
+    Las fechas que ya existan en el destino no se duplican.
+    El 29 de febrero se omite si el año destino no es
+    bisiesto.
+</p>
+{% endblock %}

@@ -13,10 +13,22 @@
     </div>
 
     {% if perms.asistencias.add_dianolaborable %}
-        <a class="btn btn-primary"
-           href="{% url 'asistencia:crear_dia_no_laborable' %}">
-            Nuevo día
-        </a>
+        <div class="d-flex gap-2">
+            <a class="btn btn-primary"
+               href="{% url 'asistencia:crear_dia_no_laborable' %}">
+                Nuevo día
+            </a>
+            {# Mejora 12: carga masiva #}
+            <a class="btn btn-outline-primary"
+               href="{% url 'asistencia:cargar_masivo' %}">
+                Carga masiva
+            </a>
+            {# Mejora 13: copiar calendario #}
+            <a class="btn btn-outline-secondary"
+               href="{% url 'asistencia:copiar_calendario' %}">
+                Copiar año
+            </a>
+        </div>
     {% endif %}
 </div>
 
@@ -58,7 +70,16 @@
                         </a>
                     </td>
                     <td>{{ dia.fecha|date:"l" }}</td>
-                    <td>{{ dia.get_tipo_display }}</td>
+                    <td>
+                        {# Mejora 14: badges de colores por tipo #}
+                        {% if dia.tipo == "FERIADO" %}
+                            <span class="badge text-bg-danger">{{ dia.get_tipo_display }}</span>
+                        {% elif dia.tipo == "ASUETO" %}
+                            <span class="badge text-bg-warning">{{ dia.get_tipo_display }}</span>
+                        {% else %}
+                            <span class="badge text-bg-info">{{ dia.get_tipo_display }}</span>
+                        {% endif %}
+                    </td>
                     <td>{{ dia.descripcion|default:"—" }}</td>
                     <td>
                         {% if perms.asistencias.change_dianolaborable %}

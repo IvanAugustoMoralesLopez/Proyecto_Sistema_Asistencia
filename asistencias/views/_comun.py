@@ -4,12 +4,28 @@ edición, mensajes de error legibles, y los filtros y la paginación que
 usan Historial y Recepción de formularios.
 """
 
+import functools
 import uuid
 
+from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.views.decorators.http import require_http_methods
 
 from ..services import adquirir_sesion_edicion
+
+
+def vista_protegida(permiso, *, methods=None):
+    """login_required + permission_required + métodos HTTP en una línea."""
+    def decorar(view_func):
+        decorada = view_func
+        if methods:
+            decorada = require_http_methods(methods)(decorada)
+        decorada = permission_required(permiso, raise_exception=True)(decorada)
+        decorada = login_required(decorada)
+        functools.update_wrapper(decorada, view_func)
+        return decorada
+    return decorar
 
 
 def _token_edicion(request):

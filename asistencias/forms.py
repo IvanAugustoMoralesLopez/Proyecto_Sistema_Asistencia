@@ -192,6 +192,12 @@ class FiltroAsistenciaForm(forms.Form):
         .order_by("carrera__nombre", "nombre"),
         empty_label="Todas las materias",
     )
+    estado_registro = forms.ChoiceField(
+        required=False,
+        label="Estado",
+        choices=[("", "Todos los estados")]
+        + RegistroAsistencia.Estado.choices,
+    )
     estado_justificacion = forms.ChoiceField(
         required=False,
         label="Justificación",
@@ -373,3 +379,66 @@ class ReaperturaMensualForm(forms.Form):
         ),
         help_text="El motivo debe tener al menos 10 caracteres.",
     )
+
+
+class CargaMasivaCalendarioForm(forms.Form):
+    fechas = forms.CharField(
+        widget=forms.Textarea(
+            attrs={
+                "rows": 10,
+                "class": "form-control",
+                "placeholder": (
+                    "Una fecha por línea (dd/mm/aaaa o aaaa-mm-dd).\n"
+                    "Opcionalmente, después de la fecha, una descripción.\n\n"
+                    "Ejemplo:\n"
+                    "01/01/2027 Año Nuevo\n"
+                    "24/03/2027 Día de la Memoria\n"
+                    "02/04/2027 Día del Veterano"
+                ),
+            }
+        ),
+        label="Fechas",
+        help_text="Una fecha por línea. Las líneas vacías y las que empiezan con # se ignoran.",
+    )
+    tipo = forms.ChoiceField(
+        choices=DiaNoLaborable.Tipo.choices,
+        initial=DiaNoLaborable.Tipo.FERIADO,
+        label="Tipo por defecto",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            clase = (
+                "form-select"
+                if isinstance(field.widget, forms.Select)
+                else "form-control"
+            )
+            field.widget.attrs.setdefault("class", clase)
+
+
+class CopiarCalendarioForm(forms.Form):
+    anio_origen = forms.IntegerField(
+        min_value=ANIO_MINIMO,
+        max_value=ANIO_MAXIMO,
+        label="Año de origen",
+    )
+    anio_destino = forms.IntegerField(
+        min_value=ANIO_MINIMO,
+        max_value=ANIO_MAXIMO,
+        label="Año de destino",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.setdefault("class", "form-control")
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("anio_origen") == cleaned.get("anio_destino"):
+            self.add_error(
+                "anio_destino",
+                "El año destino debe ser distinto del origen.",
+            )
+        return cleaned
