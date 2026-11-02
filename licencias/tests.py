@@ -458,4 +458,99 @@ class NroFormularioTests(TestCase):
             desde=date(2026, 3, 2), hasta=date(2026, 3, 4), nro_formulario='F-9',
         )
         respuesta = self.client.get('/licencias/editar/%d/' % licencia.pk)
-        self.assertContains(respuesta, 'value="F-9"')
+        self.assertContains(respuesta, 'value="F-9"') 
+
+
+class EmitirDisposicionesTests(TestCase):
+    """RF-16 / RN-10 / RN-11: emisión mensual de disposiciones."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='A-1', articulo='1', tipo_licencia='Uno',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo',
+        )
+
+    def _licencia(self, dni, nombre, desde, hasta, formulario='F-1', **extra):
+        persona = Persona.objects.create(dni=dni, apellido_nombre=nombre)
+        designacion = Designacion.objects.create(
+            persona=persona, cargo=self.cargo, desde=date(2026, 1, 1),
+        )
+        return LicenciaOtorgada.objects.create(
+            designacion=designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=desde, hasta=hasta, nro_formulario=formulario, **extra
+        )
+
+    def _emitir(self, anio=2026, mes=10, oficina=None):
+        from .services import emitir_disposiciones_mes
+        return emitir_disposiciones_mes(anio, mes, oficina)
+
+    def test_ordena_alfabeticamente_y_numera_en_forma_correlativa(self):
+        zapata = self._licencia('99000001', 'Zapata, Luis', date(2026, 10, 5), date(2026, 10, 7))
+        alvarez = self._licencia('99000002', 'Álvarez, Ana', date(2026, 10, 12), date(2026, 10, 13))
+        benitez = self._licencia('99000003', 'Benitez, Rosa', date(2026, 10, 1), date(2026, 10, 2))
+        resultado = self._emitir()
+        self.assertEqual(
+            [(numero, lic.pk) for numero, lic in resultado['emitidas']],
+            [(1, alvarez.pk), (2, benitez.pk), (3, zapata.pk)],
+        )
+
+    def test_guarda_los_datos_de_la_disposicion(self):
+        lic = self._licencia('99000001', 'Perez, Ana', date(2026, 10, 5), date(2026, 10, 7))
+        self._emitir()
+        lic.refresh_from_db()
+        self.assertEqual(
+            (lic.disp_tipo, lic.disp_oficina, lic.disp_numero, lic.disp_anio),
+            ('Disposición', '1452', '1', 2026),
+        )
+
+    def test_omite_las_licencias_sin_numero_de_formulario(self):
+        self._licencia('99000001', 'Perez, Ana', date(2026, 10, 5), date(2026, 10, 7))
+        sin_none = self._licencia(
+            '99000002', 'Gomez, Luis', date(2026, 10, 5), date(2026, 10, 7), formulario=None,
+        )
+        sin_vacio = self._licencia(
+            '99000003', 'Ruiz, Eva', date(2026, 10, 5), date(2026, 10, 7), formulario='',
+        )
+        resultado = self._emitir()
+        self.assertEqual(len(resultado['emitidas']), 1)
+        self.assertCountEqual(
+            [lic.pk for lic in resultado['omitidas']], [sin_none.pk, sin_vacio.pk],
+        )
+        sin_none.refresh_from_db()
+        self.assertIsNone(sin_none.disp_numero)
+
+    def test_continua_la_numeracion_de_la_oficina_y_el_anio(self):
+        self._licencia(
+            '99000001', 'Perez, Ana', date(2026, 10, 5), date(2026, 10, 7),
+            disp_tipo='Disposición', disp_oficina='1452', disp_numero='5', disp_anio=2026,
+        )
+        self._licencia('99000002', 'Ruiz, Eva', date(2026, 10, 12), date(2026, 10, 13))
+        resultado = self._emitir()
+        self.assertEqual([numero for numero, _ in resultado['emitidas']], [6])
+
+    def test_no_vuelve_a_numerar_lo_ya_emitido(self):
+        self._licencia('99000001', 'Perez, Ana', date(2026, 10, 5), date(2026, 10, 7))
+        self._emitir()
+        self.assertEqual(self._emitir()['emitidas'], [])
+
+    def test_no_incluye_licencias_de_otros_meses(self):
+        self._licencia('99000001', 'Perez, Ana', date(2026, 11, 2), date(2026, 11, 4))
+        self.assertEqual(self._emitir()['emitidas'], [])
+
+    def test_mes_invalido_da_error(self):
+        with self.assertRaises(ValueError):
+            self._emitir(mes=13)
+
+    def test_usa_la_oficina_de_los_parametros_del_sistema(self):
+        from reportes.models import ParametroSistema
+        parametros = ParametroSistema.obtener()
+        parametros.codigo_oficina = '2000'
+        parametros.save()
+        lic = self._licencia('99000001', 'Perez, Ana', date(2026, 10, 5), date(2026, 10, 7))
+        self._emitir()
+        lic.refresh_from_db()
+        self.assertEqual(lic.disp_oficina, '2000')
