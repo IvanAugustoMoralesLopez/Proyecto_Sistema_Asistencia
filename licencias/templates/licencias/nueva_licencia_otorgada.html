@@ -1,23 +1,120 @@
+
 {% extends "base.html" %}
-{% load static %}
 
 {% block title %}Nueva licencia otorgada{% endblock %}
-{% block seccion %}nueva-licencia{% endblock %}
-
-{% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/licencias.css' %}">
-{% endblock %}
+{% block seccion %}informe-licencias{% endblock %}
 
 {% block content %}
-<div class="encabezado-planilla">
-    <div class="encabezado-planilla__texto">
-        <p class="ruta">Administración / Licencias / Nueva licencia</p>
-        <h1 class="encabezado-planilla__titulo">Registrar licencia otorgada</h1>
-        <p class="encabezado-planilla__subtitulo">
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <p class="ruta mb-1">Administración / Licencias / Nuevo registro</p>
+        <h1 class="h3 mb-1">Registrar licencia otorgada</h1>
+        <p class="text-secondary mb-0">
             Seleccione la designación docente y complete los datos de la licencia.
         </p>
     </div>
 </div>
 
-{% include "licencias/_formulario_licencia.html" with modo="nueva" %}
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Nueva licencia</h2>
+    </div>
+
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            <h3 class="h6 border-bottom pb-2">Datos de la licencia</h3>
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    {{ form.designacion.label_tag }}
+                    {{ form.designacion }}
+                    {% for error in form.designacion.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                    {% endfor %}
+                </div>
+                <div class="col-md-6">
+                    {{ form.articulo.label_tag }}
+                    {{ form.articulo }}
+                    {% for error in form.articulo.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                    {% endfor %}
+                </div>
+                <div class="col-md-6">
+                    {{ form.sit_rev.label_tag }}
+                    {{ form.sit_rev }}
+                </div>
+            </div>
+
+            <h3 class="h6 border-bottom pb-2">Período y justificación</h3>
+            <div class="row g-3 mb-4">
+                <div class="col-md-3">
+                    {{ form.desde.label_tag }}
+                    {{ form.desde }}
+                </div>
+                <div class="col-md-3">
+                    {{ form.hasta.label_tag }}
+                    {{ form.hasta }}
+                </div>
+                <div class="col-md-3">
+                    {{ form.justifica.label_tag }}
+                    {{ form.justifica }}
+                </div>
+                <div class="col-12">
+                    {{ form.observaciones.label_tag }}
+                    {{ form.observaciones }}
+                </div>
+            </div>
+
+            <h3 class="h6 border-bottom pb-2">Disposición administrativa</h3>
+            <div class="row g-3 mb-4">
+                <div class="col-md-3">
+                    {{ form.disp_tipo.label_tag }}
+                    {{ form.disp_tipo }}
+                </div>
+                <div class="col-md-3">
+                    {{ form.disp_oficina.label_tag }}
+                    {{ form.disp_oficina }}
+                </div>
+                <div class="col-md-3">
+                    {{ form.disp_numero.label_tag }}
+                    {{ form.disp_numero }}
+                </div>
+                <div class="col-md-3">
+                    {{ form.disp_anio.label_tag }}
+                    {{ form.disp_anio }}
+                </div>
+                <div class="col-md-6">
+                    {{ form.sello_regional_as.label_tag }}
+                    {{ form.sello_regional_as }}
+                </div>
+            </div>
+
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    {{ form.non_field_errors }}
+                </div>
+            {% endif %}
+
+            {% for field in form %}
+                {% for error in field.errors %}
+                    {% if field.name != "designacion" and field.name != "articulo" %}
+                        <div class="text-danger small">
+                            {{ field.label }}: {{ error }}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% endfor %}
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    Guardar licencia
+                </button>
+                <a class="btn btn-outline-secondary" href="{% url 'pantalla_licencias' %}">
+                    Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}

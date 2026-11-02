@@ -10,8 +10,8 @@ from django.views.decorators.http import require_http_methods
 
 from personal.models import Horario
 
-from .clasificacion import CategoriaSinPlanillaError
-from .dias import obtener_feriados
+from .clasificacion import CategoriaSinPlanillaError, PLANILLA_IL01, PLANILLA_IL02
+from .dias import mes_vecino, obtener_feriados
 from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm
 from .models import LicenciaArticulo, LicenciaOtorgada
 from .services import clasificar_planilla_licencia
@@ -49,7 +49,11 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
         desde__lte=ultimo_dia
     ).exclude(
         hasta__lt=primer_dia
-    ).select_related('designacion', 'articulo')
+    ).select_related(
+        'designacion__persona',
+        'designacion__espacio_curricular',
+        'articulo',
+    )
 
     desglose = []
     cache_horarios = {}
@@ -82,7 +86,12 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
 
         desglose.append({
             'dni_docente': lic.designacion.persona_id,
-            'espacio_curricular': lic.designacion.espacio_curricular_id,
+            'docente': lic.designacion.persona.apellido_nombre,
+            'espacio_curricular': (
+                lic.designacion.espacio_curricular.nombre
+                if lic.designacion.espacio_curricular
+                else None
+            ),
             'licencia_solicitada': f"{lic.articulo.articulo} - {lic.articulo.tipo_licencia}",
             'planilla': planilla_destino,
             'requiere_revision': requiere_revision,
@@ -92,25 +101,37 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
             'horas_descontadas': horas_afectadas,
         })
 
+    total_horas = sum(fila['horas_descontadas'] for fila in desglose)
+
+    # Una tabla por planilla: IL-01, IL-02 y las que no se pudieron clasificar.
+    grupos = []
+    for planilla, titulo in (
+        (PLANILLA_IL01, 'IL-01: licencias por salud (enfermedad, tratamiento y enfermedad familiar)'),
+        (PLANILLA_IL02, 'IL-02: razones particulares, exámenes, duelo, matrimonio y otras'),
+        (SIN_CLASIFICAR, 'Sin clasificar (requieren revisión)'),
+    ):
+        filas = [fila for fila in desglose if fila['planilla'] == planilla]
+        grupos.append({
+            'planilla': planilla,
+            'titulo': titulo,
+            'filas': filas,
+            'total_horas': sum(fila['horas_descontadas'] for fila in filas),
+        })
+
+    anio_anterior, mes_anterior = mes_vecino(anio, mes, -1)
+    anio_siguiente, mes_siguiente = mes_vecino(anio, mes, 1)
+
     return render(request, 'licencias/reporte_mensual.html', {
         'anio': anio,
         'mes': mes,
         'desglose': desglose,
-        })
-def _articulos_info():
-    """Datos de cada artículo para mostrar su tope y plazo al elegirlo en el formulario."""
-    return {
-        a.pk: {
-            'tope': a.tope_dias_anual,
-            'plazo': a.plazo,
-            'haberes': a.goce_haberes,
-            'planilla': a.get_categoria_informe_display(),
-        }
-        for a in LicenciaArticulo.objects.all()
-    }
+        'total_horas': total_horas,
+        'grupos': grupos,
+        'mes_anterior': {'anio': anio_anterior, 'mes': mes_anterior},
+        'mes_siguiente': {'anio': anio_siguiente, 'mes': mes_siguiente},
+    })
 
-
-@login_required
+@login_required 
 @permission_required("licencias.add_licenciaotorgada", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def nueva_licencia_otorgada(request):
@@ -133,7 +154,7 @@ def nueva_licencia_otorgada(request):
     return render(
         request,
         "licencias/nueva_licencia_otorgada.html",
-        {"form": form, "articulos_info": _articulos_info()}
+        {"form": form}
     )
 
 @login_required
@@ -229,6 +250,5 @@ def editar_licencia_otorgada(request, licencia_id):
         {
             "form": form,
             "licencia": licencia,
-            "articulos_info": _articulos_info(),
         },
     )
