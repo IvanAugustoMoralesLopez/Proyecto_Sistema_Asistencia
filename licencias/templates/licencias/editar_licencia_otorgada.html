@@ -104,8 +104,16 @@
                     {% for error in form.justifica.errors %}
                         <div class="text-danger small">{{ error }}</div>
                     {% endfor %}
-                </div>
+                </div> 
 
+                 <div class="col-md-3">
+                    {{ form.nro_formulario.label_tag }}
+                    {{ form.nro_formulario }}
+
+                    {% for error in form.nro_formulario.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                    {% endfor %}
+                </div>
                 <div class="col-12">
                     {{ form.observaciones.label_tag }}
                     {{ form.observaciones }}

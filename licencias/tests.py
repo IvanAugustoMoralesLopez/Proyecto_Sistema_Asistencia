@@ -424,11 +424,12 @@ class NroFormularioTests(TestCase):
             categoria_informe='Duelo', sit_rev='Titular',
             goce_haberes='Con goce de haberes', autoridad='Dirección',
             plazo='Según artículo',
-        )
+        ) 
         usuario = User.objects.create_user('cargador', password='x')
-        usuario.user_permissions.add(
-            Permission.objects.get(
-                content_type__app_label='licencias', codename='add_licenciaotorgada',
+        usuario.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label='licencias',
+                codename__in=['add_licenciaotorgada', 'change_licenciaotorgada'],
             )
         )
 
@@ -445,4 +446,16 @@ class NroFormularioTests(TestCase):
             'nro_formulario': 'F-1234',
         })
         self.assertEqual(respuesta.status_code, 302)
-        self.assertEqual(LicenciaOtorgada.objects.get().nro_formulario, 'F-1234')
+        self.assertEqual(LicenciaOtorgada.objects.get().nro_formulario, 'F-1234') 
+
+    def test_la_pantalla_de_alta_muestra_el_campo(self):
+        respuesta = self.client.get('/licencias/nueva/')
+        self.assertContains(respuesta, 'name="nro_formulario"')
+
+    def test_la_pantalla_de_edicion_muestra_el_numero_cargado(self):
+        licencia = LicenciaOtorgada.objects.create(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 3, 2), hasta=date(2026, 3, 4), nro_formulario='F-9',
+        )
+        respuesta = self.client.get('/licencias/editar/%d/' % licencia.pk)
+        self.assertContains(respuesta, 'value="F-9"')
