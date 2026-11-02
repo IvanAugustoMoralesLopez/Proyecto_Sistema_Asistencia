@@ -31,6 +31,7 @@
                                     <tr>
                                         <th>Docente</th>
                                         <th>Espacio curricular</th>
+                                        <th>Cargo</th>
                                         <th>Licencia</th>
                                         <th>Desde</th>
                                         <th>Hasta</th>
@@ -47,6 +48,7 @@
                                                 <br><small class="text-secondary">DNI {{ fila.dni_docente }}</small>
                                             </td>
                                             <td>{{ fila.espacio_curricular|default:"-" }}</td>
+                                            <td>{{ fila.cargo|default:"-" }}</td>
                                             <td>{{ fila.licencia_solicitada }}</td>
                                             <td>{{ fila.fecha_inicio|date:"d/m/Y" }}</td>
                                             <td>{{ fila.fecha_fin|date:"d/m/Y" }}</td>
@@ -58,7 +60,7 @@
 
                                 <tfoot>
                                     <tr class="table-light fw-semibold">
-                                        <td colspan="6" class="text-end">Subtotal de horas afectadas</td>
+                                        <td colspan="7" class="text-end">Subtotal de horas afectadas</td>
                                         <td class="text-end">{{ grupo.total_horas }}</td>
                                     </tr>
                                 </tfoot>
