@@ -10,6 +10,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
 from ..forms import CierreMensualForm, ReaperturaMensualForm
@@ -49,6 +50,10 @@ def cerrar_jornada(request):
 
 
 @login_required
+@permission_required(
+    "asistencias.view_registroasistencia",
+    raise_exception=True,
+)
 def lista_cierres(request):
     cierres = CierreMensual.objects.select_related(
         "cerrado_por",
@@ -91,7 +96,7 @@ def confirmar_cierre(request):
                 )
                 return redirect("asistencia:lista_cierres")
     else:
-        hoy = date.today()
+        hoy = timezone.localdate()
         form = CierreMensualForm(
             initial={"anio": hoy.year, "mes": hoy.month}
         )

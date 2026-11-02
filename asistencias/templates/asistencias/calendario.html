@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Calendario escolar{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3">Calendario escolar</h1>
+        <p class="text-secondary mb-0">
+            Feriados, asuetos y días inhábiles. Los sábados y domingos ya
+            son no laborables: no hace falta cargarlos.
+        </p>
+    </div>
+
+    {% if perms.asistencias.add_dianolaborable %}
+        <a class="btn btn-primary"
+           href="{% url 'asistencia:crear_dia_no_laborable' %}">
+            Nuevo día
+        </a>
+    {% endif %}
+</div>
+
+<div class="d-flex align-items-center gap-3 mb-3">
+    {% if anio_anterior %}
+        <a class="btn btn-sm btn-outline-secondary"
+           href="{% url 'asistencia:lista_calendario' %}?anio={{ anio_anterior }}">
+            &laquo; {{ anio_anterior }}
+        </a>
+    {% endif %}
+
+    <strong>{{ anio }}</strong>
+
+    {% if anio_siguiente %}
+        <a class="btn btn-sm btn-outline-secondary"
+           href="{% url 'asistencia:lista_calendario' %}?anio={{ anio_siguiente }}">
+            {{ anio_siguiente }} &raquo;
+        </a>
+    {% endif %}
+</div>
+
+<div class="table-responsive">
+    <table class="table table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>Fecha</th>
+                <th>Día</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for dia in dias %}
+                <tr>
+                    <td>
+                        <a href="{% url 'asistencia:registro_diario' %}?fecha={{ dia.fecha|date:'Y-m-d' }}">
+                            {{ dia.fecha|date:"d/m/Y" }}
+                        </a>
+                    </td>
+                    <td>{{ dia.fecha|date:"l" }}</td>
+                    <td>{{ dia.get_tipo_display }}</td>
+                    <td>{{ dia.descripcion|default:"—" }}</td>
+                    <td>
+                        {% if perms.asistencias.change_dianolaborable %}
+                            <a class="btn btn-sm btn-outline-primary"
+                               href="{% url 'asistencia:editar_dia_no_laborable' dia.pk %}">
+                                Editar
+                            </a>
+                        {% endif %}
+
+                        {% if perms.asistencias.delete_dianolaborable %}
+                            <form method="post"
+                                  class="d-inline"
+                                  action="{% url 'asistencia:eliminar_dia_no_laborable' dia.pk %}"
+                                  onsubmit="return confirm('¿Eliminar el {{ dia.fecha|date:"d/m/Y" }} del calendario?');">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-outline-danger"
+                                        type="submit">
+                                    Eliminar
+                                </button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-4">
+                        No hay días cargados en {{ anio }}.
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

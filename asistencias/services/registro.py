@@ -16,6 +16,7 @@ from .reglas import (
     _validar_jornada_abierta,
     _validar_licencia,
     _validar_marca_requisitos,
+    _validar_motivo_maximo,
     _validar_periodo_abierto,
     validar_dia_laborable,
 )
@@ -49,6 +50,7 @@ def guardar_asistencia(
         )
 
     _validar_sesion_edicion(usuario, token)
+    _validar_motivo_maximo(motivo)
 
     designacion = datos["designacion"]
     fecha = datos["fecha"]
@@ -174,6 +176,7 @@ def guardar_planilla(*, usuario, token, fecha, filas, motivo=""):
         "No tenés permiso para registrar asistencia.",
     )
     _validar_sesion_edicion(usuario, token)
+    _validar_motivo_maximo(motivo)
 
     if not filas:
         raise ValidationError("No marcaste ninguna asistencia.")

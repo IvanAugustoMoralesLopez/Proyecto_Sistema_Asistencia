@@ -6,20 +6,34 @@ comandos de `registro.py`, `recepcion.py` y `cierres.py` antes de
 guardar o cambiar un registro.
 """
 
+import os
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.exceptions import ValidationError, PermissionDenied
 
 from ..models import (
     CierreDiario,
     CierreMensual,
     DiaNoLaborable,
+    EventoAsistencia,
     RegistroAsistencia,
     licencia_cubre_fecha,
 )
 
 
 MOTIVO_MINIMO = 10
+
+# Largo de la columna donde el motivo queda en el evento: más texto que eso
+# lo rechaza la base de datos con un error 500.
+MOTIVO_MAXIMO = EventoAsistencia._meta.get_field("motivo").max_length
+
+
+def _validar_motivo_maximo(motivo):
+    if len(motivo or "") > MOTIVO_MAXIMO:
+        raise ValidationError(
+            f"El motivo no puede superar los {MOTIVO_MAXIMO} caracteres."
+        )
 
 # Días en los que existe obligación de marcado (lunes a viernes).
 DIAS_HABILES = (0, 1, 2, 3, 4)
@@ -71,6 +85,18 @@ def _validar_jornada_abierta(usuario, fecha, motivo):
         )
 
 
+def _fin_de_semana_habilitado():
+    """
+    Solo para pruebas manuales: con ASISTENCIA_PERMITIR_FIN_DE_SEMANA=1 en el
+    entorno (por ejemplo en el .env local) los sábados y domingos se tratan
+    como hábiles. Exige DEBUG, así que no se puede activar en producción.
+    """
+    return (
+        settings.DEBUG
+        and os.environ.get("ASISTENCIA_PERMITIR_FIN_DE_SEMANA") == "1"
+    )
+
+
 def motivo_dia_no_laborable(fecha):
     """
     Devuelve el motivo por el que la fecha no tiene obligación de marcado
@@ -86,7 +112,7 @@ def motivo_dia_no_laborable(fecha):
 
         return texto
 
-    if fecha.weekday() not in DIAS_HABILES:
+    if fecha.weekday() not in DIAS_HABILES and not _fin_de_semana_habilitado():
         return f"{fecha:%d/%m/%Y} es fin de semana"
 
     return None

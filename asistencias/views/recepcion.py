@@ -15,6 +15,10 @@ from ._comun import _aplicar_filtros, _asegurar_sesion_edicion, _mensaje_error, 
 
 
 @login_required
+@permission_required(
+    "asistencias.view_registroasistencia",
+    raise_exception=True,
+)
 def recepcion_formularios(request):
     """Inasistencias a la espera de formulario en papel (RF-09)."""
     form = FiltroRecepcionForm(request.GET or None)

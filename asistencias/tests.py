@@ -1,20 +1,23 @@
 import importlib
+import os
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest import mock
 
 from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.db import IntegrityError, connection, transaction
+from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
 from licencias.models import LicenciaArticulo, LicenciaOtorgada
-from personal.models import Cargo, Designacion, Persona
+from personal.models import Cargo, Carrera, Designacion, EspacioCurricular, Persona
 
 from .forms import RegistroAsistenciaForm
 from .models import (
@@ -35,12 +38,15 @@ from .services import (
     PlanillaConErrores,
     cerrar_dia,
     cerrar_mes,
+    eliminar_dia_no_laborable,
     guardar_asistencia,
+    guardar_dia_no_laborable,
     guardar_planilla,
     liberar_sesion_edicion,
     motivo_dia_no_laborable,
     reabrir_mes,
     recepcionar_formulario,
+    registros_cargados,
     renovar_sesion_edicion,
     validar_asistencia,
 )
@@ -50,7 +56,13 @@ User = get_user_model()
 
 # Permisos de esta app que se asignan a los usuarios de prueba de a uno:
 # los tests no dependen de qué perfiles los otorguen en producción.
-PERMISOS_CARGA = (
+PERMISOS_LECTURA = ("view_registroasistencia",)
+PERMISOS_CALENDARIO = (
+    "add_dianolaborable",
+    "change_dianolaborable",
+    "delete_dianolaborable",
+)
+PERMISOS_CARGA = PERMISOS_LECTURA + (
     "add_registroasistencia",
     "change_registroasistencia",
     "recepcionar_formulario",
@@ -64,7 +76,9 @@ PERMISOS_SUPERVISION = PERMISOS_CARGA + (
 
 
 def crear_usuario(username, permisos=()):
-    usuario = User.objects.create_user(username, password="x")
+    # Sin contraseña: los tests entran con force_login, y hashear una
+    # (PBKDF2) cuesta ~0,35 s por usuario, casi todo el tiempo de la suite.
+    usuario = User.objects.create_user(username)
     encontrados = Permission.objects.filter(
         content_type__app_label="asistencias",
         codename__in=permisos,
@@ -383,6 +397,35 @@ class DiasNoLaborablesTests(BaseAsistenciaTests):
         )
         self.assertContains(respuesta, "es fin de semana")
         self.assertContains(respuesta, "No hay obligación de marcado")
+
+
+class FinDeSemanaDePruebaTests(BaseAsistenciaTests):
+    """El interruptor de pruebas manuales solo actúa con la variable y DEBUG."""
+
+    VARIABLE = {"ASISTENCIA_PERMITIR_FIN_DE_SEMANA": "1"}
+
+    @override_settings(DEBUG=True)
+    @mock.patch.dict(os.environ, VARIABLE)
+    def test_con_la_variable_y_debug_el_fin_de_semana_es_habil(self):
+        self.assertIsNone(motivo_dia_no_laborable(SABADO))
+        self.assertIsNone(motivo_dia_no_laborable(DOMINGO))
+        self.guardar(fecha=DOMINGO)
+
+    @override_settings(DEBUG=True)
+    @mock.patch.dict(os.environ, VARIABLE)
+    def test_los_feriados_siguen_bloqueando(self):
+        DiaNoLaborable.objects.create(fecha=SABADO, descripcion="Feriado")
+        self.assertIn("feriado", motivo_dia_no_laborable(SABADO))
+
+    @override_settings(DEBUG=False)
+    @mock.patch.dict(os.environ, VARIABLE)
+    def test_sin_debug_la_variable_no_habilita_el_fin_de_semana(self):
+        self.assertIn("fin de semana", motivo_dia_no_laborable(SABADO))
+
+    @override_settings(DEBUG=True)
+    @mock.patch.dict(os.environ, {"ASISTENCIA_PERMITIR_FIN_DE_SEMANA": "0"})
+    def test_sin_la_variable_activa_el_fin_de_semana_sigue_bloqueado(self):
+        self.assertIn("fin de semana", motivo_dia_no_laborable(DOMINGO))
 
 
 class EdicionDeRegistroValidadoTests(BaseAsistenciaTests):
@@ -980,15 +1023,37 @@ class PermisosVistasTests(BaseAsistenciaTests):
             200,
         )
 
-    def test_las_consultas_siguen_abiertas_a_cualquier_usuario_logueado(self):
+    def urls_de_lectura(self):
+        return (
+            reverse("asistencia:registro_diario"),
+            reverse("asistencia:historial"),
+            reverse("asistencia:detalle_asistencia", args=[self.registro.pk]),
+            reverse("asistencia:recepcion_formularios"),
+            reverse("asistencia:lista_cierres"),
+        )
+
+    def test_sin_permiso_de_lectura_las_consultas_responden_403(self):
         self.entrar_como()
-        for nombre in (
-            "asistencia:registro_diario",
-            "asistencia:historial",
-            "asistencia:recepcion_formularios",
-            "asistencia:lista_cierres",
-        ):
-            self.assertEqual(self.client.get(reverse(nombre)).status_code, 200)
+        for url in self.urls_de_lectura():
+            self.assertEqual(self.client.get(url).status_code, 403, url)
+
+    def test_un_anonimo_es_enviado_al_login_en_las_consultas(self):
+        for url in self.urls_de_lectura():
+            respuesta = self.client.get(url)
+            self.assertEqual(respuesta.status_code, 302, url)
+            self.assertIn("login", respuesta.url, url)
+
+    def test_con_permiso_de_lectura_las_consultas_responden_200(self):
+        self.entrar_como(PERMISOS_LECTURA)
+        for url in self.urls_de_lectura():
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+
+    def test_el_permiso_de_lectura_no_habilita_cargar_ni_modificar(self):
+        self.entrar_como(PERMISOS_LECTURA)
+        self.assertEqual(
+            self.client.get(reverse("asistencia:crear_asistencia")).status_code,
+            403,
+        )
 
     def test_el_historial_oculta_validar_a_quien_no_puede_y_lo_muestra_a_quien_si(self):
         self.entrar_como(PERMISOS_CARGA)
@@ -1001,7 +1066,7 @@ class PermisosVistasTests(BaseAsistenciaTests):
         self.assertContains(respuesta, "Validar")
 
     def test_el_registro_diario_oculta_nueva_asistencia_a_quien_no_puede(self):
-        self.entrar_como()
+        self.entrar_como(PERMISOS_LECTURA)
         respuesta = self.client.get(
             reverse("asistencia:registro_diario"), {"fecha": LUNES.isoformat()}
         )
@@ -1012,11 +1077,617 @@ class PermisosVistasTests(BaseAsistenciaTests):
         from django.test import RequestFactory
 
         peticion = RequestFactory().get("/")
-        peticion.user = User.objects.create_superuser("root", password="x")
+        peticion.user = User.objects.create_superuser("root")
         modelo_admin = admin.site._registry[RegistroAsistencia]
         self.assertFalse(modelo_admin.has_add_permission(peticion))
         self.assertFalse(modelo_admin.has_change_permission(peticion))
         self.assertFalse(modelo_admin.has_delete_permission(peticion))
+
+
+class CalendarioServicioTests(BaseAsistenciaTests):
+    """RF-10: el calendario escolar se administra desde el sistema."""
+
+    OCTUBRE = date(2026, 10, 12)
+
+    def setUp(self):
+        super().setUp()
+        self.gestor = crear_usuario("gestor", PERMISOS_CALENDARIO)
+
+    def cargar(self, fecha=MARTES, **datos):
+        return guardar_dia_no_laborable(
+            usuario=self.gestor,
+            datos={
+                "fecha": fecha,
+                "tipo": DiaNoLaborable.Tipo.FERIADO,
+                "descripcion": "Feriado de prueba",
+                **datos,
+            },
+        )
+
+    def cerrar_septiembre(self):
+        cerrar_mes(usuario=self.usuario, token=self.token, anio=2026, mes=9)
+
+    def test_un_dia_cargado_deja_de_ser_laborable(self):
+        self.cargar(MARTES)
+
+        self.assertIn("feriado", motivo_dia_no_laborable(MARTES))
+        with self.assertRaises(ValidationError):
+            self.guardar(fecha=MARTES)
+
+    def test_modificar_cambia_el_tipo_y_la_descripcion(self):
+        dia = self.cargar(MARTES)
+
+        guardar_dia_no_laborable(
+            usuario=self.gestor,
+            datos={
+                "fecha": MARTES,
+                "tipo": DiaNoLaborable.Tipo.ASUETO,
+                "descripcion": "Asueto de prueba",
+            },
+            dia_id=dia.pk,
+        )
+
+        dia.refresh_from_db()
+        self.assertEqual(dia.tipo, DiaNoLaborable.Tipo.ASUETO)
+        self.assertEqual(dia.descripcion, "Asueto de prueba")
+        self.assertEqual(DiaNoLaborable.objects.count(), 1)
+
+    def test_eliminar_un_dia_vuelve_a_habilitar_la_fecha(self):
+        dia = self.cargar(MARTES)
+
+        eliminar_dia_no_laborable(usuario=self.gestor, dia_id=dia.pk)
+
+        self.assertIsNone(motivo_dia_no_laborable(MARTES))
+        self.guardar(fecha=MARTES)
+
+    def test_cada_operacion_exige_su_permiso(self):
+        dia = self.cargar(MARTES)
+        sin_permiso = crear_usuario("sin_permiso")
+
+        with self.assertRaises(PermissionDenied):
+            guardar_dia_no_laborable(
+                usuario=sin_permiso,
+                datos={"fecha": LUNES, "tipo": "FERIADO"},
+            )
+        with self.assertRaises(PermissionDenied):
+            guardar_dia_no_laborable(
+                usuario=sin_permiso,
+                datos={"fecha": MARTES, "tipo": "ASUETO"},
+                dia_id=dia.pk,
+            )
+        with self.assertRaises(PermissionDenied):
+            eliminar_dia_no_laborable(usuario=sin_permiso, dia_id=dia.pk)
+
+        dia.refresh_from_db()
+        self.assertEqual(dia.tipo, DiaNoLaborable.Tipo.FERIADO)
+
+    def test_un_dia_inexistente_da_un_error_de_validacion(self):
+        with self.assertRaises(ValidationError):
+            guardar_dia_no_laborable(
+                usuario=self.gestor,
+                datos={"fecha": MARTES, "tipo": "FERIADO"},
+                dia_id=99999,
+            )
+        with self.assertRaises(ValidationError):
+            eliminar_dia_no_laborable(usuario=self.gestor, dia_id=99999)
+
+    def test_no_se_carga_un_dia_en_un_periodo_cerrado(self):
+        self.cerrar_septiembre()
+
+        with self.assertRaises(ValidationError):
+            self.cargar(MARTES)
+        self.assertFalse(DiaNoLaborable.objects.exists())
+
+    def test_no_se_modifica_ni_se_elimina_un_dia_de_un_periodo_cerrado(self):
+        dia = self.cargar(MARTES)
+        self.cerrar_septiembre()
+
+        with self.assertRaises(ValidationError):
+            guardar_dia_no_laborable(
+                usuario=self.gestor,
+                datos={"fecha": MARTES, "tipo": "ASUETO"},
+                dia_id=dia.pk,
+            )
+        # Tampoco sirve moverlo a un mes abierto: sale de uno cerrado.
+        with self.assertRaises(ValidationError):
+            guardar_dia_no_laborable(
+                usuario=self.gestor,
+                datos={"fecha": self.OCTUBRE, "tipo": "FERIADO"},
+                dia_id=dia.pk,
+            )
+        with self.assertRaises(ValidationError):
+            eliminar_dia_no_laborable(usuario=self.gestor, dia_id=dia.pk)
+
+        dia.refresh_from_db()
+        self.assertEqual(dia.fecha, MARTES)
+        self.assertEqual(dia.tipo, DiaNoLaborable.Tipo.FERIADO)
+
+    def test_no_se_mueve_un_dia_hacia_un_periodo_cerrado(self):
+        dia = self.cargar(self.OCTUBRE)
+        self.cerrar_septiembre()
+
+        with self.assertRaises(ValidationError):
+            guardar_dia_no_laborable(
+                usuario=self.gestor,
+                datos={"fecha": MARTES, "tipo": "FERIADO"},
+                dia_id=dia.pk,
+            )
+
+        dia.refresh_from_db()
+        self.assertEqual(dia.fecha, self.OCTUBRE)
+
+    def test_cuenta_los_registros_ya_cargados_en_la_fecha(self):
+        self.assertEqual(registros_cargados(LUNES), 0)
+        self.guardar(fecha=LUNES)
+        self.assertEqual(registros_cargados(LUNES), 1)
+        self.assertEqual(registros_cargados(MARTES), 0)
+
+
+class CalendarioVistasTests(BaseAsistenciaTests):
+    def setUp(self):
+        super().setUp()
+        self.dia = DiaNoLaborable.objects.create(
+            fecha=MARTES, descripcion="Feriado de prueba"
+        )
+        self.gestor = crear_usuario(
+            "gestor", PERMISOS_LECTURA + PERMISOS_CALENDARIO
+        )
+        self.client.force_login(self.gestor)
+        self.lista = reverse("asistencia:lista_calendario")
+
+    def datos(self, **cambios):
+        datos = {
+            "fecha": "2026-10-12",
+            "tipo": "FERIADO",
+            "descripcion": "Feriado nuevo",
+        }
+        datos.update(cambios)
+        return datos
+
+    def mensajes(self, respuesta):
+        return [str(m) for m in get_messages(respuesta.wsgi_request)]
+
+    def test_la_lista_muestra_los_dias_del_anio(self):
+        respuesta = self.client.get(self.lista, {"anio": "2026"})
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Feriado de prueba")
+        self.assertContains(respuesta, "15/09/2026")
+
+    def test_la_lista_solo_muestra_el_anio_pedido(self):
+        DiaNoLaborable.objects.create(
+            fecha=date(2027, 5, 25), descripcion="Otro año"
+        )
+
+        respuesta = self.client.get(self.lista, {"anio": "2026"})
+
+        self.assertNotContains(respuesta, "Otro año")
+
+    def test_un_anio_mal_formado_no_da_error_500(self):
+        actual = timezone.localdate().year
+
+        for valor in ("abc", "1500", "99999999999999999999", ""):
+            respuesta = self.client.get(self.lista, {"anio": valor})
+            self.assertEqual(respuesta.status_code, 200, valor)
+            self.assertEqual(respuesta.context["anio"], actual, valor)
+
+    def test_la_consulta_exige_el_permiso_de_lectura(self):
+        self.client.force_login(crear_usuario("sinrol"))
+        self.assertEqual(self.client.get(self.lista).status_code, 403)
+
+        self.client.logout()
+        respuesta = self.client.get(self.lista)
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertIn("login", respuesta.url)
+
+    def test_quien_solo_consulta_no_ve_las_acciones(self):
+        self.client.force_login(crear_usuario("lector", PERMISOS_LECTURA))
+
+        respuesta = self.client.get(self.lista, {"anio": "2026"})
+
+        self.assertContains(respuesta, "Feriado de prueba")
+        self.assertNotContains(respuesta, "Nuevo día")
+        self.assertNotContains(
+            respuesta,
+            reverse("asistencia:editar_dia_no_laborable", args=[self.dia.pk]),
+        )
+        self.assertNotContains(
+            respuesta,
+            reverse("asistencia:eliminar_dia_no_laborable", args=[self.dia.pk]),
+        )
+
+    def test_el_registro_diario_enlaza_al_calendario(self):
+        respuesta = self.client.get(reverse("asistencia:registro_diario"))
+        self.assertContains(respuesta, self.lista)
+
+    def test_cargar_un_dia(self):
+        respuesta = self.client.post(
+            reverse("asistencia:crear_dia_no_laborable"), self.datos()
+        )
+
+        self.assertRedirects(respuesta, f"{self.lista}?anio=2026")
+        self.assertTrue(
+            DiaNoLaborable.objects.filter(
+                fecha=date(2026, 10, 12), descripcion="Feriado nuevo"
+            ).exists()
+        )
+
+    def test_una_fecha_repetida_se_informa_en_el_formulario(self):
+        respuesta = self.client.post(
+            reverse("asistencia:crear_dia_no_laborable"),
+            self.datos(fecha=MARTES.isoformat()),
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Ya hay un día cargado en esa fecha.")
+        self.assertEqual(DiaNoLaborable.objects.count(), 1)
+
+    def test_un_anio_fuera_de_rango_se_rechaza(self):
+        respuesta = self.client.post(
+            reverse("asistencia:crear_dia_no_laborable"),
+            self.datos(fecha="1999-12-25"),
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "El año debe estar entre 2000 y 2100.")
+        self.assertEqual(DiaNoLaborable.objects.count(), 1)
+
+    def test_cargar_en_un_periodo_cerrado_se_informa_sin_guardar(self):
+        cerrar_mes(usuario=self.usuario, token=self.token, anio=2026, mes=9)
+
+        respuesta = self.client.post(
+            reverse("asistencia:crear_dia_no_laborable"),
+            self.datos(fecha="2026-09-16"),
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertTrue(
+            any("período está cerrado" in t for t in self.mensajes(respuesta))
+        )
+        self.assertEqual(DiaNoLaborable.objects.count(), 1)
+
+    def test_avisa_si_ya_habia_asistencias_cargadas_ese_dia(self):
+        self.guardar(fecha=LUNES)
+
+        respuesta = self.client.post(
+            reverse("asistencia:crear_dia_no_laborable"),
+            self.datos(fecha=LUNES.isoformat()),
+        )
+
+        self.assertRedirects(respuesta, f"{self.lista}?anio=2026")
+        self.assertTrue(
+            any("registro(s) de asistencia" in t for t in self.mensajes(respuesta))
+        )
+
+    def test_el_formulario_de_edicion_muestra_la_fecha_cargada(self):
+        respuesta = self.client.get(
+            reverse("asistencia:editar_dia_no_laborable", args=[self.dia.pk])
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'value="2026-09-15"')
+
+    def test_editar_un_dia(self):
+        respuesta = self.client.post(
+            reverse("asistencia:editar_dia_no_laborable", args=[self.dia.pk]),
+            self.datos(
+                fecha=MARTES.isoformat(),
+                tipo="ASUETO",
+                descripcion="Asueto editado",
+            ),
+        )
+
+        self.assertRedirects(respuesta, f"{self.lista}?anio=2026")
+        self.dia.refresh_from_db()
+        self.assertEqual(self.dia.tipo, "ASUETO")
+        self.assertEqual(self.dia.descripcion, "Asueto editado")
+
+    def test_editar_un_dia_inexistente_responde_404(self):
+        respuesta = self.client.get(
+            reverse("asistencia:editar_dia_no_laborable", args=[99999])
+        )
+        self.assertEqual(respuesta.status_code, 404)
+
+    def test_eliminar_un_dia(self):
+        respuesta = self.client.post(
+            reverse("asistencia:eliminar_dia_no_laborable", args=[self.dia.pk])
+        )
+
+        self.assertRedirects(respuesta, f"{self.lista}?anio=2026")
+        self.assertFalse(DiaNoLaborable.objects.exists())
+
+    def test_eliminar_solo_acepta_post(self):
+        respuesta = self.client.get(
+            reverse("asistencia:eliminar_dia_no_laborable", args=[self.dia.pk])
+        )
+
+        self.assertEqual(respuesta.status_code, 405)
+        self.assertTrue(DiaNoLaborable.objects.exists())
+
+    def test_eliminar_un_dia_inexistente_se_informa_sin_error_500(self):
+        respuesta = self.client.post(
+            reverse("asistencia:eliminar_dia_no_laborable", args=[99999])
+        )
+
+        self.assertRedirects(respuesta, self.lista)
+        self.assertTrue(
+            any("no existe" in t for t in self.mensajes(respuesta))
+        )
+
+    def test_las_acciones_de_escritura_exigen_su_permiso(self):
+        self.client.force_login(crear_usuario("lector", PERMISOS_LECTURA))
+
+        self.assertEqual(
+            self.client.get(
+                reverse("asistencia:crear_dia_no_laborable")
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse("asistencia:crear_dia_no_laborable"), self.datos()
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("asistencia:editar_dia_no_laborable", args=[self.dia.pk])
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse("asistencia:eliminar_dia_no_laborable", args=[self.dia.pk])
+            ).status_code,
+            403,
+        )
+        self.assertEqual(DiaNoLaborable.objects.count(), 1)
+
+
+class RobustezTests(BaseAsistenciaTests):
+    """Entradas hostiles y defectos que antes terminaban en error 500."""
+
+    LARGO = "m" * 600
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.usuario)
+
+    def datos(self, **cambios):
+        datos = {
+            "designacion": self.designacion,
+            "fecha": LUNES,
+            "marca": self.marca_p,
+            "horas_inasistidas": Decimal("0"),
+            "licencia": None,
+            "observaciones": "",
+        }
+        datos.update(cambios)
+        return datos
+
+    def mensajes(self, respuesta):
+        return [str(m) for m in get_messages(respuesta.wsgi_request)]
+
+    def jefa(self):
+        jefa = User.objects.create_superuser("jefa")
+        token = str(uuid.uuid4())
+        adquirir_sesion_edicion(jefa, token)
+        return jefa, token
+
+    # ───────────── motivo más largo que la columna ─────────────
+    def test_un_motivo_demasiado_largo_no_deja_dar_de_alta(self):
+        with self.assertRaises(ValidationError):
+            guardar_asistencia(
+                usuario=self.usuario,
+                token=self.token,
+                datos=self.datos(),
+                motivo=self.LARGO,
+            )
+        self.assertFalse(RegistroAsistencia.objects.exists())
+
+    def test_un_motivo_demasiado_largo_se_informa_al_editar_desde_la_vista(self):
+        registro = self.guardar()
+
+        respuesta = self.client.post(
+            reverse("asistencia:editar_asistencia", args=[registro.pk]),
+            {
+                "designacion": self.designacion.pk,
+                "fecha": LUNES.isoformat(),
+                "marca": self.marca_p.pk,
+                "horas_inasistidas": "0",
+                "observaciones": "cambio",
+                "motivo": self.LARGO,
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertTrue(any("no puede superar" in t for t in self.mensajes(respuesta)))
+        registro.refresh_from_db()
+        self.assertEqual(registro.observaciones, "")
+
+    def test_un_motivo_demasiado_largo_se_rechaza_en_la_planilla(self):
+        with self.assertRaises(ValidationError):
+            guardar_planilla(
+                usuario=self.usuario,
+                token=self.token,
+                fecha=LUNES,
+                filas=[self.datos()],
+                motivo=self.LARGO,
+            )
+        self.assertFalse(RegistroAsistencia.objects.exists())
+
+    def test_la_recepcion_valida_el_largo_del_motivo_y_del_formulario(self):
+        registro = self.guardar(marca=self.marca_i, horas_inasistidas=Decimal("2"))
+
+        with self.assertRaises(ValidationError):
+            recepcionar_formulario(
+                usuario=self.usuario,
+                token=self.token,
+                registro_id=registro.pk,
+                nuevo_estado=RegistroAsistencia.EstadoJustificacion.EN_TRAMITE,
+                nro_formulario="F-1",
+                motivo=self.LARGO,
+            )
+        with self.assertRaises(ValidationError):
+            recepcionar_formulario(
+                usuario=self.usuario,
+                token=self.token,
+                registro_id=registro.pk,
+                nuevo_estado=RegistroAsistencia.EstadoJustificacion.EN_TRAMITE,
+                nro_formulario="F" * 31,
+            )
+
+    def test_la_reapertura_valida_el_largo_del_motivo(self):
+        jefa, token = self.jefa()
+        cerrar_mes(usuario=jefa, token=token, anio=2026, mes=9)
+
+        with self.assertRaises(ValidationError):
+            reabrir_mes(
+                usuario=jefa, token=token, anio=2026, mes=9, motivo=self.LARGO
+            )
+
+    def test_reabrir_un_periodo_inexistente_da_un_error_de_validacion(self):
+        jefa, token = self.jefa()
+
+        with self.assertRaises(ValidationError):
+            reabrir_mes(
+                usuario=jefa,
+                token=token,
+                anio=2030,
+                mes=1,
+                motivo="motivo suficientemente largo",
+            )
+
+    # ───────────── planilla con dígitos que no son números ─────────────
+    def test_la_planilla_ignora_los_digitos_que_int_no_convierte(self):
+        for datos in (
+            {"marca-²": "1"},
+            {f"marca-{self.designacion.pk}": "²"},
+            {
+                f"marca-{self.designacion.pk}": str(self.marca_p.pk),
+                f"licencia-{self.designacion.pk}": "²",
+            },
+        ):
+            respuesta = self.client.post(
+                reverse("asistencia:planilla_rapida"),
+                {"fecha": LUNES.isoformat(), **datos},
+            )
+            self.assertEqual(respuesta.status_code, 200, datos)
+
+        self.assertFalse(RegistroAsistencia.objects.exists())
+
+    # ───────────── consultas repetidas (N+1) ─────────────
+    def test_el_registro_diario_no_hace_una_consulta_por_registro(self):
+        carrera = Carrera.objects.create(nombre="Carrera de prueba")
+
+        def agregar(desde, hasta):
+            for i in range(desde, hasta):
+                persona = Persona.objects.create(
+                    dni=f"4000{i:04d}", apellido_nombre=f"APELLIDO{i}, N", sexo="M"
+                )
+                espacio = EspacioCurricular.objects.create(
+                    nombre=f"Materia {i}", carrera=carrera
+                )
+                designacion = Designacion.objects.create(
+                    persona=persona,
+                    cargo=self.cargo,
+                    espacio_curricular=espacio,
+                    desde=date(2026, 3, 1),
+                )
+                self.guardar(designacion=designacion)
+
+        url = f"{reverse('asistencia:registro_diario')}?fecha={LUNES.isoformat()}"
+
+        agregar(0, 2)
+        with CaptureQueriesContext(connection) as pocas:
+            self.client.get(url)
+
+        agregar(2, 10)
+        with CaptureQueriesContext(connection) as muchas:
+            respuesta = self.client.get(url)
+
+        self.assertContains(respuesta, "Materia 9")
+        self.assertEqual(len(pocas), len(muchas))
+
+    # ───────────── cerrar sesión libera el lugar de edición ─────────────
+    def test_al_cerrar_sesion_se_libera_el_lugar_de_edicion(self):
+        token = str(uuid.uuid4())
+        sesion = self.client.session
+        sesion["asistencia_token"] = token
+        sesion.save()
+        adquirir_sesion_edicion(self.usuario, token)
+
+        self.client.logout()
+
+        self.assertFalse(SesionEdicion.objects.get(token=token).activa)
+
+    def test_cerrar_sesion_sin_sesion_de_edicion_no_falla(self):
+        self.client.logout()
+        self.client.logout()
+
+    # ───────────── el admin no saltea los cierres ─────────────
+    def test_el_admin_de_cierres_mensuales_es_solo_consulta(self):
+        from django.contrib import admin
+        from django.test import RequestFactory
+
+        peticion = RequestFactory().get("/")
+        peticion.user = User.objects.create_superuser("root")
+        modelo_admin = admin.site._registry[CierreMensual]
+
+        self.assertFalse(modelo_admin.has_add_permission(peticion))
+        self.assertFalse(modelo_admin.has_change_permission(peticion))
+        self.assertFalse(modelo_admin.has_delete_permission(peticion))
+
+
+class ValidarRegistroTests(BaseAsistenciaTests):
+    """Validar un registro inexistente o ya validado no debe dar error 500."""
+
+    def setUp(self):
+        super().setUp()
+        self.registro = self.guardar()
+
+    def validar(self, registro_id):
+        return validar_asistencia(
+            usuario=self.usuario, token=self.token, registro_id=registro_id
+        )
+
+    def test_un_registro_inexistente_da_un_error_de_validacion(self):
+        with self.assertRaises(ValidationError):
+            self.validar(99999)
+
+    def test_un_registro_ya_validado_no_genera_otro_evento(self):
+        self.validar(self.registro.pk)
+        with self.assertRaises(ValidationError):
+            self.validar(self.registro.pk)
+        self.assertEqual(
+            EventoAsistencia.objects.filter(
+                asistencia=self.registro,
+                accion=EventoAsistencia.Accion.VALIDAR,
+            ).count(),
+            1,
+        )
+
+    def test_la_vista_informa_un_registro_inexistente_sin_error_500(self):
+        self.client.force_login(self.usuario)
+        respuesta = self.client.post(
+            reverse("asistencia:validar_registro", args=[99999])
+        )
+        self.assertRedirects(
+            respuesta,
+            reverse("asistencia:historial"),
+        )
+        textos = [str(m) for m in get_messages(respuesta.wsgi_request)]
+        self.assertTrue(any("no existe" in t for t in textos))
+
+    def test_la_vista_informa_un_registro_ya_validado(self):
+        self.validar(self.registro.pk)
+        self.client.force_login(self.usuario)
+        respuesta = self.client.post(
+            reverse("asistencia:validar_registro", args=[self.registro.pk])
+        )
+        self.assertRedirects(respuesta, reverse("asistencia:historial"))
+        textos = [str(m) for m in get_messages(respuesta.wsgi_request)]
+        self.assertTrue(any("ya está validado" in t for t in textos))
 
 
 class CierreDiarioTests(BaseAsistenciaTests):
@@ -1716,7 +2387,7 @@ class CierreMensualTests(BaseAsistenciaTests):
             )
 
     def test_reabrir_con_permiso_exige_motivo_y_permite_guardar(self):
-        superusuario = User.objects.create_superuser("jefa", password="x")
+        superusuario = User.objects.create_superuser("jefa")
         token = str(uuid.uuid4())
         adquirir_sesion_edicion(superusuario, token)
         cerrar_mes(usuario=self.usuario, token=self.token, anio=2026, mes=9)
@@ -1745,7 +2416,7 @@ class CierreMensualTests(BaseAsistenciaTests):
 class ConcurrenciaTests(TestCase):
     def setUp(self):
         self.usuarios = [
-            User.objects.create_user(f"op{i}", password="x") for i in range(3)
+            User.objects.create_user(f"op{i}") for i in range(3)
         ]
 
     def test_el_limite_de_operadores_es_dos(self):
@@ -1782,6 +2453,50 @@ class ConcurrenciaTests(TestCase):
     def test_el_token_de_otro_usuario_se_deniega(self):
         token = str(uuid.uuid4())
         adquirir_sesion_edicion(self.usuarios[0], token)
+        with self.assertRaises(PermissionDenied):
+            adquirir_sesion_edicion(self.usuarios[1], token)
+
+    def test_una_sesion_vencida_se_reactiva_con_el_mismo_token(self):
+        token = str(uuid.uuid4())
+        sesion = adquirir_sesion_edicion(self.usuarios[0], token)
+        SesionEdicion.objects.filter(pk=sesion.pk).update(
+            expira_en=timezone.now() - timedelta(minutes=1)
+        )
+        reactivada = adquirir_sesion_edicion(self.usuarios[0], token)
+        self.assertEqual(reactivada.pk, sesion.pk)
+        self.assertTrue(reactivada.activa)
+        self.assertGreater(
+            reactivada.expira_en, timezone.now() + timedelta(minutes=10)
+        )
+        self.assertEqual(SesionEdicion.objects.filter(token=token).count(), 1)
+
+    def test_una_sesion_liberada_se_reactiva_con_el_mismo_token(self):
+        token = str(uuid.uuid4())
+        adquirir_sesion_edicion(self.usuarios[0], token)
+        liberar_sesion_edicion(self.usuarios[0], token)
+        reactivada = adquirir_sesion_edicion(self.usuarios[0], token)
+        self.assertTrue(reactivada.activa)
+        self.assertEqual(SesionEdicion.objects.filter(token=token).count(), 1)
+
+    def test_reactivar_una_sesion_vencida_respeta_el_maximo_de_operadores(self):
+        token = str(uuid.uuid4())
+        sesion = adquirir_sesion_edicion(self.usuarios[0], token)
+        SesionEdicion.objects.filter(pk=sesion.pk).update(
+            expira_en=timezone.now() - timedelta(minutes=1)
+        )
+        # Otros dos operadores toman los dos lugares mientras está vencida.
+        adquirir_sesion_edicion(self.usuarios[1], str(uuid.uuid4()))
+        adquirir_sesion_edicion(self.usuarios[2], str(uuid.uuid4()))
+        with self.assertRaises(ValidationError):
+            adquirir_sesion_edicion(self.usuarios[0], token)
+        self.assertFalse(SesionEdicion.objects.get(token=token).activa)
+
+    def test_el_token_vencido_de_otro_usuario_se_deniega(self):
+        token = str(uuid.uuid4())
+        sesion = adquirir_sesion_edicion(self.usuarios[0], token)
+        SesionEdicion.objects.filter(pk=sesion.pk).update(
+            expira_en=timezone.now() - timedelta(minutes=1)
+        )
         with self.assertRaises(PermissionDenied):
             adquirir_sesion_edicion(self.usuarios[1], token)
 
@@ -1844,6 +2559,41 @@ class VistasTests(BaseAsistenciaTests):
         self.assertTrue(any("El período está cerrado" in t for t in textos))
         self.assertFalse(any(t.startswith("[") for t in textos))
 
+    def test_guardar_con_la_sesion_vencida_no_da_error_500(self):
+        # A3: pasados 15 minutos sin guardar, el token de la sesión de Django
+        # sigue vigente pero la sesión de edición ya venció.
+        sesion = self.client.session
+        sesion["asistencia_token"] = self.token
+        sesion.save()
+        SesionEdicion.objects.filter(token=self.token).update(
+            expira_en=timezone.now() - timedelta(minutes=1)
+        )
+
+        respuesta = self.client.post(
+            reverse("asistencia:crear_asistencia"),
+            {
+                "designacion": self.designacion.pk,
+                "fecha": LUNES.isoformat(),
+                "marca": self.marca_p.pk,
+                "horas_inasistidas": "0",
+                "observaciones": "",
+            },
+        )
+
+        self.assertRedirects(
+            respuesta,
+            f"{reverse('asistencia:registro_diario')}"
+            f"?fecha={LUNES.isoformat()}",
+        )
+        self.assertTrue(
+            RegistroAsistencia.objects.filter(
+                designacion=self.designacion, fecha=LUNES
+            ).exists()
+        )
+        self.assertEqual(
+            SesionEdicion.objects.filter(token=self.token).count(), 1
+        )
+
     def test_la_paginacion_del_historial_conserva_los_filtros(self):
         for dia in range(30):
             RegistroAsistencia.objects.create(
@@ -1861,7 +2611,7 @@ class VistasTests(BaseAsistenciaTests):
         from django.test import RequestFactory
 
         peticion = RequestFactory().get("/")
-        peticion.user = User.objects.create_superuser("root", password="x")
+        peticion.user = User.objects.create_superuser("root")
         modelo_admin = admin.site._registry[MarcaAsistencia]
         self.assertFalse(modelo_admin.has_add_permission(peticion))
         self.assertFalse(modelo_admin.has_delete_permission(peticion))

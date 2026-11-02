@@ -11,6 +11,8 @@ navegar:
 - `cierres`: cierre de jornada, listado de cierres y cierre/reapertura
   de períodos mensuales.
 - `recepcion`: recepción del formulario en papel de las inasistencias.
+- `calendario`: alta, modificación y baja de feriados, asuetos y días
+  inhábiles (RF-10).
 - `sesion`: liberar/renovar manualmente la sesión de edición.
 - `_comun`: helpers compartidos entre las vistas de arriba.
 
@@ -19,6 +21,12 @@ navegar:
 pública que tenía el `views.py` original.
 """
 
+from .calendario import (
+    crear_dia_no_laborable,
+    editar_dia_no_laborable,
+    eliminar_dia_no_laborable_view,
+    lista_calendario,
+)
 from .cierres import cerrar_jornada, confirmar_cierre, lista_cierres, reapertura_mensual
 from .planilla import planilla_rapida
 from .recepcion import recepcion_formularios, recepcionar_formulario_view
@@ -48,4 +56,8 @@ __all__ = [
     "recepcionar_formulario_view",
     "liberar_edicion",
     "renovar_edicion",
+    "lista_calendario",
+    "crear_dia_no_laborable",
+    "editar_dia_no_laborable",
+    "eliminar_dia_no_laborable_view",
 ]

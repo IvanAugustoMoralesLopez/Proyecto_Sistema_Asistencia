@@ -22,11 +22,20 @@ leer y navegar:
   de registros.
 - `cierres`: cierre y reapertura de jornadas (RN-06) y períodos
   mensuales.
+- `calendario`: alta, modificación y baja de feriados, asuetos y días
+  inhábiles (RF-10).
 
 Todo lo que antes se importaba con `from asistencias.services import X`
 se sigue importando igual: este archivo reexporta la misma API pública.
 """
 
+from .calendario import (
+    ANIO_MAXIMO,
+    ANIO_MINIMO,
+    eliminar_dia_no_laborable,
+    guardar_dia_no_laborable,
+    registros_cargados,
+)
 from .cierres import cerrar_dia, cerrar_mes, reabrir_mes
 from .recepcion import (
     TRANSICIONES_JUSTIFICACION,
@@ -49,6 +58,8 @@ from .sesiones import (
 )
 
 __all__ = [
+    "ANIO_MAXIMO",
+    "ANIO_MINIMO",
     "MAX_OPERADORES",
     "MINUTOS_EXPIRACION_SESION",
     "MOTIVO_MINIMO",
@@ -67,4 +78,7 @@ __all__ = [
     "cerrar_dia",
     "cerrar_mes",
     "reabrir_mes",
+    "guardar_dia_no_laborable",
+    "eliminar_dia_no_laborable",
+    "registros_cargados",
 ]

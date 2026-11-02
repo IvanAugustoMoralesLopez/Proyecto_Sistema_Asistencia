@@ -71,6 +71,26 @@ urlpatterns = [
         name="reapertura_mensual",
     ),
     path(
+        "calendario/",
+        views.lista_calendario,
+        name="lista_calendario",
+    ),
+    path(
+        "calendario/nuevo/",
+        views.crear_dia_no_laborable,
+        name="crear_dia_no_laborable",
+    ),
+    path(
+        "calendario/<int:pk>/editar/",
+        views.editar_dia_no_laborable,
+        name="editar_dia_no_laborable",
+    ),
+    path(
+        "calendario/<int:pk>/eliminar/",
+        views.eliminar_dia_no_laborable_view,
+        name="eliminar_dia_no_laborable",
+    ),
+    path(
         "sesion/liberar/",
         views.liberar_edicion,
         name="liberar_edicion",
