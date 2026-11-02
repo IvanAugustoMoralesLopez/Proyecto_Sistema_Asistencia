@@ -167,6 +167,8 @@ class LicenciaOtorgadaForm(forms.ModelForm):
             "disp_anio": "Año de disposición",
             "sello_regional_as": "Sello regional",
             "justifica": "¿Está justificada?",
+            "nro_formulario": "N° de formulario",
+            "resolucion_excepcion": "Resolución de excepción",
             "observaciones": "Observaciones",
         }
 
