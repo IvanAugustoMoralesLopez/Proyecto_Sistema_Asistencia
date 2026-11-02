@@ -102,7 +102,7 @@ class LicenciaOtorgadaForm(forms.ModelForm):
 
     class Meta:
         model = LicenciaOtorgada
-        fields = [
+        fields = [ 
             "designacion",
             "articulo",
             "sit_rev",
@@ -114,6 +114,7 @@ class LicenciaOtorgadaForm(forms.ModelForm):
             "disp_anio",
             "sello_regional_as",
             "justifica",
+            "nro_formulario",
             "observaciones",
         ]
 

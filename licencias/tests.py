@@ -406,4 +406,43 @@ class ReporteMensualTests(TestCase):
 
     def test_mes_invalido_da_404(self):
         respuesta = self.client.get('/licencias/reporte/2026/13/')
-        self.assertEqual(respuesta.status_code, 404)
+        self.assertEqual(respuesta.status_code, 404) 
+
+
+class NroFormularioTests(TestCase):
+    """RN-10: el N° de formulario se carga junto con la licencia."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni='99000094', apellido_nombre='Lopez, Ana')
+        cls.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='A-1', articulo='1', tipo_licencia='Uno',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo',
+        )
+        usuario = User.objects.create_user('cargador', password='x')
+        usuario.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label='licencias', codename='add_licenciaotorgada',
+            )
+        )
+
+    def setUp(self):
+        self.client.login(username='cargador', password='x')
+
+    def test_el_alta_guarda_el_numero_de_formulario(self):
+        respuesta = self.client.post('/licencias/nueva/', {
+            'designacion': self.designacion.pk,
+            'articulo': self.articulo.pk,
+            'sit_rev': 'Titular',
+            'desde': '2026-03-02',
+            'hasta': '2026-03-04',
+            'nro_formulario': 'F-1234',
+        })
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(LicenciaOtorgada.objects.get().nro_formulario, 'F-1234')
