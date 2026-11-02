@@ -61,7 +61,15 @@ class LicenciaOtorgada(models.Model):
     disp_numero = models.CharField(max_length=20, null=True, blank=True)
     disp_anio = models.SmallIntegerField(null=True, blank=True)
     sello_regional_as = models.CharField(max_length=30, null=True, blank=True)
-    justifica = models.BooleanField(null=True, blank=True)
+    justifica = models.BooleanField(null=True, blank=True) 
+
+    # RN-10: número del formulario en papel recepcionado. Es requisito previo
+    # para emitir la disposición (RF-16); no para registrar la licencia.
+    nro_formulario = models.CharField(
+        max_length=20, null=True, blank=True,
+        verbose_name="N° de formulario",
+        help_text="Número del formulario en papel recepcionado (RN-10).",
+    )
 
     # Fechas y observaciones
     desde = models.DateField()
