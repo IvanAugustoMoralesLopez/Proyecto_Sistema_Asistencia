@@ -106,8 +106,8 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
     # Una tabla por planilla: IL-01, IL-02 y las que no se pudieron clasificar.
     grupos = []
     for planilla, titulo in (
-        (PLANILLA_IL01, 'IL-01: licencias por salud (enfermedad, tratamiento y enfermedad familiar)'),
-        (PLANILLA_IL02, 'IL-02: razones particulares, exámenes, duelo, matrimonio y otras'),
+        (PLANILLA_IL01, 'Licencias por salud (planilla IL-01): enfermedad, tratamiento y enfermedad familiar'),
+        (PLANILLA_IL02, 'Licencias administrativas (planilla IL-02): razones particulares, exámenes, duelo, matrimonio y otras'),
         (SIN_CLASIFICAR, 'Sin clasificar (requieren revisión)'),
     ):
         filas = [fila for fila in desglose if fila['planilla'] == planilla]

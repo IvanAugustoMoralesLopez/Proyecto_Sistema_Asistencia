@@ -440,6 +440,14 @@ class ReporteMensualTests(TestCase):
         self.assertContains(respuesta, '/licencias/reporte/2026/9/')
         self.assertContains(respuesta, '/licencias/reporte/2026/11/')
 
+    def test_los_titulos_muestran_salud_y_administrativas_con_su_planilla(self):
+        respuesta = self.client.get('/licencias/reporte/2026/10/')
+        self.assertContains(respuesta, 'Licencias por salud (planilla IL-01)')
+        self.assertContains(respuesta, 'Licencias administrativas (planilla IL-02)')
+        # El código ya no encabeza el título.
+        self.assertNotContains(respuesta, 'IL-01: licencias por salud')
+        self.assertNotContains(respuesta, 'IL-02: razones particulares')
+
     def test_mes_invalido_da_404(self):
         respuesta = self.client.get('/licencias/reporte/2026/13/')
         self.assertEqual(respuesta.status_code, 404) 
