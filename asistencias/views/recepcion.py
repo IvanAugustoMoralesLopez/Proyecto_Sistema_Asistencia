@@ -3,22 +3,16 @@ Recepción del formulario en papel de las inasistencias (RF-09).
 """
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_http_methods
 
 from ..forms import FiltroRecepcionForm, RecepcionFormularioForm
 from ..models import RegistroAsistencia
 from ..services import recepcionar_formulario
-from ._comun import _aplicar_filtros, _asegurar_sesion_edicion, _mensaje_error, _paginar
+from ._comun import _aplicar_filtros, _asegurar_sesion_edicion, _mensaje_error, _paginar, vista_protegida
 
 
-@login_required
-@permission_required(
-    "asistencias.view_registroasistencia",
-    raise_exception=True,
-)
+@vista_protegida("asistencias.view_registroasistencia")
 def recepcion_formularios(request):
     """Inasistencias a la espera de formulario en papel (RF-09)."""
     form = FiltroRecepcionForm(request.GET or None)
@@ -56,6 +50,16 @@ def recepcion_formularios(request):
     elif estado != FiltroRecepcionForm.TODAS:
         registros = registros.filter(estado_justificacion=estado)
 
+    pendientes = (
+        RegistroAsistencia.objects.filter(
+            marca__computa_inasistencia=True,
+            estado_justificacion__in=[
+                Justificacion.INJUSTIFICADA,
+                Justificacion.EN_TRAMITE,
+            ],
+        ).count()
+    )
+
     pagina, querystring = _paginar(request, registros)
 
     return render(
@@ -65,16 +69,12 @@ def recepcion_formularios(request):
             "form": form,
             "pagina": pagina,
             "querystring": querystring,
+            "pendientes": pendientes,
         },
     )
 
 
-@login_required
-@permission_required(
-    "asistencias.recepcionar_formulario",
-    raise_exception=True,
-)
-@require_http_methods(["GET", "POST"])
+@vista_protegida("asistencias.recepcionar_formulario", methods=["GET", "POST"])
 def recepcionar_formulario_view(request, pk):
     registro = get_object_or_404(
         RegistroAsistencia.objects.select_related(

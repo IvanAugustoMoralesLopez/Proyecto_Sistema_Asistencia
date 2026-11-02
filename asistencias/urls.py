@@ -91,6 +91,26 @@ urlpatterns = [
         name="eliminar_dia_no_laborable",
     ),
     path(
+        "validar-multiples/",
+        views.validar_multiples_view,
+        name="validar_multiples",
+    ),
+    path(
+        "historial/csv/",
+        views.exportar_csv,
+        name="exportar_csv",
+    ),
+    path(
+        "calendario/cargar-masivo/",
+        views.cargar_masivo,
+        name="cargar_masivo",
+    ),
+    path(
+        "calendario/copiar/",
+        views.copiar_calendario_view,
+        name="copiar_calendario",
+    ),
+    path(
         "sesion/liberar/",
         views.liberar_edicion,
         name="liberar_edicion",

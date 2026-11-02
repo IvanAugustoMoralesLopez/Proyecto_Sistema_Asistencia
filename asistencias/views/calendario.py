@@ -6,23 +6,23 @@ feriados, asuetos y días inhábiles.
 from datetime import date
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods, require_POST
 
-from ..forms import DiaNoLaborableForm
+from ..forms import CargaMasivaCalendarioForm, CopiarCalendarioForm, DiaNoLaborableForm
 from ..models import DiaNoLaborable
 from ..services import (
     ANIO_MAXIMO,
     ANIO_MINIMO,
+    cargar_calendario_masivo,
+    copiar_calendario,
     eliminar_dia_no_laborable,
     guardar_dia_no_laborable,
     registros_cargados,
 )
-from ._comun import _mensaje_error
+from ._comun import _mensaje_error, vista_protegida
 
 
 def _anio_consultado(request):
@@ -54,11 +54,7 @@ def _avisar_registros_existentes(request, fecha):
         )
 
 
-@login_required
-@permission_required(
-    "asistencias.view_registroasistencia",
-    raise_exception=True,
-)
+@vista_protegida("asistencias.view_registroasistencia")
 def lista_calendario(request):
     anio = _anio_consultado(request)
 
@@ -79,12 +75,7 @@ def lista_calendario(request):
     )
 
 
-@login_required
-@permission_required(
-    "asistencias.add_dianolaborable",
-    raise_exception=True,
-)
-@require_http_methods(["GET", "POST"])
+@vista_protegida("asistencias.add_dianolaborable", methods=["GET", "POST"])
 def crear_dia_no_laborable(request):
     if request.method == "POST":
         form = DiaNoLaborableForm(request.POST)
@@ -110,16 +101,15 @@ def crear_dia_no_laborable(request):
     return render(
         request,
         "asistencias/formulario_calendario.html",
-        {"form": form, "titulo": "Nuevo día del calendario"},
+        {
+            "form": form,
+            "titulo": "Nuevo día del calendario",
+            "url_cancelar": reverse("asistencia:lista_calendario"),
+        },
     )
 
 
-@login_required
-@permission_required(
-    "asistencias.change_dianolaborable",
-    raise_exception=True,
-)
-@require_http_methods(["GET", "POST"])
+@vista_protegida("asistencias.change_dianolaborable", methods=["GET", "POST"])
 def editar_dia_no_laborable(request, pk):
     dia = get_object_or_404(DiaNoLaborable, pk=pk)
 
@@ -149,16 +139,15 @@ def editar_dia_no_laborable(request, pk):
     return render(
         request,
         "asistencias/formulario_calendario.html",
-        {"form": form, "titulo": "Editar día del calendario"},
+        {
+            "form": form,
+            "titulo": "Editar día del calendario",
+            "url_cancelar": reverse("asistencia:lista_calendario"),
+        },
     )
 
 
-@login_required
-@permission_required(
-    "asistencias.delete_dianolaborable",
-    raise_exception=True,
-)
-@require_POST
+@vista_protegida("asistencias.delete_dianolaborable", methods=["POST"])
 def eliminar_dia_no_laborable_view(request, pk):
     try:
         dia = eliminar_dia_no_laborable(usuario=request.user, dia_id=pk)
@@ -171,3 +160,89 @@ def eliminar_dia_no_laborable_view(request, pk):
         f"Se eliminó el {dia.fecha:%d/%m/%Y} del calendario.",
     )
     return _volver_al_calendario(dia.fecha)
+
+
+@vista_protegida("asistencias.add_dianolaborable", methods=["GET", "POST"])
+def cargar_masivo(request):
+    if request.method == "POST":
+        form = CargaMasivaCalendarioForm(request.POST)
+
+        if form.is_valid():
+            try:
+                creados, errores = cargar_calendario_masivo(
+                    usuario=request.user,
+                    texto=form.cleaned_data["fechas"],
+                    tipo=form.cleaned_data["tipo"],
+                )
+            except (ValidationError, PermissionDenied) as exc:
+                messages.error(request, _mensaje_error(exc))
+            else:
+                if creados:
+                    messages.success(
+                        request,
+                        f"Se cargaron {creados} día(s) al calendario.",
+                    )
+                if errores:
+                    for error in errores[:10]:
+                        messages.warning(request, error)
+                if not creados and not errores:
+                    messages.info(
+                        request,
+                        "Todas las fechas ya estaban cargadas.",
+                    )
+                return redirect("asistencia:lista_calendario")
+    else:
+        form = CargaMasivaCalendarioForm()
+
+    return render(
+        request,
+        "asistencias/cargar_masivo_calendario.html",
+        {
+            "form": form,
+            "titulo": "Carga masiva de días no laborables",
+            "url_cancelar": reverse("asistencia:lista_calendario"),
+        },
+    )
+
+
+@vista_protegida("asistencias.add_dianolaborable", methods=["GET", "POST"])
+def copiar_calendario_view(request):
+    if request.method == "POST":
+        form = CopiarCalendarioForm(request.POST)
+
+        if form.is_valid():
+            try:
+                creados, omitidos = copiar_calendario(
+                    usuario=request.user,
+                    anio_origen=form.cleaned_data["anio_origen"],
+                    anio_destino=form.cleaned_data["anio_destino"],
+                )
+            except (ValidationError, PermissionDenied) as exc:
+                messages.error(request, _mensaje_error(exc))
+            else:
+                msg = f"Se copiaron {creados} día(s)."
+                if omitidos:
+                    msg += f" {omitidos} ya existían o no aplican."
+                messages.success(request, msg)
+                return redirect(
+                    f"{reverse('asistencia:lista_calendario')}"
+                    f"?anio={form.cleaned_data['anio_destino']}"
+                )
+    else:
+        anio_actual = timezone.localdate().year
+        form = CopiarCalendarioForm(
+            initial={
+                "anio_origen": anio_actual,
+                "anio_destino": anio_actual + 1,
+            }
+        )
+
+    return render(
+        request,
+        "asistencias/copiar_calendario.html",
+        {
+            "form": form,
+            "titulo": "Copiar calendario entre años",
+            "url_cancelar": reverse("asistencia:lista_calendario"),
+        },
+    )

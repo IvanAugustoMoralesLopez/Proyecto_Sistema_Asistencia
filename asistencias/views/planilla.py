@@ -8,13 +8,11 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods
 
 from licencias.models import LicenciaOtorgada
 from personal.models import Designacion
@@ -27,7 +25,7 @@ from ..models import (
     licencia_cubre_fecha,
 )
 from ..services import PlanillaConErrores, guardar_planilla, motivo_dia_no_laborable
-from ._comun import _asegurar_sesion_edicion, _mensaje_error
+from ._comun import _asegurar_sesion_edicion, _mensaje_error, vista_protegida
 
 
 def _designaciones_del_dia(fecha, texto=""):
@@ -186,12 +184,7 @@ def _leer_planilla(post, fecha):
     return filas, valores, errores
 
 
-@login_required
-@permission_required(
-    "asistencias.add_registroasistencia",
-    raise_exception=True,
-)
-@require_http_methods(["GET", "POST"])
+@vista_protegida("asistencias.add_registroasistencia", methods=["GET", "POST"])
 def planilla_rapida(request):
     """Planilla de marcado del día: una fila por designación vigente."""
     origen = request.POST if request.method == "POST" else request.GET
@@ -220,7 +213,6 @@ def planilla_rapida(request):
         "asistencias.modificar_jornada_cerrada"
     )
 
-    # Motivo por el que la planilla no se puede guardar, si lo hay.
     if fecha > timezone.localdate():
         bloqueo = "No se puede registrar asistencia de una fecha futura."
     elif motivo_no_laborable:

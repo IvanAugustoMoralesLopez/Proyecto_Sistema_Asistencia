@@ -1,14 +1,24 @@
 {% extends "base.html" %}
+{% load asistencias_extras %}
 
 {% block title %}Recepción de formularios{% endblock %}
 
 {% block content %}
-<div class="mb-4">
-    <h1 class="h3">Recepción de formularios en papel</h1>
-    <p class="text-secondary mb-0">
-        Seguimiento de las inasistencias: injustificada, en trámite o
-        justificada.
-    </p>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3">Recepción de formularios en papel</h1>
+        <p class="text-secondary mb-0">
+            Seguimiento de las inasistencias: injustificada, en trámite o
+            justificada.
+        </p>
+    </div>
+
+    {# Mejora 10: contador de pendientes #}
+    {% if pendientes %}
+        <span class="badge text-bg-warning fs-6">
+            {{ pendientes }} pendiente{{ pendientes|pluralize:"s" }}
+        </span>
+    {% endif %}
 </div>
 
 <form method="get" class="card card-body mb-4">
@@ -104,31 +114,6 @@
     </table>
 </div>
 
-<nav aria-label="Paginación de la recepción de formularios">
-    <ul class="pagination">
-        {% if pagina.has_previous %}
-            <li class="page-item">
-                <a class="page-link"
-                   href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.previous_page_number }}">
-                    Anterior
-                </a>
-            </li>
-        {% endif %}
-
-        <li class="page-item active">
-            <span class="page-link">
-                Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}
-            </span>
-        </li>
-
-        {% if pagina.has_next %}
-            <li class="page-item">
-                <a class="page-link"
-                   href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.next_page_number }}">
-                    Siguiente
-                </a>
-            </li>
-        {% endif %}
-    </ul>
-</nav>
+{# Mejora 20: paginación con números #}
+{% include "asistencias/includes/paginacion.html" %}
 {% endblock %}

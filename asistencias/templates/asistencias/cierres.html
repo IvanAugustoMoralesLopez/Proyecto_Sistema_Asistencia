@@ -14,6 +14,27 @@
     {% endif %}
 </div>
 
+{# Mejora 17: filtro por año #}
+<form method="get" class="card card-body mb-3">
+    <div class="row align-items-end g-3">
+        <div class="col-md-3">
+            <label class="form-label" for="anio">Año</label>
+            <input class="form-control" type="number" id="anio" name="anio"
+                   value="{{ anio_filtro }}" placeholder="Todos los años"
+                   min="2000" max="2100">
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-secondary" type="submit">Filtrar</button>
+            {% if anio_filtro %}
+                <a class="btn btn-outline-secondary"
+                   href="{% url 'asistencia:lista_cierres' %}">
+                    Limpiar
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</form>
+
 <div class="table-responsive">
     <table class="table table-striped">
         <thead class="table-dark">
@@ -31,7 +52,14 @@
             {% for cierre in cierres %}
                 <tr>
                     <td>{{ cierre.anio }}-{{ cierre.mes|stringformat:"02d" }}</td>
-                    <td>{{ cierre.get_estado_display }}</td>
+                    <td>
+                        {# Mejora 16: semáforo visual #}
+                        {% if cierre.estado == "CERRADO" %}
+                            <span class="badge text-bg-danger">Cerrado</span>
+                        {% else %}
+                            <span class="badge text-bg-success">Abierto</span>
+                        {% endif %}
+                    </td>
                     <td>{{ cierre.cerrado_por|default:"—" }}</td>
                     <td>
                         {{ cierre.cerrado_en|date:"d/m/Y H:i"|default:"—" }}
@@ -47,7 +75,7 @@
                                 </a>
                             {% endif %}
                         {% else %}
-                            <span class="text-secondary">Abierto</span>
+                            <span class="text-secondary">—</span>
                         {% endif %}
                     </td>
                 </tr>

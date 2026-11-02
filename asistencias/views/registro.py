@@ -3,27 +3,34 @@ Registro diario (consulta por fecha), alta/edición individual de una
 asistencia, historial con filtros y validación de registros.
 """
 
-from datetime import date
+import csv
+from datetime import date, timedelta
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods, require_POST
 
 from ..forms import FiltroAsistenciaForm, RegistroAsistenciaForm
 from ..models import CierreDiario, CierreMensual, EventoAsistencia, RegistroAsistencia
-from ..services import guardar_asistencia, motivo_dia_no_laborable, validar_asistencia
-from ._comun import _aplicar_filtros, _asegurar_sesion_edicion, _mensaje_error, _paginar
-
-
-@login_required
-@permission_required(
-    "asistencias.view_registroasistencia",
-    raise_exception=True,
+from ..services import (
+    guardar_asistencia,
+    motivo_dia_no_laborable,
+    validar_asistencia,
+    validar_multiples,
 )
+from ._comun import (
+    _aplicar_filtros,
+    _asegurar_sesion_edicion,
+    _mensaje_error,
+    _paginar,
+    vista_protegida,
+)
+
+
+@vista_protegida("asistencias.view_registroasistencia")
 def registro_diario(request):
     fecha_seleccionada = request.GET.get(
         "fecha",
@@ -36,7 +43,7 @@ def registro_diario(request):
         messages.error(request, "La fecha seleccionada no es válida.")
         return redirect("asistencia:registro_diario")
 
-    registros = (
+    registros = list(
         RegistroAsistencia.objects.select_related(
             "designacion__persona",
             "designacion__cargo",
@@ -73,6 +80,27 @@ def registro_diario(request):
         and fecha_objeto <= timezone.localdate()
     )
 
+    total = len(registros)
+    presentes = sum(
+        1 for r in registros if not r.marca.computa_inasistencia
+    )
+    inasistencias = total - presentes
+    sin_validar = sum(
+        1 for r in registros
+        if r.estado_registro == RegistroAsistencia.Estado.BORRADOR
+    )
+    pendientes_formulario = sum(
+        1 for r in registros
+        if r.estado_justificacion
+        in (
+            RegistroAsistencia.EstadoJustificacion.INJUSTIFICADA,
+            RegistroAsistencia.EstadoJustificacion.EN_TRAMITE,
+        )
+    )
+
+    fecha_anterior = (fecha_objeto - timedelta(days=1)).isoformat()
+    fecha_siguiente = (fecha_objeto + timedelta(days=1)).isoformat()
+
     return render(
         request,
         "asistencias/registro_diario.html",
@@ -83,17 +111,21 @@ def registro_diario(request):
             "jornada_cerrada": jornada_cerrada,
             "puede_cerrar_jornada": puede_cerrar_jornada,
             "motivo_no_laborable": motivo_no_laborable,
+            "total": total,
+            "presentes": presentes,
+            "inasistencias": inasistencias,
+            "sin_validar": sin_validar,
+            "pendientes_formulario": pendientes_formulario,
+            "fecha_anterior": fecha_anterior,
+            "fecha_siguiente": fecha_siguiente,
         },
     )
 
 
-@login_required
-@permission_required(
-    "asistencias.add_registroasistencia",
-    raise_exception=True,
-)
-@require_http_methods(["GET", "POST"])
+@vista_protegida("asistencias.add_registroasistencia", methods=["GET", "POST"])
 def crear_asistencia(request):
+    fecha_inicial = request.GET.get("fecha")
+
     if request.method == "POST":
         form = RegistroAsistenciaForm(request.POST)
 
@@ -118,9 +150,16 @@ def crear_asistencia(request):
                     f"?fecha={registro.fecha.isoformat()}"
                 )
     else:
-        form = RegistroAsistenciaForm(
-            initial={"fecha": timezone.localdate()}
-        )
+        initial = {}
+        if fecha_inicial:
+            try:
+                initial["fecha"] = date.fromisoformat(fecha_inicial)
+            except ValueError:
+                initial["fecha"] = timezone.localdate()
+        else:
+            initial["fecha"] = timezone.localdate()
+
+        form = RegistroAsistenciaForm(initial=initial)
 
     return render(
         request,
@@ -128,16 +167,12 @@ def crear_asistencia(request):
         {
             "form": form,
             "titulo": "Registrar asistencia",
+            "url_cancelar": reverse("asistencia:historial"),
         },
     )
 
 
-@login_required
-@permission_required(
-    "asistencias.change_registroasistencia",
-    raise_exception=True,
-)
-@require_http_methods(["GET", "POST"])
+@vista_protegida("asistencias.change_registroasistencia", methods=["GET", "POST"])
 def editar_asistencia(request, pk):
     registro = get_object_or_404(
         RegistroAsistencia.objects.select_related(
@@ -146,6 +181,11 @@ def editar_asistencia(request, pk):
             "licencia",
         ),
         pk=pk,
+    )
+
+    volver = request.GET.get(
+        "volver",
+        request.POST.get("volver", ""),
     )
 
     if request.method == "POST":
@@ -171,7 +211,12 @@ def editar_asistencia(request, pk):
                     request,
                     "La asistencia se actualizó correctamente.",
                 )
-                return redirect("asistencia:historial")
+                if volver:
+                    return redirect(volver)
+                return redirect(
+                    f"{reverse('asistencia:registro_diario')}"
+                    f"?fecha={registro.fecha.isoformat()}"
+                )
     else:
         form = RegistroAsistenciaForm(instance=registro)
 
@@ -182,15 +227,13 @@ def editar_asistencia(request, pk):
             "form": form,
             "registro": registro,
             "titulo": "Editar asistencia",
+            "volver": volver,
+            "url_cancelar": volver or reverse("asistencia:historial"),
         },
     )
 
 
-@login_required
-@permission_required(
-    "asistencias.view_registroasistencia",
-    raise_exception=True,
-)
+@vista_protegida("asistencias.view_registroasistencia")
 def historial(request):
     form = FiltroAsistenciaForm(request.GET or None)
 
@@ -208,6 +251,11 @@ def historial(request):
     if form.is_valid():
         datos = form.cleaned_data
         registros = _aplicar_filtros(registros, datos)
+
+        if datos.get("estado_registro"):
+            registros = registros.filter(
+                estado_registro=datos["estado_registro"]
+            )
 
         if datos.get("estado_justificacion"):
             registros = registros.filter(
@@ -227,11 +275,7 @@ def historial(request):
     )
 
 
-@login_required
-@permission_required(
-    "asistencias.view_registroasistencia",
-    raise_exception=True,
-)
+@vista_protegida("asistencias.view_registroasistencia")
 def detalle_asistencia(request, pk):
     registro = get_object_or_404(
         RegistroAsistencia.objects.select_related(
@@ -249,22 +293,20 @@ def detalle_asistencia(request, pk):
         asistencia=registro,
     ).select_related("usuario")
 
+    volver = request.GET.get("desde", "")
+
     return render(
         request,
         "asistencias/detalle_asistencia.html",
         {
             "registro": registro,
             "eventos": eventos,
+            "volver": volver,
         },
     )
 
 
-@login_required
-@permission_required(
-    "asistencias.validar_registro",
-    raise_exception=True,
-)
-@require_POST
+@vista_protegida("asistencias.validar_registro", methods=["POST"])
 def validar_registro(request, pk):
     try:
         token = _asegurar_sesion_edicion(request)
@@ -279,3 +321,101 @@ def validar_registro(request, pk):
         messages.success(request, "El registro quedó validado.")
 
     return redirect("asistencia:historial")
+
+
+@vista_protegida("asistencias.validar_registro", methods=["POST"])
+def validar_multiples_view(request):
+    ids = request.POST.getlist("registro_ids")
+    ids_validos = [int(i) for i in ids if i.isdecimal()]
+
+    if not ids_validos:
+        messages.warning(request, "No seleccionaste ningún registro.")
+        return redirect("asistencia:historial")
+
+    try:
+        token = _asegurar_sesion_edicion(request)
+        validados = validar_multiples(
+            usuario=request.user,
+            token=token,
+            registro_ids=ids_validos,
+        )
+    except (ValidationError, PermissionDenied) as exc:
+        messages.error(request, _mensaje_error(exc))
+    else:
+        messages.success(
+            request,
+            f"Se validaron {validados} registro(s).",
+        )
+
+    return redirect("asistencia:historial")
+
+
+@vista_protegida("asistencias.view_registroasistencia")
+def exportar_csv(request):
+    form = FiltroAsistenciaForm(request.GET or None)
+
+    registros = (
+        RegistroAsistencia.objects.select_related(
+            "designacion__persona",
+            "designacion__cargo",
+            "designacion__espacio_curricular",
+            "marca",
+            "actualizado_por",
+        )
+        .all()
+        .order_by("-fecha", "designacion__persona__apellido_nombre")
+    )
+
+    if form.is_valid():
+        datos = form.cleaned_data
+        registros = _aplicar_filtros(registros, datos)
+
+        if datos.get("estado_registro"):
+            registros = registros.filter(
+                estado_registro=datos["estado_registro"]
+            )
+
+        if datos.get("estado_justificacion"):
+            registros = registros.filter(
+                estado_justificacion=datos["estado_justificacion"]
+            )
+
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="asistencias.csv"'
+    response.write("﻿")
+
+    writer = csv.writer(response)
+    writer.writerow([
+        "Fecha",
+        "DNI",
+        "Docente",
+        "Cargo",
+        "Espacio curricular",
+        "Marca",
+        "Horas",
+        "Estado",
+        "Justificación",
+        "N° formulario",
+        "Actualizado por",
+    ])
+
+    for r in registros[:5000]:
+        writer.writerow([
+            r.fecha.strftime("%d/%m/%Y"),
+            r.designacion.persona.dni,
+            r.designacion.persona.apellido_nombre,
+            r.designacion.cargo.descripcion,
+            (
+                r.designacion.espacio_curricular.nombre
+                if r.designacion.espacio_curricular
+                else ""
+            ),
+            r.marca.codigo,
+            r.horas_inasistidas,
+            r.get_estado_registro_display(),
+            r.get_estado_justificacion_display(),
+            r.nro_formulario,
+            str(r.actualizado_por or ""),
+        ])
+
+    return response

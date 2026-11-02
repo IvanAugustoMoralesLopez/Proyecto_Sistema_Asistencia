@@ -22,6 +22,8 @@ pública que tenía el `views.py` original.
 """
 
 from .calendario import (
+    cargar_masivo,
+    copiar_calendario_view,
     crear_dia_no_laborable,
     editar_dia_no_laborable,
     eliminar_dia_no_laborable_view,
@@ -34,8 +36,10 @@ from .registro import (
     crear_asistencia,
     detalle_asistencia,
     editar_asistencia,
+    exportar_csv,
     historial,
     registro_diario,
+    validar_multiples_view,
     validar_registro,
 )
 from .sesion import liberar_edicion, renovar_edicion
@@ -60,4 +64,8 @@ __all__ = [
     "crear_dia_no_laborable",
     "editar_dia_no_laborable",
     "eliminar_dia_no_laborable_view",
+    "validar_multiples_view",
+    "exportar_csv",
+    "cargar_masivo",
+    "copiar_calendario_view",
 ]

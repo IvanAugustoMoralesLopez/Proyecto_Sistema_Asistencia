@@ -6,25 +6,18 @@ períodos mensuales.
 from datetime import date
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods, require_POST
 
 from ..forms import CierreMensualForm, ReaperturaMensualForm
-from ..models import CierreDiario, CierreMensual
+from ..models import CierreDiario, CierreMensual, RegistroAsistencia
 from ..services import cerrar_dia, cerrar_mes, reabrir_mes
-from ._comun import _asegurar_sesion_edicion, _mensaje_error
+from ._comun import _asegurar_sesion_edicion, _mensaje_error, vista_protegida
 
 
-@login_required
-@permission_required(
-    "asistencias.cerrar_jornada",
-    raise_exception=True,
-)
-@require_POST
+@vista_protegida("asistencias.cerrar_jornada", methods=["POST"])
 def cerrar_jornada(request):
     try:
         fecha = date.fromisoformat(request.POST.get("fecha", ""))
@@ -49,31 +42,32 @@ def cerrar_jornada(request):
     )
 
 
-@login_required
-@permission_required(
-    "asistencias.view_registroasistencia",
-    raise_exception=True,
-)
+@vista_protegida("asistencias.view_registroasistencia")
 def lista_cierres(request):
+    anio_filtro = request.GET.get("anio", "")
+
     cierres = CierreMensual.objects.select_related(
         "cerrado_por",
         "reabierto_por",
     ).all()
+
+    if anio_filtro and anio_filtro.isdecimal():
+        cierres = cierres.filter(anio=int(anio_filtro))
+
     cierres_diarios = CierreDiario.objects.select_related("cerrado_por")[:15]
 
     return render(
         request,
         "asistencias/cierres.html",
-        {"cierres": cierres, "cierres_diarios": cierres_diarios},
+        {
+            "cierres": cierres,
+            "cierres_diarios": cierres_diarios,
+            "anio_filtro": anio_filtro,
+        },
     )
 
 
-@login_required
-@permission_required(
-    "asistencias.cerrar_periodo",
-    raise_exception=True,
-)
-@require_http_methods(["GET", "POST"])
+@vista_protegida("asistencias.cerrar_periodo", methods=["GET", "POST"])
 def confirmar_cierre(request):
     if request.method == "POST":
         form = CierreMensualForm(request.POST)
@@ -101,19 +95,35 @@ def confirmar_cierre(request):
             initial={"anio": hoy.year, "mes": hoy.month}
         )
 
+    resumen = None
+    if request.method == "GET" or (request.method == "POST" and not form.is_valid()):
+        hoy = timezone.localdate()
+        anio_prev = form.data.get("anio", str(hoy.year))
+        mes_prev = form.data.get("mes", str(hoy.month))
+        if anio_prev.isdecimal() and mes_prev.isdecimal():
+            qs = RegistroAsistencia.objects.filter(
+                fecha__year=int(anio_prev),
+                fecha__month=int(mes_prev),
+            )
+            total = qs.count()
+            borradores = qs.filter(
+                estado_registro=RegistroAsistencia.Estado.BORRADOR
+            ).count()
+            validados = total - borradores
+            resumen = {
+                "total": total,
+                "borradores": borradores,
+                "validados": validados,
+            }
+
     return render(
         request,
         "asistencias/confirmar_cierre.html",
-        {"form": form},
+        {"form": form, "resumen": resumen},
     )
 
 
-@login_required
-@permission_required(
-    "asistencias.change_cierremensual",
-    raise_exception=True,
-)
-@require_http_methods(["GET", "POST"])
+@vista_protegida("asistencias.change_cierremensual", methods=["GET", "POST"])
 def reapertura_mensual(request, anio, mes):
     cierre = get_object_or_404(
         CierreMensual,
@@ -151,5 +161,9 @@ def reapertura_mensual(request, anio, mes):
         {
             "form": form,
             "cierre": cierre,
+            "titulo": "Reabrir período mensual",
+            "url_cancelar": reverse("asistencia:lista_cierres"),
+            "btn_texto": "Confirmar reapertura",
+            "btn_clase": "danger",
         },
     )
