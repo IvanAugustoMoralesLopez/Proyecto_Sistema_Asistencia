@@ -1,9 +1,16 @@
 from datetime import date
 
+from io import StringIO
+
+from django.core.management import call_command
+from django.core.management.base import CommandError
+
 from django.contrib.auth.models import Permission, User
 
 from django.core.exceptions import ValidationError
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase 
+
+
 
 from personal.models import (
     Carrera,
@@ -553,4 +560,21 @@ class EmitirDisposicionesTests(TestCase):
         lic = self._licencia('99000001', 'Perez, Ana', date(2026, 10, 5), date(2026, 10, 7))
         self._emitir()
         lic.refresh_from_db()
-        self.assertEqual(lic.disp_oficina, '2000')
+        self.assertEqual(lic.disp_oficina, '2000') 
+
+    def test_el_comando_informa_lo_emitido_y_lo_omitido(self):
+        self._licencia('99000001', 'Perez, Ana', date(2026, 10, 5), date(2026, 10, 7))
+        self._licencia(
+            '99000002', 'Ruiz, Eva', date(2026, 10, 5), date(2026, 10, 7), formulario=None,
+        )
+        salida = StringIO()
+        call_command('emitir_disposiciones', 2026, 10, stdout=salida)
+        texto = salida.getvalue()
+        self.assertIn('Disp. 1/2026  Perez, Ana', texto)
+        self.assertIn('Emitidas: 1', texto)
+        self.assertIn('Omitidas por falta de N° de formulario', texto)
+        self.assertIn('Ruiz, Eva', texto)
+
+    def test_el_comando_rechaza_un_mes_invalido(self):
+        with self.assertRaises(CommandError):
+            call_command('emitir_disposiciones', 2026, 13)
