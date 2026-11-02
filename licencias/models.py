@@ -136,9 +136,15 @@ class LicenciaOtorgada(models.Model):
         dias_pedidos = contar_dias_habiles(self.desde, fin_calculo)
 
         if dias_ya_usados + dias_pedidos > tope:
+            # La situación de revista sale del artículo del catálogo, que es de
+            # donde viene el tope (titular, interino, suplente: arts. 3xx del Estatuto).
+            situacion = (self.articulo.sit_rev or '').strip().lower()
+            para = f" para el personal {situacion}" if situacion else ""
             raise ValidationError({
                 'hasta': (
-                    f"Tope excedido (RN-08). El límite del artículo es {tope} días. "
+                    f"Tope excedido. El límite del artículo {self.articulo.articulo} "
+                    f"según el Estatuto Docente de la provincia del Chaco{para} "
+                    f"es {tope} días. "
                     f"El docente ya usó {dias_ya_usados} días y ahora solicita "
                     f"{dias_pedidos} más."
                 )

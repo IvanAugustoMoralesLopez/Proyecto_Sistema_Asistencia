@@ -190,7 +190,21 @@ class TopeAnualEdicionTests(TestCase):
     def test_edicion_que_supera_el_tope_con_resolucion_se_acepta(self):
         self.licencia.hasta = date(2026, 7, 24)  # 10 días hábiles
         self.licencia.resolucion_excepcion = 'Res. 123/2026'
-        self.licencia.full_clean()  # no debe lanzar ValidationError
+        self.licencia.full_clean()  # no debe lanzar ValidationError 
+
+
+    def test_el_mensaje_de_tope_nombra_el_articulo_y_la_situacion_de_revista(self):
+        nueva = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 20), hasta=date(2026, 7, 20),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            nueva.full_clean()
+        mensaje = ' '.join(ctx.exception.message_dict['hasta'])
+        self.assertIn('artículo 25', mensaje)
+        self.assertIn('Estatuto Docente de la provincia del Chaco', mensaje)
+        self.assertIn('personal titular', mensaje)
+        self.assertIn('5 días', mensaje)
 
 
 class ListadoFiltrosTests(TestCase):
@@ -403,7 +417,16 @@ class ReporteMensualTests(TestCase):
 
     def test_calcula_el_total_de_horas_del_mes(self):
         respuesta = self.client.get('/licencias/reporte/2026/10/')
-        self.assertEqual(respuesta.context['total_horas'], 4)
+        self.assertEqual(respuesta.context['total_horas'], 4) 
+
+    def test_cada_fila_incluye_el_cargo_de_la_designacion(self):
+        respuesta = self.client.get('/licencias/reporte/2026/10/')
+        self.assertEqual(respuesta.context['desglose'][0]['cargo'], 'Hora cátedra')
+
+    def test_la_tabla_muestra_la_columna_cargo(self):
+        respuesta = self.client.get('/licencias/reporte/2026/10/')
+        self.assertContains(respuesta, '<th>Cargo</th>')
+        self.assertContains(respuesta, 'Hora cátedra')    
 
     def test_mes_sin_licencias_tiene_total_cero(self):
         respuesta = self.client.get('/licencias/reporte/2026/11/')

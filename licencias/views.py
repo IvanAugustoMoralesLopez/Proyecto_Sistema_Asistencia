@@ -52,6 +52,7 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
     ).select_related(
         'designacion__persona',
         'designacion__espacio_curricular',
+        'designacion__cargo',
         'articulo',
     )
 
@@ -90,6 +91,11 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
             'espacio_curricular': (
                 lic.designacion.espacio_curricular.nombre
                 if lic.designacion.espacio_curricular
+                else None
+            ),
+            'cargo': (
+                lic.designacion.cargo.descripcion
+                if lic.designacion.cargo_id
                 else None
             ),
             'licencia_solicitada': f"{lic.articulo.articulo} - {lic.articulo.tipo_licencia}",
