@@ -114,6 +114,14 @@
                         <div class="text-danger small">{{ error }}</div>
                     {% endfor %}
                 </div>
+                  <div class="col-md-3">
+                    {{ form.resolucion_excepcion.label_tag }}
+                    {{ form.resolucion_excepcion }}
+
+                    {% for error in form.resolucion_excepcion.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                    {% endfor %}
+                </div>
                 <div class="col-12">
                     {{ form.observaciones.label_tag }}
                     {{ form.observaciones }}
