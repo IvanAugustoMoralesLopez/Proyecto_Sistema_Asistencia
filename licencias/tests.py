@@ -160,9 +160,38 @@ class TopeAnualEdicionTests(TestCase):
             self.licencia.full_clean()
         self.assertIn('hasta', ctx.exception.message_dict)
 
+
     def test_edicion_dentro_del_tope_se_acepta(self):
         self.licencia.observaciones = 'Duelo familiar'
-        self.licencia.full_clean()  # no debe lanzar ValidationError 
+        self.licencia.full_clean()  # no debe lanzar ValidationError  
+
+    def test_edicion_dentro_del_tope_se_acepta(self):
+        self.licencia.observaciones = 'Duelo familiar'
+        self.licencia.full_clean()  # no debe lanzar ValidationError
+
+    def test_alta_que_supera_el_tope_con_resolucion_se_acepta(self):
+        nueva = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 20), hasta=date(2026, 7, 20),
+            resolucion_excepcion='Res. 123/2026',
+        )
+        nueva.full_clean()  # la resolución de excepción habilita pasar el tope
+
+    def test_alta_que_supera_el_tope_con_resolucion_en_blanco_se_rechaza(self):
+        nueva = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 20), hasta=date(2026, 7, 20),
+            resolucion_excepcion='   ',
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            nueva.full_clean()
+        self.assertIn('hasta', ctx.exception.message_dict)
+
+    def test_edicion_que_supera_el_tope_con_resolucion_se_acepta(self):
+        self.licencia.hasta = date(2026, 7, 24)  # 10 días hábiles
+        self.licencia.resolucion_excepcion = 'Res. 123/2026'
+        self.licencia.full_clean()  # no debe lanzar ValidationError
+
 
 class ListadoFiltrosTests(TestCase):
     """M4: un filtro inválido en la URL no debe romper el listado."""
@@ -578,3 +607,70 @@ class EmitirDisposicionesTests(TestCase):
     def test_el_comando_rechaza_un_mes_invalido(self):
         with self.assertRaises(CommandError):
             call_command('emitir_disposiciones', 2026, 13)
+
+
+class ResolucionExcepcionPantallasTests(TestCase):
+    """RN-08: la excepción por resolución se carga y se respeta desde las pantallas."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni='99000093', apellido_nombre='Diaz, Rosa')
+        cls.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='T-5', articulo='5', tipo_licencia='Con tope',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo', tope_dias_anual=5,
+        )
+        usuario = User.objects.create_user('cargador2', password='x')
+        usuario.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label='licencias',
+                codename__in=['add_licenciaotorgada', 'change_licenciaotorgada'],
+            )
+        )
+
+    def setUp(self):
+        self.client.login(username='cargador2', password='x')
+
+    def _datos(self, **extra):
+        # Lunes 02/03/2026 a viernes 13/03/2026: 10 días hábiles, más que el tope (5).
+        datos = {
+            'designacion': self.designacion.pk,
+            'articulo': self.articulo.pk,
+            'sit_rev': 'Titular',
+            'desde': '2026-03-02',
+            'hasta': '2026-03-13',
+        }
+        datos.update(extra)
+        return datos
+
+    def test_la_pantalla_de_alta_muestra_el_campo(self):
+        respuesta = self.client.get('/licencias/nueva/')
+        self.assertContains(respuesta, 'name="resolucion_excepcion"')
+
+    def test_alta_que_excede_el_tope_sin_resolucion_no_se_guarda(self):
+        respuesta = self.client.post('/licencias/nueva/', self._datos())
+        self.assertEqual(respuesta.status_code, 200)  # vuelve al formulario con el error
+        self.assertEqual(LicenciaOtorgada.objects.count(), 0)
+
+    def test_alta_que_excede_el_tope_con_resolucion_se_guarda(self):
+        respuesta = self.client.post(
+            '/licencias/nueva/', self._datos(resolucion_excepcion='Res. 7/2026'),
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(
+            LicenciaOtorgada.objects.get().resolucion_excepcion, 'Res. 7/2026',
+        )
+
+    def test_la_pantalla_de_edicion_muestra_la_resolucion_cargada(self):
+        licencia = LicenciaOtorgada.objects.create(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 3, 2), hasta=date(2026, 3, 4),
+            resolucion_excepcion='Res. 9/2026',
+        )
+        respuesta = self.client.get(f'/licencias/editar/{licencia.pk}/')
+        self.assertContains(respuesta, 'value="Res. 9/2026"')
