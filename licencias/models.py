@@ -71,6 +71,15 @@ class LicenciaOtorgada(models.Model):
         help_text="Número del formulario en papel recepcionado (RN-10).",
     )
 
+
+    # RN-08: resolución que autoriza a exceder el tope anual del artículo.
+    # Si viene completa, la validación del tope deja pasar el exceso.
+    resolucion_excepcion = models.CharField(
+        max_length=100, null=True, blank=True,
+        verbose_name="Resolución de excepción",
+        help_text="N° y fecha de la resolución que autoriza exceder el tope anual (RN-08).",
+    )
+
     # Fechas y observaciones
     desde = models.DateField()
     hasta = models.DateField(null=True, blank=True)
@@ -103,7 +112,12 @@ class LicenciaOtorgada(models.Model):
         if not tope:
             return
 
-        # TODO (RN-08): faltan el cruce de año y la excepción por resolución.
+        # TODO (RN-08): falta el cruce de año (repartir los días entre dos años).
+
+        # RN-08: con una resolución de excepción cargada, el tope no se aplica.
+        # strip() para que un campo con solo espacios no cuente como resolución.
+        if (self.resolucion_excepcion or '').strip():
+            return
 
         # Import local: services importa models, así que no puede ir arriba.
         from .services import dias_usados_en_anio

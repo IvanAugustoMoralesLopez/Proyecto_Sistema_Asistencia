@@ -160,9 +160,38 @@ class TopeAnualEdicionTests(TestCase):
             self.licencia.full_clean()
         self.assertIn('hasta', ctx.exception.message_dict)
 
+
     def test_edicion_dentro_del_tope_se_acepta(self):
         self.licencia.observaciones = 'Duelo familiar'
-        self.licencia.full_clean()  # no debe lanzar ValidationError 
+        self.licencia.full_clean()  # no debe lanzar ValidationError  
+
+    def test_edicion_dentro_del_tope_se_acepta(self):
+        self.licencia.observaciones = 'Duelo familiar'
+        self.licencia.full_clean()  # no debe lanzar ValidationError
+
+    def test_alta_que_supera_el_tope_con_resolucion_se_acepta(self):
+        nueva = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 20), hasta=date(2026, 7, 20),
+            resolucion_excepcion='Res. 123/2026',
+        )
+        nueva.full_clean()  # la resolución de excepción habilita pasar el tope
+
+    def test_alta_que_supera_el_tope_con_resolucion_en_blanco_se_rechaza(self):
+        nueva = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 20), hasta=date(2026, 7, 20),
+            resolucion_excepcion='   ',
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            nueva.full_clean()
+        self.assertIn('hasta', ctx.exception.message_dict)
+
+    def test_edicion_que_supera_el_tope_con_resolucion_se_acepta(self):
+        self.licencia.hasta = date(2026, 7, 24)  # 10 días hábiles
+        self.licencia.resolucion_excepcion = 'Res. 123/2026'
+        self.licencia.full_clean()  # no debe lanzar ValidationError
+
 
 class ListadoFiltrosTests(TestCase):
     """M4: un filtro inválido en la URL no debe romper el listado."""
