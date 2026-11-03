@@ -108,6 +108,21 @@ class LicenciaOtorgada(models.Model):
                 'hasta': 'La fecha Hasta no puede ser anterior a la fecha Desde.'
             })
 
+        # M8: el artículo debe corresponder a la situación de revista de la
+        # designación (un suplente no usa artículos de titular). Si la designación
+        # no tiene situación cargada, no se valida.
+        if self.designacion.situacion_revista:
+            situacion_docente = self.designacion.get_situacion_revista_display()
+            situacion_articulo = (self.articulo.sit_rev or '').strip()
+            if situacion_articulo.lower() != situacion_docente.lower():
+                raise ValidationError({
+                    'articulo': (
+                        f"El artículo {self.articulo.articulo} corresponde al "
+                        f"personal {situacion_articulo.lower()} y esta designación "
+                        f"es de personal {situacion_docente.lower()}."
+                    )
+                })
+
         # M8: una designación no puede tener dos licencias en el mismo día.
         # Una licencia abierta (sin "hasta") se toma como que sigue sin fin.
         fin = self.hasta or date.max

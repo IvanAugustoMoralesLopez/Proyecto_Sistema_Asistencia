@@ -776,4 +776,54 @@ class SuperposicionTests(TestCase):
         nueva = self._nueva(date(2026, 4, 1), date(2026, 4, 3))
         with self.assertRaises(ValidationError) as ctx:
             nueva.full_clean()
-        self.assertIn('desde', ctx.exception.message_dict)
+        self.assertIn('desde', ctx.exception.message_dict) 
+
+class SituacionRevistaTests(TestCase):
+    """M8: el artículo debe corresponder a la situación de revista de la designación."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        luna = Persona.objects.create(dni='99000090', apellido_nombre='Luna, Ana')
+        rey = Persona.objects.create(dni='99000089', apellido_nombre='Rey, Pedro')
+        cls.suplente = Designacion.objects.create(
+            persona=luna, cargo=cargo, desde=date(2026, 1, 1), situacion_revista='SUP',
+        )
+        cls.sin_situacion = Designacion.objects.create(
+            persona=rey, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        datos = dict(
+            tipo_licencia='Uno', categoria_informe='Duelo',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo',
+        )
+        cls.art_titular = LicenciaArticulo.objects.create(
+            cod_licencia='R-1', articulo='1', sit_rev='Titular', **datos,
+        )
+        cls.art_suplente = LicenciaArticulo.objects.create(
+            cod_licencia='R-2', articulo='2', sit_rev='Suplente', **datos,
+        )
+
+    def _licencia(self, designacion, articulo):
+        return LicenciaOtorgada(
+            designacion=designacion, articulo=articulo, sit_rev=articulo.sit_rev,
+            desde=date(2026, 3, 9), hasta=date(2026, 3, 13),
+        )
+
+    def test_articulo_de_titular_en_designacion_de_suplente_se_rechaza(self):
+        with self.assertRaises(ValidationError) as ctx:
+            self._licencia(self.suplente, self.art_titular).full_clean()
+        self.assertIn('articulo', ctx.exception.message_dict)
+
+    def test_articulo_de_suplente_en_designacion_de_suplente_se_acepta(self):
+        self._licencia(self.suplente, self.art_suplente).full_clean()
+
+    def test_designacion_sin_situacion_acepta_cualquier_articulo(self):
+        self._licencia(self.sin_situacion, self.art_titular).full_clean()
+
+    def test_el_mensaje_nombra_las_dos_situaciones(self):
+        with self.assertRaises(ValidationError) as ctx:
+            self._licencia(self.suplente, self.art_titular).full_clean()
+        mensaje = ' '.join(ctx.exception.message_dict['articulo'])
+        self.assertIn('titular', mensaje)
+        self.assertIn('suplente', mensaje)
