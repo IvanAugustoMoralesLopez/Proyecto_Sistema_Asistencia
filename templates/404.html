@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Página no encontrada{% endblock %}
+
+{# Sin menú lateral #}
+{% block sidebar %}{% endblock %}
+{% block boton_menu %}{% endblock %}
+
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card shadow-sm border-0 text-center">
+            <div class="card-body p-5">
+                <i class="bi bi-search text-secondary" style="font-size: 3rem;"></i>
+                <h1 class="h3 mt-3">No encontramos la página</h1>
+                <p class="text-secondary">
+                    La dirección no existe o el registro que buscás ya no está disponible.
+                </p>
+                {% include "includes/boton_inicio.html" %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Ingreso y egreso de los profesores · Sistema Asistencia{% endblock %}
+{% block seccion %}ingreso-egreso{% endblock %}
+
+{% block content %}
+{% include "includes/encabezado_planilla.html" with ruta="Administración / Personal docente" titulo="Ingreso y egreso de los profesores" subtitulo="Registro de presentación de documentación, recepción y datos de ingreso del agente." panel_id="panelRegistro" %}
+
+<div class="planilla">
+    <table class="tabla-planilla">
+        <thead>
+            <tr>
+                <th>D.N.I.</th>
+                <th>Apellido y nombre</th>
+                <th>Lugar de presentación</th>
+                <th>Fecha de presentación</th>
+                <th>Lugar de recepción</th>
+                <th>Fecha de recepción</th>
+                <th>Responsable de recepción</th>
+                <th>Jurisdicción</th>
+                <th>Escalafón</th>
+                <th>Ítem / nivel</th>
+                <th>Modalidad</th>
+                <th>Oficina</th>
+            </tr>
+        </thead>
+        <tbody>
+            {# Datos de ejemplo. Reemplazar por un {% for %} sobre los ingresos #}
+            <tr>
+                <td>11.111.111</td><td>ACOSTA, FELICIANO</td><td>Mesa de entradas</td><td>02/03/2026</td>
+                <td>Secretaría</td><td>03/03/2026</td><td>PÉREZ, MARÍA</td>
+                <td>Provincial</td><td>Docente</td><td>Nivel superior</td><td>Presencial</td><td>1452</td>
+            </tr>
+            <tr>
+                <td>22.222.222</td><td>GÓMEZ, LAURA</td><td>Mesa de entradas</td><td>05/03/2026</td>
+                <td>Secretaría</td><td>05/03/2026</td><td>PÉREZ, MARÍA</td>
+                <td>Provincial</td><td>Docente</td><td>Nivel superior</td><td>Presencial</td><td>1452</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block panel %}
+<div class="offcanvas offcanvas-end panel-registro" tabindex="-1" id="panelRegistro" aria-labelledby="panelRegistroTitulo">
+    <div class="offcanvas-header">
+        <h2 class="offcanvas-title h5" id="panelRegistroTitulo">Cargar Nuevos Datos</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+
+    <form method="post" class="d-flex flex-column flex-grow-1 overflow-hidden">
+        {% csrf_token %}
+        <div class="offcanvas-body">
+            <div class="mb-3">
+                <label class="form-label" for="e_dni">D.N.I.</label>
+                <input class="form-control" id="e_dni" name="dni" maxlength="8" inputmode="numeric" required>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-7">
+                    <label class="form-label" for="e_lugar_pres">Lugar de presentación</label>
+                    <input class="form-control" id="e_lugar_pres" name="lugar_presentacion">
+                </div>
+                <div class="col-5">
+                    <label class="form-label" for="e_fecha_pres">Fecha</label>
+                    <input class="form-control px-2" id="e_fecha_pres" name="fecha_presentacion" type="date">
+                </div>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-7">
+                    <label class="form-label" for="e_lugar_rec">Lugar de recepción</label>
+                    <input class="form-control" id="e_lugar_rec" name="lugar_recepcion">
+                </div>
+                <div class="col-5">
+                    <label class="form-label" for="e_fecha_rec">Fecha</label>
+                    <input class="form-control px-2" id="e_fecha_rec" name="fecha_recepcion" type="date">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="e_resp">Responsable de recepción</label>
+                <input class="form-control" id="e_resp" name="responsable_recepcion">
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label" for="e_juris">Jurisdicción</label>
+                    <input class="form-control" id="e_juris" name="jurisdiccion">
+                </div>
+                <div class="col-6">
+                    <label class="form-label" for="e_escalafon">Escalafón</label>
+                    <input class="form-control" id="e_escalafon" name="escalafon">
+                </div>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label" for="e_item">Ítem / nivel</label>
+                    <input class="form-control" id="e_item" name="item_nivel">
+                </div>
+                <div class="col-6">
+                    <label class="form-label" for="e_modalidad">Modalidad</label>
+                    <input class="form-control" id="e_modalidad" name="modalidad">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="e_oficina">Oficina</label>
+                <input class="form-control" id="e_oficina" name="oficina">
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="e_doc">Documentación adjunta</label>
+                <input class="form-control" id="e_doc" name="documentacion_adjunta">
+            </div>
+        </div>
+        <div class="offcanvas-footer">
+            <button type="submit" class="btn btn-primario w-100">Cargar</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
