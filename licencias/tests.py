@@ -875,4 +875,46 @@ class CruceDeAnioTests(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             self._licencia(date(2026, 12, 28), date(2027, 1, 5)).full_clean()
         mensaje = ' '.join(ctx.exception.message_dict['hasta'])
-        self.assertIn('2027', mensaje)  # el mensaje dice qué año se pasó
+        self.assertIn('2027', mensaje)  # el mensaje dice qué año se pasó 
+
+class DesignacionDeBajaEdicionTests(TestCase):
+    """N2: se puede editar una licencia cuya designación fue dada de baja."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni=99000097, apellido_nombre='Baja, Docente')
+        cls.designacion_baja = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1), activo=False,
+        )
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='T-25', articulo='25', tipo_licencia='Duelo',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo', tope_dias_anual=5,
+        )
+        cls.licencia = LicenciaOtorgada.objects.create(
+            designacion=cls.designacion_baja, articulo=cls.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 13), hasta=date(2026, 7, 14),
+        )
+
+    def test_al_editar_se_ofrece_la_designacion_dada_de_baja(self):
+        from .forms import LicenciaOtorgadaForm
+        form = LicenciaOtorgadaForm(instance=self.licencia)
+        self.assertIn(
+            self.designacion_baja, form.fields['designacion'].queryset,
+        )
+
+    def test_en_un_alta_no_se_ofrecen_designaciones_dadas_de_baja(self):
+        from .forms import LicenciaOtorgadaForm
+        form = LicenciaOtorgadaForm()
+        self.assertNotIn(
+            self.designacion_baja, form.fields['designacion'].queryset,
+        ) 
+
+    def test_al_editar_las_fechas_se_precargan_en_formato_iso(self):
+        # El navegador solo entiende aaaa-mm-dd en un input type="date".
+        from .forms import LicenciaOtorgadaForm
+        form = LicenciaOtorgadaForm(instance=self.licencia)
+        self.assertIn('value="2026-07-13"', str(form['desde']))
+        self.assertIn('value="2026-07-14"', str(form['hasta']))
