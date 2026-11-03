@@ -6,15 +6,20 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="h3">Cierres mensuales</h1>
 
-    {% if perms.asistencias.cerrar_periodo %}
-        <a class="btn btn-primary"
-           href="{% url 'asistencia:confirmar_cierre' %}">
-            Nuevo cierre
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary"
+           href="{% url 'asistencia:registro_diario' %}">
+            Registro diario
         </a>
-    {% endif %}
+        {% if perms.asistencias.cerrar_periodo %}
+            <a class="btn btn-primary"
+               href="{% url 'asistencia:confirmar_cierre' %}">
+                Nuevo cierre
+            </a>
+        {% endif %}
+    </div>
 </div>
 
-{# Mejora 17: filtro por año #}
 <form method="get" class="card card-body mb-3">
     <div class="row align-items-end g-3">
         <div class="col-md-3">
@@ -53,7 +58,6 @@
                 <tr>
                     <td>{{ cierre.anio }}-{{ cierre.mes|stringformat:"02d" }}</td>
                     <td>
-                        {# Mejora 16: semáforo visual #}
                         {% if cierre.estado == "CERRADO" %}
                             <span class="badge text-bg-danger">Cerrado</span>
                         {% else %}
@@ -122,4 +126,8 @@
         </tbody>
     </table>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "asistencias/includes/ux_mejoras.html" %}
 {% endblock %}

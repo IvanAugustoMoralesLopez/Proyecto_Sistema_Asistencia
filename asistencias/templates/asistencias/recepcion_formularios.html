@@ -13,12 +13,17 @@
         </p>
     </div>
 
-    {# Mejora 10: contador de pendientes #}
-    {% if pendientes %}
-        <span class="badge text-bg-warning fs-6">
-            {{ pendientes }} pendiente{{ pendientes|pluralize:"s" }}
-        </span>
-    {% endif %}
+    <div class="d-flex align-items-center gap-2">
+        {% if pendientes %}
+            <span class="badge text-bg-warning fs-6">
+                {{ pendientes }} pendiente{{ pendientes|pluralize:"s" }}
+            </span>
+        {% endif %}
+        <a class="btn btn-outline-secondary"
+           href="{% url 'asistencia:registro_diario' %}">
+            Registro diario
+        </a>
+    </div>
 </div>
 
 <form method="get" class="card card-body mb-4">
@@ -92,7 +97,7 @@
                     </td>
                     <td class="text-nowrap">
                         <a class="btn btn-sm btn-outline-primary"
-                           href="{% url 'asistencia:detalle_asistencia' registro.pk %}">
+                           href="{% url 'asistencia:detalle_asistencia' registro.pk %}?desde={% url 'asistencia:recepcion_formularios' %}{% if querystring %}%3F{{ querystring }}{% endif %}">
                             Ver
                         </a>
                         {% if registro.estado_justificacion != "JUSTIFICADA" and perms.asistencias.recepcionar_formulario %}
@@ -114,6 +119,9 @@
     </table>
 </div>
 
-{# Mejora 20: paginación con números #}
 {% include "asistencias/includes/paginacion.html" %}
+{% endblock %}
+
+{% block extra_js %}
+{% include "asistencias/includes/ux_mejoras.html" %}
 {% endblock %}

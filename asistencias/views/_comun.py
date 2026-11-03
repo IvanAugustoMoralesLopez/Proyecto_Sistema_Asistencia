@@ -1,18 +1,26 @@
 """
 Helpers compartidos por las vistas de asistencias: token/sesión de
-edición, mensajes de error legibles, y los filtros y la paginación que
-usan Historial y Recepción de formularios.
+edición, mensajes de error legibles, los filtros y la paginación que
+usan Historial y Recepción de formularios, y las vistas de
+liberación/renovación manual de sesión.
 """
 
 import functools
 import uuid
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
-from django.views.decorators.http import require_http_methods
+from django.shortcuts import redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_http_methods, require_POST
 
-from ..services import adquirir_sesion_edicion
+from ..services import (
+    adquirir_sesion_edicion,
+    liberar_sesion_edicion,
+    renovar_sesion_edicion,
+)
 
 
 def vista_protegida(permiso, *, methods=None):
@@ -55,6 +63,13 @@ def _mensaje_error(exc):
     return str(exc)
 
 
+def _url_segura(url):
+    """Solo URLs relativas del mismo sitio (previene open redirect)."""
+    if url and url_has_allowed_host_and_scheme(url, allowed_hosts=set()):
+        return url
+    return ""
+
+
 def _aplicar_filtros(registros, datos):
     """Filtros comunes del historial y de la recepción de formularios."""
     if datos.get("dni"):
@@ -83,6 +98,11 @@ def _aplicar_filtros(registros, datos):
             designacion__espacio_curricular=datos["espacio_curricular"]
         )
 
+    if datos.get("estado_registro"):
+        registros = registros.filter(
+            estado_registro=datos["estado_registro"]
+        )
+
     return registros
 
 
@@ -90,8 +110,41 @@ def _paginar(request, registros):
     paginador = Paginator(registros, 25)
     pagina = paginador.get_page(request.GET.get("page"))
 
-    # Los enlaces de paginación conservan los filtros aplicados.
     parametros = request.GET.copy()
     parametros.pop("page", None)
 
     return pagina, parametros.urlencode()
+
+
+# --- Vistas de sesión de edición ---
+
+
+@login_required
+@require_POST
+def liberar_edicion(request):
+    token = request.session.get("asistencia_token")
+
+    if token:
+        liberar_sesion_edicion(request.user, token)
+        request.session.pop("asistencia_token", None)
+
+    messages.info(request, "Se liberó la sesión de edición.")
+    return redirect("asistencia:registro_diario")
+
+
+@login_required
+@require_POST
+def renovar_edicion(request):
+    token = request.session.get("asistencia_token")
+
+    try:
+        renovar_sesion_edicion(request.user, token)
+    except (ValidationError, PermissionDenied) as exc:
+        return render(
+            request,
+            "asistencias/error_sesion.html",
+            {"mensaje": _mensaje_error(exc)},
+            status=409,
+        )
+
+    return redirect("asistencia:registro_diario")

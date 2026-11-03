@@ -109,7 +109,6 @@
                     <td>{{ evento.usuario|default:"—" }}</td>
                     <td>{{ evento.get_accion_display }}</td>
                     <td>{{ evento.motivo|default:"—" }}</td>
-                    {# Mejora 24: JSON legible con diff #}
                     <td>
                         <div class="small">{{ evento.antes|json_legible }}</div>
                     </td>
@@ -128,7 +127,6 @@
     </table>
 </div>
 
-{# Mejora 25: botón de volver inteligente #}
 {% if volver %}
     <a class="btn btn-outline-secondary" href="{{ volver }}">
         Volver
@@ -139,4 +137,8 @@
         Volver al historial
     </a>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% include "asistencias/includes/ux_mejoras.html" %}
 {% endblock %}

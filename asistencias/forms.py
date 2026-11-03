@@ -22,6 +22,16 @@ from .services import (
 )
 
 
+def _aplicar_clases_bootstrap(fields):
+    for field in fields.values():
+        clase = (
+            "form-select"
+            if isinstance(field.widget, forms.Select)
+            else "form-control"
+        )
+        field.widget.attrs.setdefault("class", clase)
+
+
 class RegistroAsistenciaForm(forms.ModelForm):
     class Meta:
         model = RegistroAsistencia
@@ -88,8 +98,7 @@ class RegistroAsistenciaForm(forms.ModelForm):
 
         self.fields["licencia"].required = False
 
-        for field in self.fields.values():
-            field.widget.attrs.setdefault("class", "form-control")
+        _aplicar_clases_bootstrap(self.fields)
 
     def clean_fecha(self):
         fecha = self.cleaned_data["fecha"]
@@ -207,14 +216,7 @@ class FiltroAsistenciaForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        for field in self.fields.values():
-            clase = (
-                "form-select"
-                if isinstance(field.widget, forms.Select)
-                else "form-control"
-            )
-            field.widget.attrs.setdefault("class", clase)
+        _aplicar_clases_bootstrap(self.fields)
 
     def clean(self):
         cleaned = super().clean()
@@ -279,13 +281,7 @@ class RecepcionFormularioForm(forms.Form):
         ]
         self.fields["fecha_recepcion"].initial = timezone.localdate()
 
-        for field in self.fields.values():
-            clase = (
-                "form-select"
-                if isinstance(field.widget, forms.Select)
-                else "form-control"
-            )
-            field.widget.attrs.setdefault("class", clase)
+        _aplicar_clases_bootstrap(self.fields)
 
     def clean_fecha_recepcion(self):
         fecha = self.cleaned_data["fecha_recepcion"]
@@ -346,14 +342,7 @@ class DiaNoLaborableForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        for field in self.fields.values():
-            clase = (
-                "form-select"
-                if isinstance(field.widget, forms.Select)
-                else "form-control"
-            )
-            field.widget.attrs.setdefault("class", clase)
+        _aplicar_clases_bootstrap(self.fields)
 
     def clean_fecha(self):
         fecha = self.cleaned_data["fecha"]
@@ -408,13 +397,7 @@ class CargaMasivaCalendarioForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            clase = (
-                "form-select"
-                if isinstance(field.widget, forms.Select)
-                else "form-control"
-            )
-            field.widget.attrs.setdefault("class", clase)
+        _aplicar_clases_bootstrap(self.fields)
 
 
 class CopiarCalendarioForm(forms.Form):
@@ -431,8 +414,7 @@ class CopiarCalendarioForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs.setdefault("class", "form-control")
+        _aplicar_clases_bootstrap(self.fields)
 
     def clean(self):
         cleaned = super().clean()

@@ -1,4 +1,3 @@
-
 from django.contrib import admin
 
 from .models import (
@@ -11,6 +10,19 @@ from .models import (
     ControlConcurrencia,
     DiaNoLaborable,
 )
+
+
+class SoloLecturaAdmin(admin.ModelAdmin):
+    """Admin de solo lectura: no permite alta, edición ni baja."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(MarcaAsistencia)
@@ -53,7 +65,7 @@ class DiaNoLaborableAdmin(admin.ModelAdmin):
 
 
 @admin.register(RegistroAsistencia)
-class RegistroAsistenciaAdmin(admin.ModelAdmin):
+class RegistroAsistenciaAdmin(SoloLecturaAdmin):
     list_display = (
         "fecha",
         "designacion",
@@ -84,35 +96,15 @@ class RegistroAsistenciaAdmin(admin.ModelAdmin):
     )
     date_hierarchy = "fecha"
 
-    # Solo consulta: las altas y modificaciones pasan por los servicios
-    # para respetar cierres, permisos por rol y auditoría.
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
 
 @admin.register(CierreDiario)
-class CierreDiarioAdmin(admin.ModelAdmin):
+class CierreDiarioAdmin(SoloLecturaAdmin):
     list_display = ("fecha", "cerrado_por", "cerrado_en")
     date_hierarchy = "fecha"
 
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
 
 @admin.register(CierreMensual)
-class CierreMensualAdmin(admin.ModelAdmin):
+class CierreMensualAdmin(SoloLecturaAdmin):
     list_display = (
         "anio",
         "mes",
@@ -132,20 +124,9 @@ class CierreMensualAdmin(admin.ModelAdmin):
         "version",
     )
 
-    # Solo consulta: cerrar y reabrir un período pasan por los servicios,
-    # que exigen permiso y motivo y dejan el evento en la bitácora (RN-06).
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
 
 @admin.register(EventoAsistencia)
-class EventoAsistenciaAdmin(admin.ModelAdmin):
+class EventoAsistenciaAdmin(SoloLecturaAdmin):
     list_display = (
         "creado_en",
         "usuario",
@@ -170,15 +151,6 @@ class EventoAsistenciaAdmin(admin.ModelAdmin):
         "despues",
         "creado_en",
     )
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
 
 
 @admin.register(SesionEdicion)
