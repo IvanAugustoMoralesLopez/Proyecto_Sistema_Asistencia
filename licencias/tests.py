@@ -475,6 +475,10 @@ class ReporteMensualTests(TestCase):
         respuesta = self.client.get('/licencias/reporte/2026/13/')
         self.assertEqual(respuesta.status_code, 404) 
 
+    def test_anio_fuera_de_rango_da_404(self):
+        self.assertEqual(self.client.get('/licencias/reporte/0/5/').status_code, 404)
+        self.assertEqual(self.client.get('/licencias/reporte/3000/5/').status_code, 404)    
+
 
 class NroFormularioTests(TestCase):
     """RN-10: el N° de formulario se carga junto con la licencia."""
