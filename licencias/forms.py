@@ -93,6 +93,14 @@ class LicenciaOtorgadaForm(forms.ModelForm):
                 Q(hasta__isnull=True) | Q(hasta__gte=fecha_desde)
             )
 
+        # N2: al editar, siempre se ofrece la designación que la licencia ya
+        # tiene, aunque haya sido dada de baja; si no, la licencia no se puede
+        # guardar. En un alta no hay designación previa y no se agrega nada.
+        if self.instance.designacion_id:
+            designaciones = designaciones | Designacion.objects.filter(
+                pk=self.instance.designacion_id
+            )
+
         self.fields["designacion"].queryset = (
             designaciones.select_related(
                 "persona", "cargo"
@@ -126,11 +134,11 @@ class LicenciaOtorgadaForm(forms.ModelForm):
                 "class": "form-control",
                 "placeholder": "Situación de revista",
             }),
-            "desde": forms.DateInput(attrs={
+            "desde": forms.DateInput(format="%Y-%m-%d", attrs={
                 "class": "form-control",
                 "type": "date",
             }),
-            "hasta": forms.DateInput(attrs={
+            "hasta": forms.DateInput(format="%Y-%m-%d", attrs={
                 "class": "form-control",
                 "type": "date",
             }),
