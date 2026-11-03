@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from .clasificacion import CATEGORIA_CHOICES
-from .dias import contar_dias_habiles
+from .dias import contar_dias_habiles, rango_en_anio
 
 
 class LicenciaArticulo(models.Model):
@@ -149,8 +149,6 @@ class LicenciaOtorgada(models.Model):
         if not tope:
             return
 
-        # TODO (RN-08): falta el cruce de año (repartir los días entre dos años).
-
         # RN-08: con una resolución de excepción cargada, el tope no se aplica.
         # strip() para que un campo con solo espacios no cuente como resolución.
         if (self.resolucion_excepcion or '').strip():
@@ -159,33 +157,44 @@ class LicenciaOtorgada(models.Model):
         # Import local: services importa models, así que no puede ir arriba.
         from .services import dias_usados_en_anio
 
-        # Al editar (self.pk existe) se excluye esta misma licencia del conteo,
-        # para que no se cuente contra sí misma. En un alta, self.pk es None.
-        dias_ya_usados = dias_usados_en_anio(
-            self.designacion.persona.dni,
-            self.articulo.articulo,
-            self.desde.year,
-            excluir_id=self.pk,
-        )
+        # El tope es anual: una licencia que cruza de año se reparte y cada
+        # parte se controla contra el tope de su propio año.
+        hoy = date.today()
+        fin_calculo = self.hasta or hoy  # licencia abierta: hasta hoy
+        anios = range(self.desde.year, fin_calculo.year + 1)
 
-        # Licencia abierta: se calcula hasta hoy (igual criterio que services.py).
-        fin_calculo = self.hasta or date.today()
-        dias_pedidos = contar_dias_habiles(self.desde, fin_calculo)
+        for anio in anios:
+            rango = rango_en_anio(self.desde, self.hasta, anio, hoy)
+            if rango is None:
+                continue
+            inicio, fin = rango
+            dias_pedidos = contar_dias_habiles(inicio, fin)
 
-        if dias_ya_usados + dias_pedidos > tope:
-            # La situación de revista sale del artículo del catálogo, que es de
-            # donde viene el tope (titular, interino, suplente: arts. 3xx del Estatuto).
-            situacion = (self.articulo.sit_rev or '').strip().lower()
-            para = f" para el personal {situacion}" if situacion else ""
-            raise ValidationError({
-                'hasta': (
-                    f"Tope excedido. El límite del artículo {self.articulo.articulo} "
-                    f"según el Estatuto Docente de la provincia del Chaco{para} "
-                    f"es {tope} días. "
-                    f"El docente ya usó {dias_ya_usados} días y ahora solicita "
-                    f"{dias_pedidos} más."
-                )
-            })
+            # Al editar (self.pk existe) se excluye esta misma licencia del
+            # conteo, para que no se cuente contra sí misma. En un alta es None.
+            dias_ya_usados = dias_usados_en_anio(
+                self.designacion.persona.dni,
+                self.articulo.articulo,
+                anio,
+                excluir_id=self.pk,
+            )
+
+            if dias_ya_usados + dias_pedidos > tope:
+                # La situación de revista sale del artículo del catálogo, que es
+                # de donde viene el tope (titular, interino, suplente: arts. 3xx).
+                situacion = (self.articulo.sit_rev or '').strip().lower()
+                para = f" para el personal {situacion}" if situacion else ""
+                # Solo se nombra el año cuando la licencia cruza de año.
+                en_anio = f" en {anio}" if len(anios) > 1 else ""
+                raise ValidationError({
+                    'hasta': (
+                        f"Tope excedido. El límite del artículo {self.articulo.articulo} "
+                        f"según el Estatuto Docente de la provincia del Chaco{para} "
+                        f"es {tope} días. "
+                        f"El docente ya usó {dias_ya_usados} días{en_anio} y ahora "
+                        f"solicita {dias_pedidos} más{en_anio}."
+                    )
+                })
 
 
 class RegistroBitacora(models.Model):

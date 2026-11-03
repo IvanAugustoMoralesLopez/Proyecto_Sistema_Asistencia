@@ -826,4 +826,53 @@ class SituacionRevistaTests(TestCase):
             self._licencia(self.suplente, self.art_titular).full_clean()
         mensaje = ' '.join(ctx.exception.message_dict['articulo'])
         self.assertIn('titular', mensaje)
-        self.assertIn('suplente', mensaje)
+        self.assertIn('suplente', mensaje) 
+
+class CruceDeAnioTests(TestCase):
+    """RN-08: una licencia que cruza de año se reparte entre los dos años."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni=99000098, apellido_nombre='Cruce, Docente')
+        cls.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='T-25', articulo='25', tipo_licencia='Duelo',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo', tope_dias_anual=5,
+        )
+
+    def _licencia(self, desde, hasta):
+        return LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=desde, hasta=hasta,
+        )
+
+    def test_cruce_de_anio_se_reparte_y_cada_parte_entra_en_su_tope(self):
+        # Lun 28/12/2026 a mar 05/01/2027: 4 días hábiles en 2026 y 3 en 2027.
+        # Total 7 (> tope 5), pero cada año por separado entra en el tope.
+        self._licencia(date(2026, 12, 28), date(2027, 1, 5)).full_clean()
+
+    def test_cruce_de_anio_rechaza_si_se_pasa_el_tope_del_primer_anio(self):
+        # Ya usó 2 días en 2026 (21 y 22/12); sumados a los 4 de diciembre = 6 > 5.
+        LicenciaOtorgada.objects.create(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 12, 21), hasta=date(2026, 12, 22),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            self._licencia(date(2026, 12, 28), date(2027, 1, 5)).full_clean()
+        self.assertIn('hasta', ctx.exception.message_dict)
+
+    def test_cruce_de_anio_rechaza_si_se_pasa_el_tope_del_segundo_anio(self):
+        # Ya usó 4 días en 2027 (11 al 14/01); sumados a los 3 de enero = 7 > 5.
+        LicenciaOtorgada.objects.create(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2027, 1, 11), hasta=date(2027, 1, 14),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            self._licencia(date(2026, 12, 28), date(2027, 1, 5)).full_clean()
+        mensaje = ' '.join(ctx.exception.message_dict['hasta'])
+        self.assertIn('2027', mensaje)  # el mensaje dice qué año se pasó
