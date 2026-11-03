@@ -13,8 +13,7 @@ navegar:
 - `recepcion`: recepción del formulario en papel de las inasistencias.
 - `calendario`: alta, modificación y baja de feriados, asuetos y días
   inhábiles (RF-10).
-- `sesion`: liberar/renovar manualmente la sesión de edición.
-- `_comun`: helpers compartidos entre las vistas de arriba.
+- `_comun`: helpers compartidos y vistas de sesión de edición.
 
 `asistencias/urls.py` sigue haciendo `from . import views` y llamando
 `views.<nombre>`: este archivo reexporta exactamente la misma API
@@ -42,7 +41,7 @@ from .registro import (
     validar_multiples_view,
     validar_registro,
 )
-from .sesion import liberar_edicion, renovar_edicion
+from ._comun import liberar_edicion, renovar_edicion
 
 __all__ = [
     "registro_diario",

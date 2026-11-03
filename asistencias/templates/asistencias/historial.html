@@ -8,7 +8,10 @@
     <h1 class="h3">Historial de asistencia</h1>
 
     <div class="d-flex gap-2">
-        {# Mejora 18: botón de exportación CSV #}
+        <a class="btn btn-outline-secondary"
+           href="{% url 'asistencia:registro_diario' %}">
+            Registro diario
+        </a>
         {% if perms.asistencias.view_registroasistencia %}
             <a class="btn btn-outline-success"
                href="{% url 'asistencia:exportar_csv' %}{% if querystring %}?{{ querystring }}{% endif %}">
@@ -46,10 +49,11 @@
     </div>
 </form>
 
-{# Mejora 2: validación masiva con checkboxes #}
 {% if perms.asistencias.validar_registro %}
 <form method="post" action="{% url 'asistencia:validar_multiples' %}" id="form-validar-masivo">
     {% csrf_token %}
+    <input type="hidden" name="next"
+           value="{% url 'asistencia:historial' %}{% if querystring %}?{{ querystring }}{% endif %}">
 {% endif %}
 
 <div class="table-responsive">
@@ -118,8 +122,11 @@
                                 method="post"
                                 action="{% url 'asistencia:validar_registro' registro.pk %}"
                                 class="d-inline"
+                                onsubmit="return confirm('¿Validar este registro?');"
                             >
                                 {% csrf_token %}
+                                <input type="hidden" name="next"
+                                       value="{% url 'asistencia:historial' %}{% if querystring %}?{{ querystring }}{% endif %}">
                                 <button
                                     class="btn btn-sm btn-success"
                                     type="submit"
@@ -151,11 +158,11 @@
 </form>
 {% endif %}
 
-{# Mejora 20: paginación con números #}
 {% include "asistencias/includes/paginacion.html" %}
 {% endblock %}
 
 {% block extra_js %}
+{% include "asistencias/includes/ux_mejoras.html" %}
 <script>
 (function () {
     var masterCheckbox = document.getElementById("seleccionar-todos");
@@ -192,6 +199,20 @@
             actualizarBarra();
         }
     });
+
+    var formMasivo = document.getElementById("form-validar-masivo");
+    if (formMasivo) {
+        formMasivo.addEventListener("submit", function (e) {
+            var cant = document.querySelectorAll(".check-validar:checked").length;
+            if (cant === 0) {
+                e.preventDefault();
+                return;
+            }
+            if (!confirm("¿Confirmar? Se marcarán " + cant + " registro(s) como validado(s).")) {
+                e.preventDefault();
+            }
+        });
+    }
 })();
 </script>
 {% endblock %}

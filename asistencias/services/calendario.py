@@ -104,6 +104,12 @@ def copiar_calendario(*, usuario, anio_origen, anio_destino):
             omitidos += 1
             continue
 
+        try:
+            _validar_periodo_abierto(nueva_fecha)
+        except ValidationError:
+            omitidos += 1
+            continue
+
         _, created = DiaNoLaborable.objects.get_or_create(
             fecha=nueva_fecha,
             defaults={"tipo": dia.tipo, "descripcion": dia.descripcion},
@@ -157,6 +163,14 @@ def cargar_calendario_masivo(*, usuario, texto, tipo):
         if not ANIO_MINIMO <= fecha.year <= ANIO_MAXIMO:
             errores.append(
                 f"Línea {i}: el año {fecha.year} está fuera del rango."
+            )
+            continue
+
+        try:
+            _validar_periodo_abierto(fecha)
+        except ValidationError:
+            errores.append(
+                f"Línea {i}: el período de {fecha_texto} está cerrado."
             )
             continue
 

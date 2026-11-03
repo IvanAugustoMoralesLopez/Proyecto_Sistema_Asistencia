@@ -1,0 +1,55 @@
+<script>
+(function () {
+    /* Auto-cerrar mensajes de éxito después de 5 s */
+    document.querySelectorAll('.alert-success').forEach(function (el) {
+        setTimeout(function () {
+            el.style.transition = 'opacity 0.5s';
+            el.style.opacity = '0';
+            setTimeout(function () { el.remove(); }, 500);
+        }, 5000);
+    });
+
+    /* Scroll al primer error visible */
+    var primerError = document.querySelector('.alert-danger, .table-danger');
+    if (primerError) {
+        primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    /* Cambios sin guardar (beforeunload) en formularios con campos */
+    document.querySelectorAll('form[method="post"]').forEach(function (form) {
+        var tieneInputs = form.querySelector(
+            'input:not([type="hidden"]):not([type="submit"]):not([type="checkbox"]),' +
+            'select, textarea'
+        );
+        if (!tieneInputs) return;
+
+        var modificado = false;
+
+        form.addEventListener('input', function () { modificado = true; });
+        form.addEventListener('change', function () { modificado = true; });
+        form.addEventListener('submit', function () { modificado = false; });
+
+        window.addEventListener('beforeunload', function (e) {
+            if (modificado) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+    });
+
+    /* Prevención de doble clic en todos los submit */
+    document.querySelectorAll('form').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            setTimeout(function () {
+                if (e.defaultPrevented) return;
+                form.querySelectorAll(
+                    'button[type="submit"]'
+                ).forEach(function (btn) {
+                    btn.disabled = true;
+                    setTimeout(function () { btn.disabled = false; }, 5000);
+                });
+            }, 0);
+        });
+    });
+})();
+</script>

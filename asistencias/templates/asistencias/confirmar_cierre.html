@@ -14,7 +14,6 @@
                     hasta que una persona autorizada lo reabra.
                 </div>
 
-                {# Mejora 15: resumen antes de cerrar #}
                 {% if resumen %}
                     <div class="card mb-3">
                         <div class="card-body">
@@ -36,10 +35,10 @@
                                 </div>
                             </div>
                             {% if resumen.borradores %}
-                                <div class="alert alert-info mt-3 mb-0 small">
+                                <div class="alert alert-danger mt-3 mb-0 small">
                                     Hay {{ resumen.borradores }} registro(s)
-                                    sin validar. Podés cerrar igual, pero
-                                    conviene revisarlos primero.
+                                    sin validar. No se puede cerrar el período
+                                    hasta que todos estén validados.
                                 </div>
                             {% endif %}
                         </div>
@@ -83,4 +82,8 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "asistencias/includes/ux_mejoras.html" %}
 {% endblock %}

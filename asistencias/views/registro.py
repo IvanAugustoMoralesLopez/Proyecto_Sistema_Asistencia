@@ -26,6 +26,7 @@ from ._comun import (
     _asegurar_sesion_edicion,
     _mensaje_error,
     _paginar,
+    _url_segura,
     vista_protegida,
 )
 
@@ -183,9 +184,8 @@ def editar_asistencia(request, pk):
         pk=pk,
     )
 
-    volver = request.GET.get(
-        "volver",
-        request.POST.get("volver", ""),
+    volver = _url_segura(
+        request.GET.get("volver", request.POST.get("volver", ""))
     )
 
     if request.method == "POST":
@@ -252,11 +252,6 @@ def historial(request):
         datos = form.cleaned_data
         registros = _aplicar_filtros(registros, datos)
 
-        if datos.get("estado_registro"):
-            registros = registros.filter(
-                estado_registro=datos["estado_registro"]
-            )
-
         if datos.get("estado_justificacion"):
             registros = registros.filter(
                 estado_justificacion=datos["estado_justificacion"]
@@ -293,7 +288,7 @@ def detalle_asistencia(request, pk):
         asistencia=registro,
     ).select_related("usuario")
 
-    volver = request.GET.get("desde", "")
+    volver = _url_segura(request.GET.get("desde", ""))
 
     return render(
         request,
@@ -320,7 +315,8 @@ def validar_registro(request, pk):
     else:
         messages.success(request, "El registro quedó validado.")
 
-    return redirect("asistencia:historial")
+    destino = _url_segura(request.POST.get("next", ""))
+    return redirect(destino or "asistencia:historial")
 
 
 @vista_protegida("asistencias.validar_registro", methods=["POST"])
@@ -342,12 +338,21 @@ def validar_multiples_view(request):
     except (ValidationError, PermissionDenied) as exc:
         messages.error(request, _mensaje_error(exc))
     else:
-        messages.success(
-            request,
-            f"Se validaron {validados} registro(s).",
-        )
+        omitidos = len(ids_validos) - validados
+        if omitidos:
+            messages.success(
+                request,
+                f"Se validaron {validados} registro(s). "
+                f"{omitidos} ya estaba(n) validado(s).",
+            )
+        else:
+            messages.success(
+                request,
+                f"Se validaron {validados} registro(s).",
+            )
 
-    return redirect("asistencia:historial")
+    destino = _url_segura(request.POST.get("next", ""))
+    return redirect(destino or "asistencia:historial")
 
 
 @vista_protegida("asistencias.view_registroasistencia")
@@ -369,11 +374,6 @@ def exportar_csv(request):
     if form.is_valid():
         datos = form.cleaned_data
         registros = _aplicar_filtros(registros, datos)
-
-        if datos.get("estado_registro"):
-            registros = registros.filter(
-                estado_registro=datos["estado_registro"]
-            )
 
         if datos.get("estado_justificacion"):
             registros = registros.filter(
@@ -399,7 +399,10 @@ def exportar_csv(request):
         "Actualizado por",
     ])
 
-    for r in registros[:5000]:
+    limite = 5000
+    total_registros = registros.count()
+
+    for r in registros[:limite]:
         writer.writerow([
             r.fecha.strftime("%d/%m/%Y"),
             r.designacion.persona.dni,
@@ -416,6 +419,12 @@ def exportar_csv(request):
             r.get_estado_justificacion_display(),
             r.nro_formulario,
             str(r.actualizado_por or ""),
+        ])
+
+    if total_registros > limite:
+        writer.writerow([
+            f"*** Exportación limitada a {limite} de "
+            f"{total_registros} registros ***",
         ])
 
     return response

@@ -207,6 +207,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% include "asistencias/includes/ux_mejoras.html" %}
 <script>
 (function () {
     var presente = "{{ marca_presente.pk|default:'' }}";
@@ -258,6 +259,9 @@
                     sincronizar(select);
                 }
             });
+            document.getElementById("planilla").dispatchEvent(
+                new Event("change", { bubbles: true })
+            );
         });
     }
 
@@ -268,6 +272,9 @@
                 select.value = "";
                 sincronizar(select);
             });
+            document.getElementById("planilla").dispatchEvent(
+                new Event("change", { bubbles: true })
+            );
         });
     }
 })();

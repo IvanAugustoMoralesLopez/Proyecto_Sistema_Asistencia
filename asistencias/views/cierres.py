@@ -95,26 +95,25 @@ def confirmar_cierre(request):
             initial={"anio": hoy.year, "mes": hoy.month}
         )
 
+    hoy = timezone.localdate()
     resumen = None
-    if request.method == "GET" or (request.method == "POST" and not form.is_valid()):
-        hoy = timezone.localdate()
-        anio_prev = form.data.get("anio", str(hoy.year))
-        mes_prev = form.data.get("mes", str(hoy.month))
-        if anio_prev.isdecimal() and mes_prev.isdecimal():
-            qs = RegistroAsistencia.objects.filter(
-                fecha__year=int(anio_prev),
-                fecha__month=int(mes_prev),
-            )
-            total = qs.count()
-            borradores = qs.filter(
-                estado_registro=RegistroAsistencia.Estado.BORRADOR
-            ).count()
-            validados = total - borradores
-            resumen = {
-                "total": total,
-                "borradores": borradores,
-                "validados": validados,
-            }
+    anio_prev = form.data.get("anio", str(hoy.year))
+    mes_prev = form.data.get("mes", str(hoy.month))
+    if anio_prev.isdecimal() and mes_prev.isdecimal():
+        qs = RegistroAsistencia.objects.filter(
+            fecha__year=int(anio_prev),
+            fecha__month=int(mes_prev),
+        )
+        total = qs.count()
+        borradores = qs.filter(
+            estado_registro=RegistroAsistencia.Estado.BORRADOR
+        ).count()
+        validados = total - borradores
+        resumen = {
+            "total": total,
+            "borradores": borradores,
+            "validados": validados,
+        }
 
     return render(
         request,
@@ -165,5 +164,6 @@ def reapertura_mensual(request, anio, mes):
             "url_cancelar": reverse("asistencia:lista_cierres"),
             "btn_texto": "Confirmar reapertura",
             "btn_clase": "danger",
+            "confirmar_submit": "¿Confirmar la reapertura del período?",
         },
     )

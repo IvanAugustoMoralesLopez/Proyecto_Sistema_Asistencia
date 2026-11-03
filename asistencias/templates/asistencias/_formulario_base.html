@@ -11,7 +11,7 @@
 
                 {% block antes_form %}{% endblock %}
 
-                <form method="post">
+                <form method="post"{% if confirmar_submit %} onsubmit="return confirm('{{ confirmar_submit }}');"{% endif %}>
                     {% csrf_token %}
                     {% block campos_ocultos %}{% endblock %}
 
@@ -62,4 +62,21 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% include "asistencias/includes/ux_mejoras.html" %}
+<script>
+(function () {
+    var form = document.querySelector('form[method="post"]');
+    if (form && !form.querySelector('.text-danger, .alert-danger')) {
+        var campo = form.querySelector(
+            'input:not([type="hidden"]):not([disabled]):not([readonly]),' +
+            'select:not([disabled]),' +
+            'textarea:not([disabled])'
+        );
+        if (campo) campo.focus();
+    }
+})();
+</script>
 {% endblock %}
