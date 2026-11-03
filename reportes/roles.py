@@ -39,6 +39,10 @@ _SECRETARIA = _BEDELIA + [
     ("asistencias", "modificar_jornada_cerrada"),
     ("asistencias", "cerrar_periodo"),
     ("asistencias", "change_cierremensual"),
+    # Calendario escolar (RF-10): feriados, asuetos e inhábiles.
+    ("asistencias", "add_dianolaborable"),
+    ("asistencias", "change_dianolaborable"),
+    ("asistencias", "delete_dianolaborable"),
     ("reportes", "ver_bitacora"),
     # Legajos y designaciones (pantalla de legajos, alta de designaciones y
     # planilla de designaciones de la página de inicio).
