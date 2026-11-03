@@ -708,4 +708,72 @@ class ResolucionExcepcionPantallasTests(TestCase):
             resolucion_excepcion='Res. 9/2026',
         )
         respuesta = self.client.get(f'/licencias/editar/{licencia.pk}/')
-        self.assertContains(respuesta, 'value="Res. 9/2026"')
+        self.assertContains(respuesta, 'value="Res. 9/2026"') 
+
+
+class SuperposicionTests(TestCase):
+    """M8: una designación no puede tener dos licencias en el mismo día."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni='99000092', apellido_nombre='Sosa, Rita')
+        otra = Persona.objects.create(dni='99000091', apellido_nombre='Vega, Juan')
+        cls.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        cls.otra_designacion = Designacion.objects.create(
+            persona=otra, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        datos = dict(
+            tipo_licencia='Uno', categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo',
+        )
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='S-1', articulo='1', **datos,
+        )
+        cls.otro_articulo = LicenciaArticulo.objects.create(
+            cod_licencia='S-2', articulo='2', **datos,
+        )
+        # Lunes 09/03/2026 a viernes 13/03/2026.
+        cls.licencia = LicenciaOtorgada.objects.create(
+            designacion=cls.designacion, articulo=cls.articulo, sit_rev='Titular',
+            desde=date(2026, 3, 9), hasta=date(2026, 3, 13),
+        )
+
+    def _nueva(self, desde, hasta, designacion=None):
+        return LicenciaOtorgada(
+            designacion=designacion or self.designacion,
+            articulo=self.otro_articulo, sit_rev='Titular',
+            desde=desde, hasta=hasta,
+        )
+
+    def test_licencia_que_se_pisa_con_otra_se_rechaza(self):
+        nueva = self._nueva(date(2026, 3, 11), date(2026, 3, 16))
+        with self.assertRaises(ValidationError) as ctx:
+            nueva.full_clean()
+        self.assertIn('desde', ctx.exception.message_dict)
+
+    def test_licencia_contigua_sin_pisarse_se_acepta(self):
+        self._nueva(date(2026, 3, 14), date(2026, 3, 18)).full_clean()
+
+    def test_otra_designacion_no_se_pisa(self):
+        nueva = self._nueva(
+            date(2026, 3, 11), date(2026, 3, 16), designacion=self.otra_designacion,
+        )
+        nueva.full_clean()
+
+    def test_la_edicion_no_se_cuenta_contra_si_misma(self):
+        self.licencia.observaciones = 'Sin cambios de fechas'
+        self.licencia.full_clean()
+
+    def test_licencia_abierta_se_pisa_con_una_posterior(self):
+        LicenciaOtorgada.objects.create(
+            designacion=self.designacion, articulo=self.otro_articulo,
+            sit_rev='Titular', desde=date(2026, 3, 20), hasta=None,
+        )
+        nueva = self._nueva(date(2026, 4, 1), date(2026, 4, 3))
+        with self.assertRaises(ValidationError) as ctx:
+            nueva.full_clean()
+        self.assertIn('desde', ctx.exception.message_dict)

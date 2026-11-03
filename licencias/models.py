@@ -108,6 +108,28 @@ class LicenciaOtorgada(models.Model):
                 'hasta': 'La fecha Hasta no puede ser anterior a la fecha Desde.'
             })
 
+        # M8: una designación no puede tener dos licencias en el mismo día.
+        # Una licencia abierta (sin "hasta") se toma como que sigue sin fin.
+        fin = self.hasta or date.max
+        superpuestas = LicenciaOtorgada.objects.filter(
+            designacion_id=self.designacion_id,
+            desde__lte=fin,
+        ).filter(models.Q(hasta__isnull=True) | models.Q(hasta__gte=self.desde))
+        if self.pk:
+            superpuestas = superpuestas.exclude(pk=self.pk)
+        otra = superpuestas.order_by('desde').first()
+        if otra:
+            hasta_otra = (
+                otra.hasta.strftime('%d/%m/%Y') if otra.hasta else 'sin fecha de fin'
+            )
+            raise ValidationError({
+                'desde': (
+                    "Las fechas se superponen con otra licencia de este docente "
+                    f"(artículo {otra.articulo.articulo}, del "
+                    f"{otra.desde.strftime('%d/%m/%Y')} al {hasta_otra})."
+                )
+            })
+
         tope = self.articulo.tope_dias_anual
         if not tope:
             return
