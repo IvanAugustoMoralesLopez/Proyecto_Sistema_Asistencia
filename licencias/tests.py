@@ -475,6 +475,10 @@ class ReporteMensualTests(TestCase):
         respuesta = self.client.get('/licencias/reporte/2026/13/')
         self.assertEqual(respuesta.status_code, 404) 
 
+    def test_anio_fuera_de_rango_da_404(self):
+        self.assertEqual(self.client.get('/licencias/reporte/0/5/').status_code, 404)
+        self.assertEqual(self.client.get('/licencias/reporte/3000/5/').status_code, 404)    
+
 
 class NroFormularioTests(TestCase):
     """RN-10: el N° de formulario se carga junto con la licencia."""
@@ -704,4 +708,122 @@ class ResolucionExcepcionPantallasTests(TestCase):
             resolucion_excepcion='Res. 9/2026',
         )
         respuesta = self.client.get(f'/licencias/editar/{licencia.pk}/')
-        self.assertContains(respuesta, 'value="Res. 9/2026"')
+        self.assertContains(respuesta, 'value="Res. 9/2026"') 
+
+
+class SuperposicionTests(TestCase):
+    """M8: una designación no puede tener dos licencias en el mismo día."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni='99000092', apellido_nombre='Sosa, Rita')
+        otra = Persona.objects.create(dni='99000091', apellido_nombre='Vega, Juan')
+        cls.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        cls.otra_designacion = Designacion.objects.create(
+            persona=otra, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        datos = dict(
+            tipo_licencia='Uno', categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo',
+        )
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='S-1', articulo='1', **datos,
+        )
+        cls.otro_articulo = LicenciaArticulo.objects.create(
+            cod_licencia='S-2', articulo='2', **datos,
+        )
+        # Lunes 09/03/2026 a viernes 13/03/2026.
+        cls.licencia = LicenciaOtorgada.objects.create(
+            designacion=cls.designacion, articulo=cls.articulo, sit_rev='Titular',
+            desde=date(2026, 3, 9), hasta=date(2026, 3, 13),
+        )
+
+    def _nueva(self, desde, hasta, designacion=None):
+        return LicenciaOtorgada(
+            designacion=designacion or self.designacion,
+            articulo=self.otro_articulo, sit_rev='Titular',
+            desde=desde, hasta=hasta,
+        )
+
+    def test_licencia_que_se_pisa_con_otra_se_rechaza(self):
+        nueva = self._nueva(date(2026, 3, 11), date(2026, 3, 16))
+        with self.assertRaises(ValidationError) as ctx:
+            nueva.full_clean()
+        self.assertIn('desde', ctx.exception.message_dict)
+
+    def test_licencia_contigua_sin_pisarse_se_acepta(self):
+        self._nueva(date(2026, 3, 14), date(2026, 3, 18)).full_clean()
+
+    def test_otra_designacion_no_se_pisa(self):
+        nueva = self._nueva(
+            date(2026, 3, 11), date(2026, 3, 16), designacion=self.otra_designacion,
+        )
+        nueva.full_clean()
+
+    def test_la_edicion_no_se_cuenta_contra_si_misma(self):
+        self.licencia.observaciones = 'Sin cambios de fechas'
+        self.licencia.full_clean()
+
+    def test_licencia_abierta_se_pisa_con_una_posterior(self):
+        LicenciaOtorgada.objects.create(
+            designacion=self.designacion, articulo=self.otro_articulo,
+            sit_rev='Titular', desde=date(2026, 3, 20), hasta=None,
+        )
+        nueva = self._nueva(date(2026, 4, 1), date(2026, 4, 3))
+        with self.assertRaises(ValidationError) as ctx:
+            nueva.full_clean()
+        self.assertIn('desde', ctx.exception.message_dict) 
+
+class SituacionRevistaTests(TestCase):
+    """M8: el artículo debe corresponder a la situación de revista de la designación."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        luna = Persona.objects.create(dni='99000090', apellido_nombre='Luna, Ana')
+        rey = Persona.objects.create(dni='99000089', apellido_nombre='Rey, Pedro')
+        cls.suplente = Designacion.objects.create(
+            persona=luna, cargo=cargo, desde=date(2026, 1, 1), situacion_revista='SUP',
+        )
+        cls.sin_situacion = Designacion.objects.create(
+            persona=rey, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        datos = dict(
+            tipo_licencia='Uno', categoria_informe='Duelo',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo',
+        )
+        cls.art_titular = LicenciaArticulo.objects.create(
+            cod_licencia='R-1', articulo='1', sit_rev='Titular', **datos,
+        )
+        cls.art_suplente = LicenciaArticulo.objects.create(
+            cod_licencia='R-2', articulo='2', sit_rev='Suplente', **datos,
+        )
+
+    def _licencia(self, designacion, articulo):
+        return LicenciaOtorgada(
+            designacion=designacion, articulo=articulo, sit_rev=articulo.sit_rev,
+            desde=date(2026, 3, 9), hasta=date(2026, 3, 13),
+        )
+
+    def test_articulo_de_titular_en_designacion_de_suplente_se_rechaza(self):
+        with self.assertRaises(ValidationError) as ctx:
+            self._licencia(self.suplente, self.art_titular).full_clean()
+        self.assertIn('articulo', ctx.exception.message_dict)
+
+    def test_articulo_de_suplente_en_designacion_de_suplente_se_acepta(self):
+        self._licencia(self.suplente, self.art_suplente).full_clean()
+
+    def test_designacion_sin_situacion_acepta_cualquier_articulo(self):
+        self._licencia(self.sin_situacion, self.art_titular).full_clean()
+
+    def test_el_mensaje_nombra_las_dos_situaciones(self):
+        with self.assertRaises(ValidationError) as ctx:
+            self._licencia(self.suplente, self.art_titular).full_clean()
+        mensaje = ' '.join(ctx.exception.message_dict['articulo'])
+        self.assertIn('titular', mensaje)
+        self.assertIn('suplente', mensaje)

@@ -37,6 +37,8 @@ def _horas_por_dia(designacion_id, cache):
 def reporte_mensual_licencias(request, anio: int, mes: int):
     if not 1 <= mes <= 12:
         raise Http404("Mes inválido")
+    if not 2000 <= anio <= 2100:
+        raise Http404("Año fuera de rango")
 
     primer_dia = date(anio, mes, 1)
     ultimo_dia = date(anio, mes, calendar.monthrange(anio, mes)[1])
