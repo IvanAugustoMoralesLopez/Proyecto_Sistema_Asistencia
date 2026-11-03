@@ -1,0 +1,19 @@
+{% comment %}
+Botón de salida para las páginas de error (403 y 404).
+Uso: {% include "includes/boton_inicio.html" %}
+{% endcomment %}
+{% if user.is_authenticated %}
+    {% if perms.asistencias.view_registroasistencia %}
+        <a class="btn btn-primario" href="{% url 'asistencia:registro_diario' %}">Volver al inicio</a>
+    {% else %}
+        <p class="text-secondary small">
+            Tu usuario todavía no tiene un rol asignado. Pedile a Subsecretaría que te asigne uno.
+        </p>
+        <form method="post" action="{% url 'logout' %}" class="d-inline">
+            {% csrf_token %}
+            <button class="btn btn-primario" type="submit">Cerrar sesión</button>
+        </form>
+    {% endif %}
+{% else %}
+    <a class="btn btn-primario" href="{% url 'login' %}">Iniciar sesión</a>
+{% endif %}

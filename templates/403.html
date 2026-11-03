@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Acceso denegado{% endblock %}
+
+{# Sin menú lateral: esta pantalla no debe permitir navegar #}
+{% block sidebar %}{% endblock %}
+{% block boton_menu %}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card shadow-sm border-0 text-center">
+            <div class="card-body p-5">
+                <i class="bi bi-shield-lock text-danger" style="font-size: 3rem;"></i>
+                <h1 class="h3 mt-3">No tenés permiso para ver esta pantalla</h1>
+                <p class="text-secondary">
+                    Tu usuario no tiene el rol necesario para acceder a esta sección.
+                    Si creés que es un error, consultá con Secretaría o Subsecretaría.
+                </p>
+            {% include "includes/boton_inicio.html" %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

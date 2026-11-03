@@ -16,9 +16,11 @@
 
     {# ───────── Barra superior ───────── #}
     <header class="topbar">
+        {% block boton_menu %}
         <button class="topbar__menu" type="button" id="btnMenu" aria-label="Mostrar u ocultar el menú">
             <i class="bi bi-list"></i>
         </button>
+        {% endblock %}
 
         <div class="topbar__marca">
             <i class="bi bi-mortarboard-fill"></i>
@@ -39,77 +41,100 @@
     <div class="app-shell">
 
         {# ───────── Menú lateral ───────── #}
-        {% block sidebar %}
+                {% block sidebar %}
         <aside class="sidebar" id="sidebar">
             <nav class="sidebar__nav">
-                <p class="sidebar__titulo">Planillas</p>
 
-                <a class="sidebar__link" data-seccion="datos-personal" href="{% url 'pantalla_personal' %}">
-                    <i class="bi bi-person-vcard"></i><span>Datos de personal</span>
+                {# ── Personal (Pantalla 1) ── #}
+                {% if perms.personal.change_designacion or perms.personal.change_persona or perms.personal.change_cargo or perms.personal.change_carrera or perms.personal.change_espaciocurricular or perms.licencias.change_licenciaarticulo %}
+                <p class="sidebar__titulo">Personal</p>
+                {% if perms.personal.change_designacion %}
+                <a class="sidebar__link" href="{% url 'inicio_personal' %}">
+                    <i class="bi bi-person-lines-fill"></i><span>Designaciones</span>
                 </a>
-                <a class="sidebar__link" data-seccion="codigos-licencia" href="{% url 'pantalla_licencias' %}">
-                    <i class="bi bi-journal-text"></i><span>Código y artículos de licencia</span>
+                <a class="sidebar__link" href="{% url 'personal:nueva_designacion' %}">
+                    <i class="bi bi-plus-square"></i><span>Nueva designación</span>
                 </a>
-                <a class="sidebar__link" data-seccion="informe-licencias" href="{% url 'pantalla_informe' %}">
-                    <i class="bi bi-clipboard2-pulse"></i><span>Inf. men. de licencias por enfermedad</span>
+                {% endif %}
+                {% if perms.personal.change_persona %}
+                <a class="sidebar__link" href="{% url 'personal:gestion_legajos' %}">
+                    <i class="bi bi-person-vcard"></i><span>Legajos</span>
                 </a>
-            
+                {% endif %}
+                {% if perms.personal.change_cargo or perms.personal.change_carrera or perms.personal.change_espaciocurricular or perms.licencias.change_licenciaarticulo %}
+                <a class="sidebar__link" href="{% url 'personal:catalogos' %}">
+                    <i class="bi bi-collection"></i><span>Catálogos</span>
+                </a>
+                {% endif %}
+                {% endif %}
 
-                
+                {# ── Asistencia (Pantalla 2) ── #}
+                {% if perms.asistencias.view_registroasistencia %}
                 <p class="sidebar__titulo">Asistencia</p>
-                <a class="sidebar__link" data-seccion="asistencia-diaria" href="{% url 'asistencia:registro_diario' %}">
+                <a class="sidebar__link" href="{% url 'asistencia:registro_diario' %}">
                     <i class="bi bi-calendar-check"></i><span>Registro diario</span>
                 </a>
-                <a class="sidebar__link" data-seccion="asistencia-historial" href="{% url 'asistencia:historial' %}">
+                {% if perms.asistencias.add_registroasistencia %}
+                <a class="sidebar__link" href="{% url 'asistencia:planilla_rapida' %}">
+                    <i class="bi bi-ui-checks-grid"></i><span>Planilla rápida</span>
+                </a>
+                {% endif %}
+                <a class="sidebar__link" href="{% url 'asistencia:historial' %}">
                     <i class="bi bi-clock-history"></i><span>Historial</span>
                 </a>
-                <a class="sidebar__link" data-seccion="asistencia-cierres" href="{% url 'asistencia:lista_cierres' %}">
+                <a class="sidebar__link" href="{% url 'asistencia:recepcion_formularios' %}">
+                    <i class="bi bi-file-earmark-check"></i><span>Recepción de formularios</span>
+                </a>
+                <a class="sidebar__link" href="{% url 'asistencia:lista_cierres' %}">
                     <i class="bi bi-lock"></i><span>Cierres</span>
                 </a>
+                <a class="sidebar__link" href="{% url 'asistencia:lista_calendario' %}">
+                    <i class="bi bi-calendar-event"></i><span>Calendario escolar</span>
+                </a>
+                {% endif %}
 
-                {# ── Licencias (Pantalla 3): agregado para poder llegar a las pantallas nuevas ── #}
+                {# ── Licencias (Pantalla 3) ── #}
                 {% if perms.licencias.add_licenciaotorgada or perms.licencias.view_licenciaotorgada %}
                 <p class="sidebar__titulo">Licencias</p>
                 {% if perms.licencias.add_licenciaotorgada %}
-                <a class="sidebar__link" data-seccion="nueva-licencia" href="{% url 'licencias:nueva_licencia_otorgada' %}">
+                <a class="sidebar__link" href="{% url 'licencias:nueva_licencia_otorgada' %}">
                     <i class="bi bi-file-earmark-plus"></i><span>Nueva licencia</span>
                 </a>
                 {% endif %}
                 {% if perms.licencias.view_licenciaotorgada %}
-                <a class="sidebar__link" data-seccion="listado-licencias" href="{% url 'licencias:listado_licencias_otorgadas' %}">
+                <a class="sidebar__link" href="{% url 'licencias:listado_licencias_otorgadas' %}">
                     <i class="bi bi-list-ul"></i><span>Licencias otorgadas</span>
                 </a>
                 {% now "Y" as anio_actual %}{% now "n" as mes_actual %}
-                <a class="sidebar__link" data-seccion="reporte-licencias" href="{% url 'licencias:reporte_mensual_licencias' anio=anio_actual mes=mes_actual %}">
+                <a class="sidebar__link" data-match="/licencias/reporte/" href="{% url 'licencias:reporte_mensual_licencias' anio=anio_actual mes=mes_actual %}">
                     <i class="bi bi-clipboard2-pulse"></i><span>Reporte mensual</span>
                 </a>
                 {% endif %}
                 {% endif %}
 
+                {# ── Administración (Pantalla 4) ── #}
                 {% if perms.reportes.consultar_licencias or perms.reportes.ver_bitacora or perms.reportes.gestionar_parametros or perms.reportes.gestionar_usuarios %}
                 <p class="sidebar__titulo">Administración</p>
                 {% if perms.reportes.consultar_licencias %}
-                <a class="sidebar__link" data-seccion="reportes-consultas" href="{% url 'reportes:consultas' %}">
+                <a class="sidebar__link" href="{% url 'reportes:consultas' %}">
                     <i class="bi bi-search"></i><span>Consultas</span>
                 </a>
-                {% endif %}
-                {% if perms.reportes.consultar_licencias %}
-                <a class="sidebar__link" data-seccion="reportes-alertas" href="{% url 'reportes:alertas' %}">
+                <a class="sidebar__link" href="{% url 'reportes:alertas' %}">
                     <i class="bi bi-bell"></i><span>Alertas</span>
                 </a>
                 {% endif %}
                 {% if perms.reportes.ver_bitacora %}
-                <a class="sidebar__link" data-seccion="reportes-bitacora" href="{% url 'reportes:bitacora' %}">
+                <a class="sidebar__link" href="{% url 'reportes:bitacora' %}">
                     <i class="bi bi-journal-check"></i><span>Bitácora</span>
                 </a>
                 {% endif %}
                 {% if perms.reportes.gestionar_usuarios %}
-                <a class="sidebar__link" data-seccion="reportes-usuarios" href="{% url 'reportes:usuarios' %}">
+                <a class="sidebar__link" href="{% url 'reportes:usuarios' %}">
                     <i class="bi bi-people"></i><span>Usuarios y roles</span>
                 </a>
                 {% endif %}
                 {% if perms.reportes.gestionar_parametros %}
-                <a class="sidebar__link" data-seccion="reportes-parametros" href="{% url 'reportes:parametros' %}">
+                <a class="sidebar__link" href="{% url 'reportes:parametros' %}">
                     <i class="bi bi-gear"></i><span>Parámetros</span>
                 </a>
                 {% endif %}
@@ -122,8 +147,9 @@
         <main class="app-content">
             {% if messages %}
                 {% for message in messages %}
-                    <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">
+                    <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
                         {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
                     </div>
                 {% endfor %}
             {% endif %}
@@ -138,18 +164,29 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Menú lateral: colapsa en escritorio, se desliza en pantallas chicas
-        document.getElementById('btnMenu').addEventListener('click', function () {
-            const clase = window.innerWidth <= 768 ? 'menu-abierto' : 'menu-colapsado';
-            document.body.classList.toggle(clase);
-        });
-
-        // Marca como activo el link del menú que coincide con la pantalla actual
-        (function () {
-            const actual = document.body.dataset.seccion;
-            if (!actual) return;
-            document.querySelectorAll('.sidebar__link[data-seccion]').forEach(function (a) {
-                if (a.dataset.seccion === actual) a.classList.add('activo');
+          const btnMenu = document.getElementById('btnMenu');
+          if (btnMenu) {
+            btnMenu.addEventListener('click', function () {
+                const clase = window.innerWidth <= 768 ? 'menu-abierto' : 'menu-colapsado';
+                document.body.classList.toggle(clase);
             });
+        }
+
+                // Marca como activo el link del menú cuya ruta coincide con la pantalla actual
+        // (gana el más específico: /asistencia/cierres/ antes que /asistencia/)
+        (function () {
+            const ruta = window.location.pathname;
+            let mejor = null;
+            let mejorLargo = -1;
+            document.querySelectorAll('.sidebar__link').forEach(function (a) {
+                const base = a.dataset.match || a.pathname;
+                const coincide = base === '/' ? ruta === '/' : ruta.startsWith(base);
+                if (coincide && base.length > mejorLargo) {
+                    mejor = a;
+                    mejorLargo = base.length;
+                }
+            });
+            if (mejor) mejor.classList.add('activo');
         })();
 
         // Selección de fila en las planillas (delegación de eventos optimizada)

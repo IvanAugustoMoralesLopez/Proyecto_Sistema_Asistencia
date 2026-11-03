@@ -15,6 +15,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from django.contrib import messages
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env') #esto sirve para cargar las variables de entorno desde el archivo .env
@@ -143,3 +145,9 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 
 LOGIN_REDIRECT_URL = "asistencia:registro_diario"
 LOGOUT_REDIRECT_URL = "login"
+
+
+# Bootstrap llama "danger" a la alerta roja; Django etiqueta los errores como "error".
+MESSAGE_TAGS = {
+    messages.ERROR: "danger",
+}
