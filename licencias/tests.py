@@ -1223,4 +1223,48 @@ class ResolucionesVistasTests(TestCase):
     def test_el_listado_enlaza_a_las_resoluciones_de_cada_licencia(self):
         self.client.force_login(self.operador)
         respuesta = self.client.get(reverse('licencias:listado_licencias_otorgadas'))
-        self.assertContains(respuesta, self._url_gestion())
+        self.assertContains(respuesta, self._url_gestion()) 
+
+class EncabezadosPantallasTests(TestCase):
+    """Las pantallas nuevas llevan la ruta y el título, como las demás."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Permission
+
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni=99000051, apellido_nombre='Encabezado, Docente')
+        designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        articulo = LicenciaArticulo.objects.create(
+            cod_licencia='T-25', articulo='25', tipo_licencia='Duelo',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo', tope_dias_anual=5,
+        )
+        cls.licencia = LicenciaOtorgada.objects.create(
+            designacion=designacion, articulo=articulo, sit_rev='Titular',
+            desde=date(2026, 3, 9), hasta=date(2026, 3, 9),
+        )
+        cls.operador = get_user_model().objects.create_user(username='cabecera', password='x')
+        cls.operador.user_permissions.add(
+            Permission.objects.get(codename='change_licenciaotorgada'),
+        )
+
+    def test_el_generador_muestra_la_ruta_y_el_titulo(self):
+        self.client.force_login(self.operador)
+        respuesta = self.client.get(
+            reverse('licencias:generador_disposiciones'), {'anio': 2026, 'mes': 3},
+        )
+        self.assertContains(respuesta, 'Administración / Licencias / Generador de disposiciones')
+        self.assertContains(respuesta, '<h1 class="h3 mb-1">Generador de disposiciones</h1>', html=True)
+
+    def test_resoluciones_muestra_la_ruta_y_el_titulo(self):
+        self.client.force_login(self.operador)
+        respuesta = self.client.get(
+            reverse('licencias:resoluciones_licencia', args=[self.licencia.pk]),
+        )
+        self.assertContains(respuesta, 'Administración / Licencias / Resoluciones')
+        self.assertContains(respuesta, '<h1 class="h3 mb-1">Resoluciones de la licencia</h1>', html=True)
