@@ -38,7 +38,9 @@ from .calendario import (
     guardar_dia_no_laborable,
     registros_cargados,
 )
-from .cierres import cerrar_dia, cerrar_mes, reabrir_mes
+from .cierres import cerrar_dia, cerrar_mes, reabrir_mes 
+from .licencia_marcado import marcar_licencia
+
 from .recepcion import (
     TRANSICIONES_JUSTIFICACION,
     recepcionar_formulario,
@@ -81,6 +83,7 @@ __all__ = [
     "cerrar_dia",
     "cerrar_mes",
     "reabrir_mes",
+     "marcar_licencia",
     "guardar_dia_no_laborable",
     "eliminar_dia_no_laborable",
     "registros_cargados",

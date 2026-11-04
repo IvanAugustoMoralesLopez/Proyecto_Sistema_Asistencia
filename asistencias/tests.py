@@ -2614,4 +2614,296 @@ class VistasTests(BaseAsistenciaTests):
         peticion.user = User.objects.create_superuser("root")
         modelo_admin = admin.site._registry[MarcaAsistencia]
         self.assertFalse(modelo_admin.has_add_permission(peticion))
-        self.assertFalse(modelo_admin.has_delete_permission(peticion))
+        self.assertFalse(modelo_admin.has_delete_permission(peticion)) 
+
+class MarcarLicenciaTests(TestCase):
+    """RN-07 / RF-14: la licencia marca sus dias habiles en asistencias."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from personal.models import Horario
+
+        cargo = Cargo.objects.create(codigo="HC", descripcion="Hora catedra")
+        persona = Persona.objects.create(
+            dni="99000041", apellido_nombre="Marcada, Docente",
+        )
+        cls.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+            situacion_revista="TIT",
+        )
+        for dia in ("LUN", "MAR", "MIE", "JUE", "VIE"):
+            Horario.objects.create(
+                designacion=cls.designacion, dia=dia, horas_catedra=2,
+            )
+        articulo = LicenciaArticulo.objects.create(
+            cod_licencia="T-14", articulo="14", tipo_licencia="Enfermedad comun",
+            categoria_informe="Enfermedad comun", sit_rev="Titular",
+            goce_haberes="Con goce de haberes", autoridad="Direccion",
+            plazo="Segun articulo", tope_dias_anual=30,
+        )
+        # Lunes 9 a viernes 13 de marzo de 2026.
+        cls.licencia = LicenciaOtorgada.objects.create(
+            designacion=cls.designacion, articulo=articulo, sit_rev="Titular",
+            desde=date(2026, 3, 9), hasta=date(2026, 3, 13),
+        )
+
+    def test_marca_un_registro_por_dia_habil_del_periodo(self):
+        # Se importa aca para que, mientras la funcion no exista, falle
+        # solo este test y no todo el archivo de tests de asistencias.
+        from .services import marcar_licencia
+
+        marcar_licencia(self.licencia)
+
+        registros = list(
+            RegistroAsistencia.objects.filter(designacion=self.designacion)
+            .order_by("fecha")
+        )
+        self.assertEqual(
+            [r.fecha for r in registros],
+            [date(2026, 3, 9) + timedelta(days=i) for i in range(5)],
+        )
+        for registro in registros:
+            self.assertEqual(registro.marca.codigo, "LIC")
+            self.assertEqual(registro.horas_inasistidas, Decimal("2"))
+            self.assertEqual(registro.licencia_id, self.licencia.pk)
+        self.assertEqual(
+            EventoAsistencia.objects.filter(
+                asistencia__in=registros,
+                accion=EventoAsistencia.Accion.CREAR,
+            ).count(),
+            5,
+        )
+    def _licencia_en(self, desde, hasta):
+        """Cambia el periodo de la licencia de prueba sin pasar por save()."""
+        LicenciaOtorgada.objects.filter(pk=self.licencia.pk).update(
+            desde=desde, hasta=hasta,
+        )
+        return LicenciaOtorgada.objects.get(pk=self.licencia.pk)
+
+    def test_saltea_los_feriados_y_lo_informa(self):
+        from .services import marcar_licencia
+
+        DiaNoLaborable.objects.create(
+            fecha=date(2026, 3, 11), tipo=DiaNoLaborable.Tipo.FERIADO,
+        )
+
+        resumen = marcar_licencia(self.licencia)
+
+        self.assertEqual(
+            resumen["marcados"],
+            [date(2026, 3, 9), date(2026, 3, 10),
+             date(2026, 3, 12), date(2026, 3, 13)],
+        )
+        omitidos = dict(resumen["omitidos"])
+        self.assertIn("feriado", omitidos[date(2026, 3, 11)].lower())
+        self.assertFalse(
+            RegistroAsistencia.objects.filter(fecha=date(2026, 3, 11)).exists()
+        )
+
+    def test_saltea_los_fines_de_semana_y_lo_informa(self):
+        from .services import marcar_licencia
+
+        # Viernes 13 a lunes 16 de marzo.
+        licencia = self._licencia_en(date(2026, 3, 13), date(2026, 3, 16))
+
+        resumen = marcar_licencia(licencia)
+
+        self.assertEqual(
+            resumen["marcados"], [date(2026, 3, 13), date(2026, 3, 16)],
+        )
+        omitidos = dict(resumen["omitidos"])
+        self.assertIn("fin de semana", omitidos[date(2026, 3, 14)])
+        self.assertIn("fin de semana", omitidos[date(2026, 3, 15)])
+
+    def test_saltea_los_dias_de_un_periodo_cerrado(self):
+        from .services import marcar_licencia
+
+        CierreMensual.objects.create(
+            anio=2026, mes=3, estado=CierreMensual.Estado.CERRADO,
+        )
+
+        resumen = marcar_licencia(self.licencia)
+
+        self.assertEqual(resumen["marcados"], [])
+        self.assertEqual(len(resumen["omitidos"]), 5)
+        for _fecha, motivo in resumen["omitidos"]:
+            self.assertIn("cerrado", motivo)
+        self.assertFalse(RegistroAsistencia.objects.exists())
+
+    def test_saltea_las_fechas_fuera_de_la_designacion(self):
+        from .services import marcar_licencia
+
+        Designacion.objects.filter(pk=self.designacion.pk).update(
+            desde=date(2026, 3, 11), hasta=date(2026, 3, 12),
+        )
+        licencia = LicenciaOtorgada.objects.get(pk=self.licencia.pk)
+
+        resumen = marcar_licencia(licencia)
+
+        self.assertEqual(
+            resumen["marcados"], [date(2026, 3, 11), date(2026, 3, 12)],
+        )
+        omitidos = dict(resumen["omitidos"])
+        self.assertIn("anterior", omitidos[date(2026, 3, 9)])
+        self.assertIn("anterior", omitidos[date(2026, 3, 10)])
+        self.assertIn("posterior", omitidos[date(2026, 3, 13)])
+
+    def test_licencia_sin_fecha_hasta_no_marca_nada_y_avisa(self):
+        from .services import marcar_licencia
+
+        licencia = self._licencia_en(date(2026, 3, 9), None)
+
+        resumen = marcar_licencia(licencia)
+
+        self.assertEqual(resumen["marcados"], [])
+        self.assertTrue(resumen["advertencias"])
+        self.assertFalse(RegistroAsistencia.objects.exists())
+
+    def test_designacion_sin_horarios_no_marca_nada_y_avisa(self):
+        from personal.models import Horario
+        from .services import marcar_licencia
+
+        Horario.objects.filter(designacion=self.designacion).delete()
+
+        resumen = marcar_licencia(self.licencia)
+
+        self.assertEqual(resumen["marcados"], [])
+        self.assertTrue(
+            any("horarios" in aviso for aviso in resumen["advertencias"])
+        )
+        self.assertFalse(RegistroAsistencia.objects.exists()) 
+
+    def test_actualiza_el_registro_existente_en_lugar_de_duplicar(self):
+        from .services import marcar_licencia
+
+        RegistroAsistencia.objects.create(
+            designacion=self.designacion,
+            fecha=date(2026, 3, 10),
+            marca=MarcaAsistencia.objects.get(codigo="I"),
+            horas_inasistidas=Decimal("1"),
+        )
+
+        resumen = marcar_licencia(self.licencia)
+
+        self.assertIn(date(2026, 3, 10), resumen["marcados"])
+        self.assertEqual(
+            RegistroAsistencia.objects.filter(
+                designacion=self.designacion,
+            ).count(),
+            5,
+        )
+        registro = RegistroAsistencia.objects.get(
+            designacion=self.designacion, fecha=date(2026, 3, 10),
+        )
+        self.assertEqual(registro.marca.codigo, "LIC")
+        self.assertEqual(registro.horas_inasistidas, Decimal("2"))
+        self.assertEqual(registro.licencia_id, self.licencia.pk)
+        evento = EventoAsistencia.objects.get(
+            asistencia=registro, accion=EventoAsistencia.Accion.EDITAR,
+        )
+        self.assertEqual(evento.antes["marca"], "I")
+        self.assertEqual(evento.despues["marca"], "LIC")
+
+    def test_marcar_dos_veces_no_duplica_ni_repite_eventos(self):
+        from .services import marcar_licencia
+
+        marcar_licencia(self.licencia)
+        resumen = marcar_licencia(self.licencia)
+
+        self.assertEqual(len(resumen["marcados"]), 5)
+        self.assertEqual(
+            RegistroAsistencia.objects.filter(
+                designacion=self.designacion,
+            ).count(),
+            5,
+        )
+        self.assertEqual(
+            EventoAsistencia.objects.filter(
+                accion=EventoAsistencia.Accion.CREAR,
+            ).count(),
+            5,
+        )
+        self.assertFalse(
+            EventoAsistencia.objects.filter(
+                accion=EventoAsistencia.Accion.EDITAR,
+            ).exists()
+        )
+
+    def test_un_registro_validado_vuelve_a_borrador(self):
+        from .services import marcar_licencia
+
+        RegistroAsistencia.objects.create(
+            designacion=self.designacion,
+            fecha=date(2026, 3, 11),
+            marca=MarcaAsistencia.objects.get(codigo="P"),
+            estado_registro=RegistroAsistencia.Estado.VALIDADO,
+        )
+
+        marcar_licencia(self.licencia)
+
+        registro = RegistroAsistencia.objects.get(
+            designacion=self.designacion, fecha=date(2026, 3, 11),
+        )
+        self.assertEqual(registro.marca.codigo, "LIC")
+        self.assertEqual(
+            registro.estado_registro, RegistroAsistencia.Estado.BORRADOR,
+        )
+
+    def test_saltea_las_jornadas_cerradas_y_lo_informa(self):
+        from .services import marcar_licencia
+
+        CierreDiario.objects.create(
+            fecha=date(2026, 3, 11), cerrado_por=crear_usuario("cierre"),
+        )
+
+        resumen = marcar_licencia(self.licencia)
+
+        self.assertNotIn(date(2026, 3, 11), resumen["marcados"])
+        omitidos = dict(resumen["omitidos"])
+        self.assertIn("cerrada", omitidos[date(2026, 3, 11)])
+        self.assertFalse(
+            RegistroAsistencia.objects.filter(
+                fecha=date(2026, 3, 11),
+            ).exists()
+        )
+
+    def test_largo_tratamiento_usa_la_marca_lt(self):
+        from .services import marcar_licencia
+
+        articulo_lt = LicenciaArticulo.objects.create(
+            cod_licencia="T-15", articulo="15",
+            tipo_licencia="Largo tratamiento",
+            categoria_informe="Largo tratamiento", sit_rev="Titular",
+            goce_haberes="Con goce de haberes", autoridad="Direccion",
+            plazo="Segun articulo", tope_dias_anual=30,
+        )
+        LicenciaOtorgada.objects.filter(pk=self.licencia.pk).update(
+            articulo=articulo_lt,
+        )
+        licencia = LicenciaOtorgada.objects.get(pk=self.licencia.pk)
+
+        marcar_licencia(licencia)
+
+        codigos = set(
+            RegistroAsistencia.objects.filter(
+                designacion=self.designacion,
+            ).values_list("marca__codigo", flat=True)
+        )
+        self.assertEqual(codigos, {"LT"}) 
+
+    def test_un_dia_sin_horario_no_es_un_omitido_sino_un_dia_sin_clase(self):
+        from personal.models import Horario
+        from .services import marcar_licencia
+
+        # El miercoles 11 el docente no da clase: no es un problema.
+        Horario.objects.filter(designacion=self.designacion, dia="MIE").delete()
+
+        resumen = marcar_licencia(self.licencia)
+
+        self.assertEqual(
+            resumen["marcados"],
+            [date(2026, 3, 9), date(2026, 3, 10),
+             date(2026, 3, 12), date(2026, 3, 13)],
+        )
+        self.assertEqual(resumen["omitidos"], [])
+        self.assertEqual(resumen["sin_horario"], [date(2026, 3, 11)])
