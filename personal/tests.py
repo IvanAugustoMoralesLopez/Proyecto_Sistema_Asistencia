@@ -207,6 +207,8 @@ class DesignacionTests(TestCase):
             password="test-password",
         )
         self.otorgar_permiso(usuario, "change_persona")
+        self.otorgar_permiso(usuario, "add_persona")
+        self.otorgar_permiso(usuario, "add_designacion")
         cliente = Client()
         cliente.force_login(usuario)
         archivo = SimpleUploadedFile(
@@ -268,6 +270,7 @@ class DesignacionTests(TestCase):
             password="test-password",
         )
         self.otorgar_permiso(usuario, "change_persona")
+        self.otorgar_permiso(usuario, "add_persona")
         cliente = Client()
         cliente.force_login(usuario)
 
@@ -282,6 +285,55 @@ class DesignacionTests(TestCase):
 
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, "DNI")
+
+    def test_id_diseno_invalido_no_causa_error_500(self):
+        usuario = get_user_model().objects.create_user(
+            username="invalid-designacion-id-test",
+            password="test-password",
+        )
+        self.otorgar_permiso(usuario, "change_persona")
+        cliente = Client()
+        cliente.force_login(usuario)
+
+        respuesta = cliente.get(
+            reverse("personal:gestion_legajos"),
+            {
+                "dni": self.persona.pk,
+                "designacion": "abc",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "La designación indicada no existe.")
+
+    def test_catalogo_numerico_invalido_no_causa_error_500(self):
+        usuario = get_user_model().objects.create_user(
+            username="invalid-catalog-id-test",
+            password="test-password",
+        )
+        self.otorgar_permiso(usuario, "change_carrera")
+        cliente = Client()
+        cliente.force_login(usuario)
+
+        respuesta = cliente.get(
+            reverse("personal:catalogos"),
+            {"seccion": "carreras", "editar": "abc"},
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertNotIn("500", respuesta.headers.get("Location", ""))
+
+    def test_nombre_persona_sincroniza_campos_compatibles(self):
+        persona = Persona.objects.create(
+            dni="30123458",
+            apellido_nombre="López, Ana María",
+            apellido="Viejo",
+            nombres="Nombre viejo",
+        )
+
+        persona.refresh_from_db()
+        self.assertEqual(persona.apellido, "López")
+        self.assertEqual(persona.nombres, "Ana María")
 
     def test_pantalla_renderiza_para_usuario_autenticado(self):
         usuario = get_user_model().objects.create_user(
