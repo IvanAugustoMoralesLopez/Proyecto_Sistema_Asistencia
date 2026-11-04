@@ -12,6 +12,8 @@ from django.views.decorators.http import require_http_methods
 
 from personal.models import Horario
 
+from asistencias.services import marcar_licencia, motivo_dia_no_laborable
+
 from .clasificacion import CategoriaSinPlanillaError, PLANILLA_IL01, PLANILLA_IL02
 from .dias import fecha_de_hoy, mes_vecino, obtener_feriados
 from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm, ResolucionAdjuntaForm
@@ -145,6 +147,36 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
         'mes_siguiente': {'anio': anio_siguiente, 'mes': mes_siguiente},
     })
 
+
+def _marcar_y_avisar(request, licencia):
+    """
+    RN-07 / RF-14: marca en asistencias los días hábiles de la licencia y
+    le informa al operador cómo quedó.
+    """
+    resumen = marcar_licencia(licencia, usuario=request.user)
+
+    cantidad = len(resumen["marcados"])
+    if cantidad:
+        verbo = "Se marcó" if cantidad == 1 else "Se marcaron"
+        dias = "día" if cantidad == 1 else "días"
+        messages.info(request, f"{verbo} {cantidad} {dias} en asistencias.")
+
+    # Fines de semana y feriados no se avisan: es lo esperado y haría ruido
+    # en cada licencia que cruce un fin de semana.
+    sin_marcar = [
+        f"{fecha:%d/%m/%Y}: {motivo}"
+        for fecha, motivo in resumen["omitidos"]
+        if not motivo_dia_no_laborable(fecha)
+    ]
+    if sin_marcar:
+        messages.warning(
+            request,
+            "No se marcaron en asistencias: " + "; ".join(sin_marcar) + ".",
+        )
+
+    for advertencia in resumen["advertencias"]:
+        messages.warning(request, advertencia)
+
 @login_required 
 @permission_required("licencias.add_licenciaotorgada", raise_exception=True)
 @require_http_methods(["GET", "POST"])
@@ -153,14 +185,13 @@ def nueva_licencia_otorgada(request):
         form = LicenciaOtorgadaForm(request.POST)
 
         if form.is_valid():
-            form.save()
+            licencia = form.save()
             messages.success(
                 request,
                 "La licencia se registró correctamente."
             )
+            _marcar_y_avisar(request, licencia)
             return redirect(reverse("licencias:nueva_licencia_otorgada"))
-
-        messages.error(request, "Revise los datos de la licencia.")
 
     else:
         form = LicenciaOtorgadaForm()
@@ -239,11 +270,12 @@ def editar_licencia_otorgada(request, licencia_id):
         )
 
         if form.is_valid():
-            form.save()
+            licencia = form.save()
             messages.success(
                 request,
                 "La licencia se actualizó correctamente."
             )
+            _marcar_y_avisar(request, licencia)
 
             url_listado = reverse("licencias:listado_licencias_otorgadas")
             filtros = request.GET.urlencode()
