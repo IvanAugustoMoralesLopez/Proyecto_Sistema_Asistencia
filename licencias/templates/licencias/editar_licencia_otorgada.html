@@ -1,4 +1,4 @@
-```html
+
 {% extends "base.html" %}
 
 {% block title %}Editar licencia otorgada{% endblock %}
@@ -63,7 +63,8 @@
 
                     {% for error in form.articulo.errors %}
                         <div class="text-danger small">{{ error }}</div>
-                    {% endfor %}
+                    {% endfor %} 
+                    <div id="panel-articulo" class="alert alert-info small mt-2 mb-0 d-none"></div>
                 </div>
 
                 <div class="col-md-6">
@@ -201,6 +202,6 @@
             </div>
         </form>
     </div>
-</div>
+</div> 
+{% include "licencias/_asistente_articulo.html" %}
 {% endblock %}
-```
