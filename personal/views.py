@@ -220,6 +220,7 @@ def _procesar_csv(archivo, usuario=None):
 
 
 @login_required
+@permission_required("personal.change_persona", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def gestion_legajos(request):
     if request.method == "POST":
