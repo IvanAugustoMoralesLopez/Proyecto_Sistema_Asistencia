@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods
 from personal.models import Horario
 
 from .clasificacion import CategoriaSinPlanillaError, PLANILLA_IL01, PLANILLA_IL02
-from .dias import mes_vecino, obtener_feriados
+from .dias import fecha_de_hoy, mes_vecino, obtener_feriados
 from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm, ResolucionAdjuntaForm
 from .models import LicenciaArticulo, LicenciaOtorgada, ResolucionAdjunta
 from .services import (
@@ -283,7 +283,7 @@ def generador_disposiciones(request):
     del mes sin guardar nada; POST emite las disposiciones del mes.
     """
     datos = request.POST if request.method == "POST" else request.GET
-    hoy = date.today()
+    hoy = fecha_de_hoy()
     try:
         anio = int(datos.get("anio", hoy.year))
         mes = int(datos.get("mes", hoy.month))
