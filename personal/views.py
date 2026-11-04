@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models.deletion import ProtectedError
+from django.db.models.deletion import ProtectedError, RestrictedError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -37,6 +37,14 @@ from licencias.forms import LicenciaArticuloForm
 MAX_CSV_BYTES = 5 * 1024 * 1024
 
 
+def _pk_valido(modelo, valor):
+    if not valor:
+        return None
+    if modelo._meta.pk.get_internal_type() == "CharField":
+        return valor
+    return valor if str(valor).isdigit() else None
+
+
 def _mensaje_errores(exc):
     if isinstance(exc, ValidationError):
         if hasattr(exc, "message_dict"):
@@ -48,7 +56,7 @@ def _mensaje_errores(exc):
     return str(exc)
 
 
-def _importar_fila_personal(fila):
+def _importar_fila_personal(fila, usuario=None):
     dni = (fila.get("dni") or "").strip()
     if not dni:
         raise ValidationError("Falta el DNI.")
@@ -63,6 +71,15 @@ def _importar_fila_personal(fila):
                 "El DNI no existe y la fila no contiene datos personales para crearlo."
             )
     else:
+        permiso_persona = (
+            "personal.change_persona"
+            if persona is not None
+            else "personal.add_persona"
+        )
+        if usuario and not usuario.has_perm(permiso_persona):
+            raise ValidationError(
+                f"No tiene permiso para registrar el legajo con DNI {dni}."
+            )
         persona = persona or Persona(dni=dni)
         apellido_actual = (fila.get("apellido") or "").strip() if "apellido" in fila else persona.apellido
         nombres_actuales = (fila.get("nombres") or "").strip() if "nombres" in fila else persona.nombres
@@ -89,6 +106,16 @@ def _importar_fila_personal(fila):
     codigo_cargo = (fila.get("cargo_codigo") or "").strip()
     if not codigo_cargo:
         return
+
+    permiso_designacion = (
+        "personal.change_designacion"
+        if Designacion.objects.filter(persona_id=dni, cargo_id=codigo_cargo).exists()
+        else "personal.add_designacion"
+    )
+    if usuario and not usuario.has_perm(permiso_designacion):
+        raise ValidationError(
+            f"No tiene permiso para registrar la designación del DNI {dni}."
+        )
 
     cargo = Cargo.objects.filter(pk=codigo_cargo).first()
     if cargo is None:
@@ -154,7 +181,7 @@ def _importar_fila_personal(fila):
     designacion.save()
 
 
-def _procesar_csv(archivo):
+def _procesar_csv(archivo, usuario=None):
     if archivo.size > MAX_CSV_BYTES:
         raise ValidationError("El archivo CSV supera el máximo de 5 MB.")
     if not archivo.name.lower().endswith(".csv"):
@@ -178,7 +205,7 @@ def _procesar_csv(archivo):
         total += 1
         try:
             with transaction.atomic():
-                _importar_fila_personal(fila)
+                _importar_fila_personal(fila, usuario=usuario)
         except (ValidationError, IntegrityError, ValueError) as exc:
             rechazadas += 1
             ImportacionPersonalError.objects.create(
@@ -193,20 +220,25 @@ def _procesar_csv(archivo):
 
 
 @login_required
-@permission_required("personal.change_persona", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def gestion_legajos(request):
     if request.method == "POST":
         accion = request.POST.get("accion")
         if accion == "importar_csv":
-            if not request.user.has_perm("personal.change_persona"):
+            puede_importar_personas = request.user.has_perm(
+                "personal.add_persona"
+            ) or request.user.has_perm("personal.change_persona")
+            puede_importar_designaciones = request.user.has_perm(
+                "personal.add_designacion"
+            ) or request.user.has_perm("personal.change_designacion")
+            if not (puede_importar_personas or puede_importar_designaciones):
                 raise PermissionDenied
             archivo = request.FILES.get("archivo")
             if not archivo:
                 messages.error(request, "Seleccione un archivo CSV.")
             else:
                 try:
-                    total, rechazadas = _procesar_csv(archivo)
+                    total, rechazadas = _procesar_csv(archivo, usuario=request.user)
                 except ValidationError as exc:
                     messages.error(request, _mensaje_errores(exc))
                 else:
@@ -230,6 +262,13 @@ def gestion_legajos(request):
         if accion == "guardar_persona":
             dni = request.POST.get("dni", "").strip()
             persona_existente = Persona.objects.filter(pk=dni).first()
+            permiso = (
+                "personal.change_persona"
+                if persona_existente
+                else "personal.add_persona"
+            )
+            if not request.user.has_perm(permiso):
+                raise PermissionDenied
             form = PersonaForm(request.POST, instance=persona_existente)
             if form.is_valid():
                 persona = form.save()
@@ -245,18 +284,28 @@ def gestion_legajos(request):
             )
 
         if accion in {"guardar_designacion", "dar_baja_designacion"}:
-            if not request.user.has_perm("personal.change_designacion"):
-                raise PermissionDenied
             dni = request.POST.get("dni", "").strip()
             persona = get_object_or_404(Persona, pk=dni)
             designacion_id = request.POST.get("designacion_id")
             designacion = None
             if designacion_id:
+                if _pk_valido(Designacion, designacion_id) is None:
+                    messages.error(request, "La designación indicada no existe.")
+                    return redirect(
+                        f"{reverse('personal:gestion_legajos')}?dni={persona.pk}"
+                    )
                 designacion = get_object_or_404(
                     Designacion,
                     pk=designacion_id,
                     persona=persona,
                 )
+            permiso = (
+                "personal.change_designacion"
+                if designacion
+                else "personal.add_designacion"
+            )
+            if not request.user.has_perm(permiso):
+                raise PermissionDenied
 
             if accion == "dar_baja_designacion":
                 if designacion and designacion.activo:
@@ -299,10 +348,14 @@ def gestion_legajos(request):
     designacion_id = request.GET.get("designacion")
     designacion = None
     if persona and designacion_id:
-        designacion = Designacion.objects.filter(
-            pk=designacion_id,
-            persona=persona,
-        ).first()
+        designacion_pk = _pk_valido(Designacion, designacion_id)
+        if designacion_pk is not None:
+            designacion = Designacion.objects.filter(
+                pk=designacion_pk,
+                persona=persona,
+            ).first()
+        else:
+            messages.error(request, "La designación indicada no existe.")
 
     return render(
         request,
@@ -460,7 +513,12 @@ def catalogos_personal(request):
 
     datos = configuracion[seccion]
     objeto_id = request.GET.get("editar")
-    objeto = datos["modelo"].objects.filter(pk=objeto_id).first() if objeto_id else None
+    objeto_id_valido = _pk_valido(datos["modelo"], objeto_id)
+    objeto = (
+        datos["modelo"].objects.filter(pk=objeto_id_valido).first()
+        if objeto_id_valido
+        else None
+    )
     if objeto_id and objeto is None:
         messages.error(request, "El registro solicitado no existe.")
         return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
@@ -468,8 +526,13 @@ def catalogos_personal(request):
     if request.method == "POST":
         accion = request.POST.get("accion")
         if accion == "guardar":
-            objeto = datos["modelo"].objects.filter(pk=request.POST.get("objeto_id")).first()
             objeto_id_enviado = (request.POST.get("objeto_id") or "").strip()
+            objeto_pk = _pk_valido(datos["modelo"], objeto_id_enviado)
+            objeto = (
+                datos["modelo"].objects.filter(pk=objeto_pk).first()
+                if objeto_pk
+                else None
+            )
             if objeto_id_enviado and objeto is None:
                 messages.error(request, "El registro solicitado no existe.")
                 return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
@@ -492,7 +555,13 @@ def catalogos_personal(request):
                     messages.success(request, f"{datos['titulo']} guardado correctamente.")
                     return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
         elif accion == "eliminar":
-            objeto = datos["modelo"].objects.filter(pk=request.POST.get("objeto_id")).first()
+            objeto_id_enviado = (request.POST.get("objeto_id") or "").strip()
+            objeto_pk = _pk_valido(datos["modelo"], objeto_id_enviado)
+            objeto = (
+                datos["modelo"].objects.filter(pk=objeto_pk).first()
+                if objeto_pk
+                else None
+            )
             if objeto:
                 campo_activo = datos["campo_activo"]
                 if campo_activo:
@@ -502,7 +571,7 @@ def catalogos_personal(request):
                 else:
                     try:
                         objeto.delete()
-                    except ProtectedError:
+                    except (ProtectedError, RestrictedError):
                         messages.error(
                             request,
                             "El registro está en uso y no puede eliminarse.",

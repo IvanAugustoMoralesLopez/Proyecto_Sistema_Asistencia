@@ -48,6 +48,25 @@ class Persona(models.Model):
     def __str__(self):
         return f"{self.apellido_nombre} ({self.dni})"
 
+    def save(self, *args, **kwargs):
+        apellido_nombre = (self.apellido_nombre or "").strip()
+        apellido = (self.apellido or "").strip()
+        nombres = (self.nombres or "").strip()
+
+        if not apellido_nombre and (apellido or nombres):
+            self.apellido_nombre = ", ".join(
+                parte for parte in (apellido, nombres) if parte
+            )
+        elif apellido_nombre and (apellido or nombres):
+            partes = [parte.strip() for parte in apellido_nombre.split(",", 1)]
+            if len(partes) == 2:
+                apellido = partes[0].strip()
+                nombres = partes[1].strip()
+                self.apellido = apellido
+                self.nombres = nombres
+
+        super().save(*args, **kwargs)
+
 
 class Cargo(models.Model):
     codigo = models.CharField(max_length=10, primary_key=True)
