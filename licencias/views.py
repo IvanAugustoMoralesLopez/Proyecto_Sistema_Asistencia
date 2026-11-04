@@ -1,10 +1,11 @@
+import os
 import calendar
 from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.db.models import Q
-from django.http import Http404
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.views.decorators.http import require_http_methods
 
@@ -12,9 +13,13 @@ from personal.models import Horario
 
 from .clasificacion import CategoriaSinPlanillaError, PLANILLA_IL01, PLANILLA_IL02
 from .dias import mes_vecino, obtener_feriados
-from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm
-from .models import LicenciaArticulo, LicenciaOtorgada
-from .services import clasificar_planilla_licencia
+from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm, ResolucionAdjuntaForm
+from .models import LicenciaArticulo, LicenciaOtorgada, ResolucionAdjunta
+from .services import (
+    clasificar_planilla_licencia,
+    emitir_disposiciones_mes,
+    previsualizar_disposiciones_mes,
+)
 # Mapeo de Python weekday() a formato varchar(3) de la DB
 MAPEO_DIAS = {
     0: 'LUN', 1: 'MAR', 2: 'MIE', 3: 'JUE', 4: 'VIE', 5: 'SAB', 6: 'DOM'
@@ -259,4 +264,96 @@ def editar_licencia_otorgada(request, licencia_id):
             "form": form,
             "licencia": licencia,
         },
+    ) 
+
+MESES = [
+    (1, "Enero"), (2, "Febrero"), (3, "Marzo"), (4, "Abril"),
+    (5, "Mayo"), (6, "Junio"), (7, "Julio"), (8, "Agosto"),
+    (9, "Septiembre"), (10, "Octubre"), (11, "Noviembre"), (12, "Diciembre"),
+]
+
+
+@login_required
+@permission_required("licencias.change_licenciaotorgada", raise_exception=True)
+@require_http_methods(["GET", "POST"])
+def generador_disposiciones(request):
+    """
+    RF-16: pantalla del generador de disposiciones. GET muestra la vista previa
+    del mes sin guardar nada; POST emite las disposiciones del mes.
+    """
+    datos = request.POST if request.method == "POST" else request.GET
+    hoy = date.today()
+    try:
+        anio = int(datos.get("anio", hoy.year))
+        mes = int(datos.get("mes", hoy.month))
+    except ValueError:
+        raise Http404("Año o mes inválido.")
+    if not (1 <= mes <= 12 and 2000 <= anio <= 2100):
+        raise Http404("Año o mes fuera de rango.")
+
+    if request.method == "POST":
+        resultado = emitir_disposiciones_mes(anio, mes)
+        emitidas = len(resultado["emitidas"])
+        omitidas = len(resultado["omitidas"])
+        if emitidas:
+            messages.success(
+                request,
+                f"Se emitieron {emitidas} disposiciones. "
+                f"Licencias omitidas por no tener N° de formulario: {omitidas}.",
+            )
+        else:
+            messages.info(request, "No había disposiciones para emitir en ese mes.")
+        return redirect(
+            f"{reverse('licencias:generador_disposiciones')}?anio={anio}&mes={mes}"
+        )
+
+    previa = previsualizar_disposiciones_mes(anio, mes)
+    return render(request, "licencias/generador_disposiciones.html", {
+        "anio": anio,
+        "mes": mes,
+        "meses": MESES,
+        "a_emitir": previa["a_emitir"],
+        "omitidas": previa["omitidas"],
+        "oficina": previa["oficina"],
+    }) 
+
+@login_required
+@permission_required("licencias.change_licenciaotorgada", raise_exception=True)
+@require_http_methods(["GET", "POST"])
+def resoluciones_licencia(request, licencia_id):
+    """RF-16: lista las resoluciones de una licencia y permite adjuntar otra."""
+    licencia = get_object_or_404(
+        LicenciaOtorgada.objects.select_related("designacion__persona", "articulo"),
+        pk=licencia_id,
+    )
+
+    if request.method == "POST":
+        form = ResolucionAdjuntaForm(request.POST, request.FILES)
+        if form.is_valid():
+            resolucion = form.save(commit=False)
+            resolucion.licencia = licencia
+            resolucion.save()
+            messages.success(request, "La resolución se adjuntó correctamente.")
+            return redirect("licencias:resoluciones_licencia", licencia_id=licencia.pk)
+        messages.error(request, "Revise los datos de la resolución.")
+    else:
+        form = ResolucionAdjuntaForm()
+
+    return render(request, "licencias/resoluciones_licencia.html", {
+        "licencia": licencia,
+        "resoluciones": licencia.resoluciones.all(),
+        "form": form,
+    })
+
+
+@login_required
+@permission_required("licencias.view_licenciaotorgada", raise_exception=True)
+def descargar_resolucion(request, resolucion_id):
+    """RF-16: entrega el PDF solo a quien tiene permiso (nunca por URL pública)."""
+    resolucion = get_object_or_404(ResolucionAdjunta, pk=resolucion_id)
+    return FileResponse(
+        resolucion.archivo.open("rb"),
+        as_attachment=True,
+        filename=os.path.basename(resolucion.archivo.name),
+        content_type="application/pdf",
     )

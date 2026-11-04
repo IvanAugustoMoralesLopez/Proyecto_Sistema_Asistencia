@@ -132,7 +132,6 @@
                                         No
                                     {% endif %}
                                 </td>
-
                                 <td>
                                     <a
                                         href="{% url 'licencias:editar_licencia_otorgada' licencia.id %}?{{ request.GET.urlencode }}"
@@ -140,6 +139,12 @@
                                         onclick="return confirm('¿Desea ingresar a editar esta licencia?');"
                                     >
                                         Editar
+                                    </a>
+                                    <a
+                                        href="{% url 'licencias:resoluciones_licencia' licencia.id %}"
+                                        class="btn btn-sm btn-outline-secondary ms-1"
+                                    >
+                                        Resoluciones
                                     </a>
                                 </td>
                             </tr>

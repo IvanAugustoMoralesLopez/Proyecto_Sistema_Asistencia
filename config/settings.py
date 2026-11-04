@@ -139,6 +139,9 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
+# Archivos subidos (resoluciones adjuntas, RF-16). No se define MEDIA_URL a
+# propósito: los archivos no se sirven públicamente, solo por una vista con permiso.
+MEDIA_ROOT = BASE_DIR / "media"
 
 # Autenticación
 # https://docs.djangoproject.com/en/6.0/topics/auth/default/

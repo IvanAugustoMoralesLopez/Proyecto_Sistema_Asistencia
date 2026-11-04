@@ -76,25 +76,15 @@ def _ultimo_numero_emitido(oficina, anio):
     return mayor
 
 
-def emitir_disposiciones_mes(anio: int, mes: int, oficina: str = None) -> dict:
+def _clasificar_pendientes(anio: int, mes: int):
     """
-    Emite las Disposiciones Internas de las licencias que empiezan en el mes
-    (RF-16). Devuelve {'emitidas': [(numero, licencia)], 'omitidas': [licencia]}.
-
-    - RN-10: solo se emiten las licencias con N° de formulario en papel; las
-      demás quedan en 'omitidas' y no se tocan.
-    - RN-11: se ordenan alfabéticamente por apellido y se numeran en forma
-      correlativa, continuando desde el último número de la oficina y el año.
-    - Lo ya emitido (con disp_numero) no se vuelve a numerar.
-    - `oficina` por defecto: la de ParametroSistema (RF-21).
+    Licencias que empiezan en el mes y todavía no tienen disposición, separadas
+    en (emitibles, omitidas), cada lista en orden alfabético (RN-11).
+    - RN-10: solo son emitibles las que tienen N° de formulario en papel.
+    - Lo ya emitido (con disp_numero) queda afuera.
     """
     if not 1 <= mes <= 12:
         raise ValueError("El mes debe estar entre 1 y 12.")
-
-    if oficina is None:
-        # Import local: reportes importa licencias, no al revés.
-        from reportes.models import ParametroSistema
-        oficina = ParametroSistema.obtener().codigo_oficina
 
     primer_dia = date(anio, mes, 1)
     ultimo_dia = date(anio, mes, calendar.monthrange(anio, mes)[1])
@@ -115,6 +105,50 @@ def emitir_disposiciones_mes(anio: int, mes: int, oficina: str = None) -> dict:
 
     emitibles.sort(key=_clave_alfabetica)
     omitidas.sort(key=_clave_alfabetica)
+    return emitibles, omitidas
+
+
+def _oficina_o_por_defecto(oficina):
+    """`oficina` por defecto: la de ParametroSistema (RF-21)."""
+    if oficina is None:
+        # Import local: reportes importa licencias, no al revés.
+        from reportes.models import ParametroSistema
+        return ParametroSistema.obtener().codigo_oficina
+    return oficina
+
+
+def previsualizar_disposiciones_mes(anio: int, mes: int, oficina: str = None) -> dict:
+    """
+    Muestra qué haría emitir_disposiciones_mes sin guardar nada (RF-16).
+    Devuelve {'a_emitir': [(numero, licencia)], 'omitidas': [licencia],
+    'oficina': str}, con los números que se asignarían.
+    """
+    emitibles, omitidas = _clasificar_pendientes(anio, mes)
+    oficina = _oficina_o_por_defecto(oficina)
+
+    numero = _ultimo_numero_emitido(oficina, anio)
+    a_emitir = []
+    for licencia in emitibles:
+        numero += 1
+        a_emitir.append((numero, licencia))
+
+    return {'a_emitir': a_emitir, 'omitidas': omitidas, 'oficina': oficina}
+
+
+def emitir_disposiciones_mes(anio: int, mes: int, oficina: str = None) -> dict:
+    """
+    Emite las Disposiciones Internas de las licencias que empiezan en el mes
+    (RF-16). Devuelve {'emitidas': [(numero, licencia)], 'omitidas': [licencia]}.
+
+    - RN-10: solo se emiten las licencias con N° de formulario en papel; las
+      demás quedan en 'omitidas' y no se tocan.
+    - RN-11: se ordenan alfabéticamente por apellido y se numeran en forma
+      correlativa, continuando desde el último número de la oficina y el año.
+    - Lo ya emitido (con disp_numero) no se vuelve a numerar.
+    - `oficina` por defecto: la de ParametroSistema (RF-21).
+    """
+    emitibles, omitidas = _clasificar_pendientes(anio, mes)
+    oficina = _oficina_o_por_defecto(oficina)
 
     emitidas = []
     with transaction.atomic():

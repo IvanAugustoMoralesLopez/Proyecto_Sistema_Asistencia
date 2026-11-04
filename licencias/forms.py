@@ -2,7 +2,7 @@
 from django.db.models import Q
 from django import forms
 from personal.models import Designacion
-from .models import LicenciaArticulo, LicenciaOtorgada
+from .models import LicenciaArticulo, LicenciaOtorgada, ResolucionAdjunta
 from django.utils.dateparse import parse_date
 
 
@@ -192,4 +192,25 @@ class FiltroLicenciasForm(forms.Form):
         queryset=LicenciaArticulo.objects.all(), required=False,
     )
     fecha_desde = forms.DateField(required=False)
-    fecha_hasta = forms.DateField(required=False)
+    fecha_hasta = forms.DateField(required=False) 
+
+class ResolucionAdjuntaForm(forms.ModelForm):
+    """RF-16: formulario para adjuntar una resolución (PDF) a una licencia."""
+
+    class Meta:
+        model = ResolucionAdjunta
+        fields = ["descripcion", "archivo"]
+        widgets = {
+            "descripcion": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ej.: Resolución ministerial N° 123/2026",
+            }),
+            "archivo": forms.ClearableFileInput(attrs={
+                "class": "form-control",
+                "accept": "application/pdf",
+            }),
+        }
+        labels = {
+            "descripcion": "Descripción",
+            "archivo": "Archivo PDF (máximo 5 MB)",
+        }

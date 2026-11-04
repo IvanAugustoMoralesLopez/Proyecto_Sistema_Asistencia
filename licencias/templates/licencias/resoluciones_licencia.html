@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Resoluciones de la licencia{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Resoluciones adjuntas</h2>
+    </div>
+    <div class="card-body">
+        <p class="mb-3">
+            <strong>{{ licencia.designacion.persona.apellido_nombre }}</strong>
+            &middot; Artículo {{ licencia.articulo.articulo }} - {{ licencia.articulo.tipo_licencia }}
+            &middot; Desde {{ licencia.desde|date:"d/m/Y" }}
+            {% if licencia.hasta %}hasta {{ licencia.hasta|date:"d/m/Y" }}{% else %}(sin fecha de fin){% endif %}
+        </p>
+
+        {% if resoluciones %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Descripción</th>
+                            <th>Cargada el</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for resolucion in resoluciones %}
+                            <tr>
+                                <td>{{ resolucion.descripcion }}</td>
+                                <td>{{ resolucion.subido_en|date:"d/m/Y H:i" }}</td>
+                                <td class="text-end">
+                                    <a class="btn btn-outline-primary btn-sm"
+                                       href="{% url 'licencias:descargar_resolucion' resolucion.pk %}">
+                                        Descargar PDF
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted">Esta licencia todavía no tiene resoluciones adjuntas.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Adjuntar una resolución</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data" class="row g-3">
+            {% csrf_token %}
+            <div class="col-md-6">
+                <label for="{{ form.descripcion.id_for_label }}" class="form-label">{{ form.descripcion.label }}</label>
+                {{ form.descripcion }}
+                {% for error in form.descripcion.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="col-md-6">
+                <label for="{{ form.archivo.id_for_label }}" class="form-label">{{ form.archivo.label }}</label>
+                {{ form.archivo }}
+                {% for error in form.archivo.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary">Adjuntar</button>
+                <a class="btn btn-outline-secondary" href="{% url 'licencias:listado_licencias_otorgadas' %}">Volver al listado</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,6 +1,7 @@
 from datetime import date
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError 
+from django.core.validators import FileExtensionValidator
 from django.db import models
 
 from .clasificacion import CATEGORIA_CHOICES
@@ -208,4 +209,39 @@ class RegistroBitacora(models.Model):
         verbose_name_plural = 'Registros de Bitácora'
 
     def __str__(self):
-        return f"{self.fecha.strftime('%d/%m/%Y %H:%M')} - {self.accion}"
+        return f"{self.fecha.strftime('%d/%m/%Y %H:%M')} - {self.accion}" 
+
+TAMANIO_MAXIMO_RESOLUCION = 5 * 1024 * 1024  # 5 MB
+
+
+def validar_resolucion_pdf(archivo):
+    """RF-16: hasta 5 MB y contenido que realmente empiece como un PDF."""
+    if archivo.size > TAMANIO_MAXIMO_RESOLUCION:
+        raise ValidationError("El archivo supera el máximo permitido de 5 MB.")
+    archivo.seek(0)
+    cabecera = archivo.read(5)
+    archivo.seek(0)
+    if cabecera != b'%PDF-':
+        raise ValidationError("El archivo no es un PDF válido.")
+
+
+class ResolucionAdjunta(models.Model):
+    """RF-16: resolución ministerial o externa adjunta a una licencia (PDF)."""
+    licencia = models.ForeignKey(
+        LicenciaOtorgada, on_delete=models.CASCADE, related_name='resoluciones',
+    )
+    descripcion = models.CharField(
+        max_length=200,
+        help_text="Por ejemplo: Resolución ministerial N° 123/2026.",
+    )
+    archivo = models.FileField(
+        upload_to='resoluciones/%Y/%m/',
+        validators=[FileExtensionValidator(['pdf']), validar_resolucion_pdf],
+    )
+    subido_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-subido_en']
+
+    def __str__(self):
+        return self.descripcion
