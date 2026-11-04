@@ -5,10 +5,14 @@ from datetime import date
 from django.db import transaction
 from django.db.models import Q
 
-from .clasificacion import planilla_para_categoria
+from .clasificacion import (
+    CategoriaSinPlanillaError,
+    PLANILLA_IL01,
+    PLANILLA_IL02,
+    planilla_para_categoria,
+)
 from .dias import contar_dias_habiles, fecha_de_hoy, obtener_feriados, rango_en_anio
-from .models import LicenciaOtorgada
-
+from .models import LicenciaArticulo, LicenciaOtorgada
 
 def dias_usados_en_anio(dni: str, articulo: str, anio: int, excluir_id: int = None) -> int:
     """
@@ -164,4 +168,45 @@ def emitir_disposiciones_mes(anio: int, mes: int, oficina: str = None) -> dict:
             ])
             emitidas.append((numero, licencia))
 
-    return {'emitidas': emitidas, 'omitidas': omitidas}
+    return {'emitidas': emitidas, 'omitidas': omitidas} 
+
+TITULOS_PLANILLA = {
+    PLANILLA_IL01: 'IL-01 Salud',
+    PLANILLA_IL02: 'IL-02 Administrativas',
+}
+TITULO_SIN_PLANILLA = 'Sin planilla asignada'
+
+
+def articulos_para_asistente(situacion: str = None) -> list:
+    """
+    RF-15: datos del catálogo para guiar la elección del artículo.
+
+    Devuelve una lista de diccionarios (aptos para JSON) con la planilla de
+    salida de cada artículo (IL-01 / IL-02), su tope, goce, plazo y autoridad.
+    Si `situacion` viene (titular, interino, suplente), se filtra por ella sin
+    distinguir mayúsculas. Un artículo con categoría sin planilla no rompe:
+    queda con planilla None.
+    """
+    articulos = LicenciaArticulo.objects.all()
+    if situacion:
+        articulos = articulos.filter(sit_rev__iexact=situacion.strip())
+
+    datos = []
+    for articulo in articulos.order_by('articulo', 'sit_rev'):
+        try:
+            planilla = planilla_para_categoria(articulo.categoria_informe)
+        except CategoriaSinPlanillaError:
+            planilla = None
+        datos.append({
+            'id': articulo.pk,
+            'articulo': articulo.articulo,
+            'tipo_licencia': articulo.tipo_licencia,
+            'situacion': (articulo.sit_rev or '').strip().lower(),
+            'planilla': planilla,
+            'planilla_titulo': TITULOS_PLANILLA.get(planilla, TITULO_SIN_PLANILLA),
+            'tope_dias_anual': articulo.tope_dias_anual,
+            'goce_haberes': articulo.goce_haberes,
+            'plazo': articulo.plazo,
+            'autoridad': articulo.autoridad,
+        })
+    return datos
