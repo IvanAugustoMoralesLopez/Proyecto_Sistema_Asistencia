@@ -1,0 +1,77 @@
+{{ form.datos_articulos|json_script:"datos-articulos" }}
+<script>
+(function () {
+    const articulos = JSON.parse(document.getElementById('datos-articulos').textContent);
+    const selDesignacion = document.getElementById('id_designacion');
+    const selArticulo = document.getElementById('id_articulo');
+    const panel = document.getElementById('panel-articulo');
+    if (!selDesignacion || !selArticulo || !panel) return;
+
+    // Situación de revista de la designación elegida ('' si no hay o no se conoce).
+    function situacionElegida() {
+        const opcion = selDesignacion.options[selDesignacion.selectedIndex];
+        return opcion ? (opcion.dataset.situacion || '') : '';
+    }
+
+    // Muestra planilla, tope, goce, plazo y autoridad del artículo elegido.
+    function mostrarPanel() {
+        const a = articulos.find(function (x) { return String(x.id) === selArticulo.value; });
+        panel.innerHTML = '';
+        if (!a) {
+            panel.classList.add('d-none');
+            return;
+        }
+        const lineas = [
+            ['Planilla de salida', a.planilla_titulo],
+            ['Tope anual', a.tope_dias_anual ? a.tope_dias_anual + ' días' : 'Sin tope'],
+            ['Goce de haberes', a.goce_haberes],
+            ['Plazo', a.plazo],
+            ['Autoridad', a.autoridad],
+        ];
+        lineas.forEach(function (par) {
+            const fila = document.createElement('div');
+            const titulo = document.createElement('strong');
+            titulo.textContent = par[0] + ': ';
+            fila.appendChild(titulo);
+            fila.appendChild(document.createTextNode(par[1] || '—'));
+            panel.appendChild(fila);
+        });
+        panel.classList.remove('d-none');
+    }
+
+    // Arma el desplegable de artículos: solo los de la situación de revista de
+    // la designación, agrupados por planilla de salida (IL-01 / IL-02).
+    function armarArticulos() {
+        const situacion = situacionElegida();
+        const actual = selArticulo.value;
+        selArticulo.innerHTML = '';
+
+        const vacia = document.createElement('option');
+        vacia.value = '';
+        vacia.textContent = '---------';
+        selArticulo.appendChild(vacia);
+
+        const grupos = {};
+        articulos.forEach(function (a) {
+            if (situacion && a.situacion !== situacion) return;
+            if (!grupos[a.planilla_titulo]) {
+                const grupo = document.createElement('optgroup');
+                grupo.label = a.planilla_titulo;
+                grupos[a.planilla_titulo] = grupo;
+                selArticulo.appendChild(grupo);
+            }
+            const opcion = document.createElement('option');
+            opcion.value = a.id;
+            opcion.textContent = a.articulo + ' - ' + a.tipo_licencia;
+            grupos[a.planilla_titulo].appendChild(opcion);
+        });
+
+        selArticulo.value = actual;  // si el artículo ya no corresponde, queda vacío
+        mostrarPanel();
+    }
+
+    selDesignacion.addEventListener('change', armarArticulos);
+    selArticulo.addEventListener('change', mostrarPanel);
+    armarArticulos();
+})();
+</script>

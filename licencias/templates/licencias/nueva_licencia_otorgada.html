@@ -39,6 +39,7 @@
                     {% for error in form.articulo.errors %}
                         <div class="text-danger small">{{ error }}</div>
                     {% endfor %}
+                    <div id="panel-articulo" class="alert alert-info small mt-2 mb-0 d-none"></div>
                 </div>
                 <div class="col-md-6">
                     {{ form.sit_rev.label_tag }}
@@ -118,11 +119,12 @@
                 <button type="submit" class="btn btn-primary">
                     Guardar licencia
                 </button>
-                <a class="btn btn-outline-secondary" href="{% url 'pantalla_licencias' %}">
+                    <a class="btn btn-outline-secondary" href="{% url 'licencias:listado_licencias_otorgadas' %}">
                     Cancelar
                 </a>
             </div>
         </form>
     </div>
-</div>
+</div> 
+{% include "licencias/_asistente_articulo.html" %}
 {% endblock %}

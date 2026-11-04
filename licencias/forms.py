@@ -3,6 +3,7 @@ from django.db.models import Q
 from django import forms
 from personal.models import Designacion
 from .models import LicenciaArticulo, LicenciaOtorgada, ResolucionAdjunta
+from .services import articulos_para_asistente
 from django.utils.dateparse import parse_date
 
 
@@ -61,6 +62,19 @@ class LicenciaArticuloForm(forms.ModelForm):
             "tope_dias_anual": "Tope de días por año",
         }
 
+class SelectDesignacion(forms.Select):
+    """RF-15: cada opción lleva la situación de revista de su designación."""
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        opcion = super().create_option(
+            name, value, label, selected, index, subindex=subindex, attrs=attrs,
+        )
+        designacion = getattr(value, "instance", None)
+        if designacion is not None and designacion.situacion_revista:
+            opcion["attrs"]["data-situacion"] = (
+                designacion.get_situacion_revista_display().lower()
+            )
+        return opcion
 
 class LicenciaOtorgadaForm(forms.ModelForm):
     justifica = forms.TypedChoiceField(
@@ -107,6 +121,9 @@ class LicenciaOtorgadaForm(forms.ModelForm):
             ).order_by("persona__apellido_nombre")
         )
 
+    def datos_articulos(self):
+        """RF-15: catálogo con su planilla de salida, para el asistente."""
+        return articulos_para_asistente()
 
     class Meta:
         model = LicenciaOtorgada
@@ -128,7 +145,7 @@ class LicenciaOtorgadaForm(forms.ModelForm):
         ]
 
         widgets = {
-            "designacion": forms.Select(attrs={"class": "form-select"}),
+            "designacion": SelectDesignacion(attrs={"class": "form-select"}),
             "articulo": forms.Select(attrs={"class": "form-select"}),
             "sit_rev": forms.TextInput(attrs={
                 "class": "form-control",
