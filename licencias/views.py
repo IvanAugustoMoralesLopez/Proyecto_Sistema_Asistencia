@@ -1,10 +1,11 @@
+import os
 import calendar
 from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.db.models import Q
-from django.http import Http404
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.views.decorators.http import require_http_methods
 
@@ -12,8 +13,8 @@ from personal.models import Horario
 
 from .clasificacion import CategoriaSinPlanillaError, PLANILLA_IL01, PLANILLA_IL02
 from .dias import mes_vecino, obtener_feriados
-from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm
-from .models import LicenciaArticulo, LicenciaOtorgada
+from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm, ResolucionAdjuntaForm
+from .models import LicenciaArticulo, LicenciaOtorgada, ResolucionAdjunta
 from .services import (
     clasificar_planilla_licencia,
     emitir_disposiciones_mes,
@@ -314,4 +315,45 @@ def generador_disposiciones(request):
         "a_emitir": previa["a_emitir"],
         "omitidas": previa["omitidas"],
         "oficina": previa["oficina"],
+    }) 
+
+@login_required
+@permission_required("licencias.change_licenciaotorgada", raise_exception=True)
+@require_http_methods(["GET", "POST"])
+def resoluciones_licencia(request, licencia_id):
+    """RF-16: lista las resoluciones de una licencia y permite adjuntar otra."""
+    licencia = get_object_or_404(
+        LicenciaOtorgada.objects.select_related("designacion__persona", "articulo"),
+        pk=licencia_id,
+    )
+
+    if request.method == "POST":
+        form = ResolucionAdjuntaForm(request.POST, request.FILES)
+        if form.is_valid():
+            resolucion = form.save(commit=False)
+            resolucion.licencia = licencia
+            resolucion.save()
+            messages.success(request, "La resolución se adjuntó correctamente.")
+            return redirect("licencias:resoluciones_licencia", licencia_id=licencia.pk)
+        messages.error(request, "Revise los datos de la resolución.")
+    else:
+        form = ResolucionAdjuntaForm()
+
+    return render(request, "licencias/resoluciones_licencia.html", {
+        "licencia": licencia,
+        "resoluciones": licencia.resoluciones.all(),
+        "form": form,
     })
+
+
+@login_required
+@permission_required("licencias.view_licenciaotorgada", raise_exception=True)
+def descargar_resolucion(request, resolucion_id):
+    """RF-16: entrega el PDF solo a quien tiene permiso (nunca por URL pública)."""
+    resolucion = get_object_or_404(ResolucionAdjunta, pk=resolucion_id)
+    return FileResponse(
+        resolucion.archivo.open("rb"),
+        as_attachment=True,
+        filename=os.path.basename(resolucion.archivo.name),
+        content_type="application/pdf",
+    )
