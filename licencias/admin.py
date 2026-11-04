@@ -28,9 +28,9 @@ class LicenciaOtorgadaAdmin(admin.ModelAdmin):
     list_display = ('designacion', 'articulo', 'desde', 'hasta', 'sit_rev')
     list_filter = ('sit_rev', 'justifica')
     date_hierarchy = 'desde'
-    # Esta línea soluciona el error E040
+    # Obligatorio (admin.E040): otro admin referencia este modelo con
+    # autocomplete_fields, y Django exige search_fields acá.
     search_fields = ('disp_numero', 'articulo__articulo', 'articulo__tipo_licencia')
-
 
 @admin.register(RegistroBitacora)
 class RegistroBitacoraAdmin(admin.ModelAdmin):
