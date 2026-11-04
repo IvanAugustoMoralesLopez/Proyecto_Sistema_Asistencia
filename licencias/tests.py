@@ -10,7 +10,7 @@ from django.contrib.auth.models import Permission, User
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase 
 
-
+from django.urls import reverse
 
 from personal.models import (
     Carrera,
@@ -917,4 +917,138 @@ class DesignacionDeBajaEdicionTests(TestCase):
         from .forms import LicenciaOtorgadaForm
         form = LicenciaOtorgadaForm(instance=self.licencia)
         self.assertIn('value="2026-07-13"', str(form['desde']))
-        self.assertIn('value="2026-07-14"', str(form['hasta']))
+        self.assertIn('value="2026-07-14"', str(form['hasta'])) 
+
+class PrevisualizarDisposicionesTests(TestCase):
+    """RF-16: la vista previa muestra qué se emitiría sin guardar nada."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='T-25', articulo='25', tipo_licencia='Duelo',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo', tope_dias_anual=5,
+        )
+
+        def licencia(dni, apellido_nombre, formulario):
+            persona = Persona.objects.create(dni=dni, apellido_nombre=apellido_nombre)
+            designacion = Designacion.objects.create(
+                persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+            )
+            return LicenciaOtorgada.objects.create(
+                designacion=designacion, articulo=cls.articulo, sit_rev='Titular',
+                desde=date(2026, 3, 9), hasta=date(2026, 3, 9),
+                nro_formulario=formulario,
+            )
+
+        # Se crean fuera de orden alfabético para comprobar el orden (RN-11).
+        cls.zeta = licencia(99000081, 'ZETA, Zoe', '101')
+        cls.alfa = licencia(99000082, 'ALFA, Ana', '102')
+        cls.sin_formulario = licencia(99000083, 'MEDINA, Mario', '')
+
+    def test_la_vista_previa_no_guarda_nada(self):
+        from .services import previsualizar_disposiciones_mes
+        previsualizar_disposiciones_mes(2026, 3, oficina='1452')
+        self.alfa.refresh_from_db()
+        self.zeta.refresh_from_db()
+        self.assertFalse(self.alfa.disp_numero)
+        self.assertFalse(self.zeta.disp_numero)
+
+    def test_la_vista_previa_numera_por_orden_alfabetico(self):
+        from .services import previsualizar_disposiciones_mes
+        previa = previsualizar_disposiciones_mes(2026, 3, oficina='1452')
+        self.assertEqual(
+            [(numero, lic.pk) for numero, lic in previa['a_emitir']],
+            [(1, self.alfa.pk), (2, self.zeta.pk)],
+        )
+
+    def test_la_vista_previa_lista_las_omitidas_sin_formulario(self):
+        from .services import previsualizar_disposiciones_mes
+        previa = previsualizar_disposiciones_mes(2026, 3, oficina='1452')
+        self.assertEqual([l.pk for l in previa['omitidas']], [self.sin_formulario.pk])
+
+    def test_la_vista_previa_coincide_con_lo_que_se_emite(self):
+        from .services import emitir_disposiciones_mes, previsualizar_disposiciones_mes
+        previa = previsualizar_disposiciones_mes(2026, 3, oficina='1452')
+        emitido = emitir_disposiciones_mes(2026, 3, oficina='1452')
+        self.assertEqual(
+            [(n, l.pk) for n, l in previa['a_emitir']],
+            [(n, l.pk) for n, l in emitido['emitidas']],
+        ) 
+
+class GeneradorDisposicionesVistaTests(TestCase):
+    """RF-16: pantalla del generador de disposiciones."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Permission
+
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        articulo = LicenciaArticulo.objects.create(
+            cod_licencia='T-25', articulo='25', tipo_licencia='Duelo',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo', tope_dias_anual=5,
+        )
+
+        def licencia(dni, apellido_nombre, formulario):
+            persona = Persona.objects.create(dni=dni, apellido_nombre=apellido_nombre)
+            designacion = Designacion.objects.create(
+                persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+            )
+            return LicenciaOtorgada.objects.create(
+                designacion=designacion, articulo=articulo, sit_rev='Titular',
+                desde=date(2026, 3, 9), hasta=date(2026, 3, 9),
+                nro_formulario=formulario,
+            )
+
+        cls.zeta = licencia(99000091, 'ZETA, Zoe', '101')
+        cls.alfa = licencia(99000092, 'ALFA, Ana', '102')
+        cls.sin_formulario = licencia(99000093, 'MEDINA, Mario', '')
+
+        User = get_user_model()
+        cls.usuario = User.objects.create_user(username='emisor', password='x')
+        cls.usuario.user_permissions.add(
+            Permission.objects.get(codename='change_licenciaotorgada'),
+        )
+        cls.sin_permiso = User.objects.create_user(username='curioso', password='x')
+
+        cls.url = reverse('licencias:generador_disposiciones')
+
+    def test_anonimo_es_redirigido_al_login(self):
+        respuesta = self.client.get(self.url, {'anio': 2026, 'mes': 3})
+        self.assertEqual(respuesta.status_code, 302)
+
+    def test_sin_permiso_recibe_403(self):
+        self.client.force_login(self.sin_permiso)
+        respuesta = self.client.get(self.url, {'anio': 2026, 'mes': 3})
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_get_muestra_la_vista_previa_sin_emitir(self):
+        self.client.force_login(self.usuario)
+        respuesta = self.client.get(self.url, {'anio': 2026, 'mes': 3})
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'ALFA, Ana')
+        self.assertContains(respuesta, 'ZETA, Zoe')
+        self.assertContains(respuesta, 'MEDINA, Mario')  # omitida
+        self.alfa.refresh_from_db()
+        self.assertFalse(self.alfa.disp_numero)
+
+    def test_post_emite_las_disposiciones_y_redirige(self):
+        self.client.force_login(self.usuario)
+        respuesta = self.client.post(self.url, {'anio': 2026, 'mes': 3})
+        self.assertEqual(respuesta.status_code, 302)
+        self.alfa.refresh_from_db()
+        self.zeta.refresh_from_db()
+        self.sin_formulario.refresh_from_db()
+        self.assertEqual(self.alfa.disp_numero, '1')
+        self.assertEqual(self.zeta.disp_numero, '2')
+        self.assertFalse(self.sin_formulario.disp_numero)
+
+    def test_mes_fuera_de_rango_devuelve_404(self):
+        self.client.force_login(self.usuario)
+        respuesta = self.client.get(self.url, {'anio': 2026, 'mes': 13})
+        self.assertEqual(respuesta.status_code, 404)

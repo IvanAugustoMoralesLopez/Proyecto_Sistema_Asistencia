@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Generador de disposiciones{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Generador de disposiciones internas</h2>
+    </div>
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-sm-4 col-md-3">
+                <label for="id_mes" class="form-label">Mes</label>
+                <select name="mes" id="id_mes" class="form-select">
+                    {% for numero, nombre in meses %}
+                        <option value="{{ numero }}" {% if numero == mes %}selected{% endif %}>{{ nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-sm-4 col-md-3">
+                <label for="id_anio" class="form-label">Año</label>
+                <input type="number" name="anio" id="id_anio" class="form-control"
+                       min="2000" max="2100" value="{{ anio }}">
+            </div>
+            <div class="col-sm-4 col-md-3">
+                <button type="submit" class="btn btn-outline-primary">Ver vista previa</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Se emitirán (oficina {{ oficina }}, año {{ anio }})</h2>
+    </div>
+    <div class="card-body">
+        {% if a_emitir %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>N° de disposición</th>
+                            <th>Docente</th>
+                            <th>Licencia</th>
+                            <th>Desde</th>
+                            <th>Hasta</th>
+                            <th>N° de formulario</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for numero, licencia in a_emitir %}
+                            <tr>
+                                <td>{{ numero }}/{{ anio }}</td>
+                                <td>{{ licencia.designacion.persona.apellido_nombre }}</td>
+                                <td>{{ licencia.articulo.articulo }} - {{ licencia.articulo.tipo_licencia }}</td>
+                                <td>{{ licencia.desde|date:"d/m/Y" }}</td>
+                                <td>{{ licencia.hasta|date:"d/m/Y"|default:"Sin fecha de fin" }}</td>
+                                <td>{{ licencia.nro_formulario }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <form method="post"
+                  onsubmit="return confirm('Se van a emitir {{ a_emitir|length }} disposiciones. ¿Confirma?');">
+                {% csrf_token %}
+                <input type="hidden" name="anio" value="{{ anio }}">
+                <input type="hidden" name="mes" value="{{ mes }}">
+                <button type="submit" class="btn btn-primary">Emitir disposiciones</button>
+            </form>
+        {% else %}
+            <p class="text-muted mb-0">No hay disposiciones para emitir en este mes.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% if omitidas %}
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-secondary text-white">
+            <h2 class="h5 mb-0">Omitidas por no tener N° de formulario</h2>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">No se emiten: la disposición solo se genera para licencias con formulario en papel.</p>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Docente</th>
+                            <th>Licencia</th>
+                            <th>Desde</th>
+                            <th>Hasta</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for licencia in omitidas %}
+                            <tr>
+                                <td>{{ licencia.designacion.persona.apellido_nombre }}</td>
+                                <td>{{ licencia.articulo.articulo }} - {{ licencia.articulo.tipo_licencia }}</td>
+                                <td>{{ licencia.desde|date:"d/m/Y" }}</td>
+                                <td>{{ licencia.hasta|date:"d/m/Y"|default:"Sin fecha de fin" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

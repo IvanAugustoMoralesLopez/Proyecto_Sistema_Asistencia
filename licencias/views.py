@@ -14,7 +14,11 @@ from .clasificacion import CategoriaSinPlanillaError, PLANILLA_IL01, PLANILLA_IL
 from .dias import mes_vecino, obtener_feriados
 from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm
 from .models import LicenciaArticulo, LicenciaOtorgada
-from .services import clasificar_planilla_licencia
+from .services import (
+    clasificar_planilla_licencia,
+    emitir_disposiciones_mes,
+    previsualizar_disposiciones_mes,
+)
 # Mapeo de Python weekday() a formato varchar(3) de la DB
 MAPEO_DIAS = {
     0: 'LUN', 1: 'MAR', 2: 'MIE', 3: 'JUE', 4: 'VIE', 5: 'SAB', 6: 'DOM'
@@ -259,4 +263,55 @@ def editar_licencia_otorgada(request, licencia_id):
             "form": form,
             "licencia": licencia,
         },
-    )
+    ) 
+
+MESES = [
+    (1, "Enero"), (2, "Febrero"), (3, "Marzo"), (4, "Abril"),
+    (5, "Mayo"), (6, "Junio"), (7, "Julio"), (8, "Agosto"),
+    (9, "Septiembre"), (10, "Octubre"), (11, "Noviembre"), (12, "Diciembre"),
+]
+
+
+@login_required
+@permission_required("licencias.change_licenciaotorgada", raise_exception=True)
+@require_http_methods(["GET", "POST"])
+def generador_disposiciones(request):
+    """
+    RF-16: pantalla del generador de disposiciones. GET muestra la vista previa
+    del mes sin guardar nada; POST emite las disposiciones del mes.
+    """
+    datos = request.POST if request.method == "POST" else request.GET
+    hoy = date.today()
+    try:
+        anio = int(datos.get("anio", hoy.year))
+        mes = int(datos.get("mes", hoy.month))
+    except ValueError:
+        raise Http404("Año o mes inválido.")
+    if not (1 <= mes <= 12 and 2000 <= anio <= 2100):
+        raise Http404("Año o mes fuera de rango.")
+
+    if request.method == "POST":
+        resultado = emitir_disposiciones_mes(anio, mes)
+        emitidas = len(resultado["emitidas"])
+        omitidas = len(resultado["omitidas"])
+        if emitidas:
+            messages.success(
+                request,
+                f"Se emitieron {emitidas} disposiciones. "
+                f"Licencias omitidas por no tener N° de formulario: {omitidas}.",
+            )
+        else:
+            messages.info(request, "No había disposiciones para emitir en ese mes.")
+        return redirect(
+            f"{reverse('licencias:generador_disposiciones')}?anio={anio}&mes={mes}"
+        )
+
+    previa = previsualizar_disposiciones_mes(anio, mes)
+    return render(request, "licencias/generador_disposiciones.html", {
+        "anio": anio,
+        "mes": mes,
+        "meses": MESES,
+        "a_emitir": previa["a_emitir"],
+        "omitidas": previa["omitidas"],
+        "oficina": previa["oficina"],
+    })

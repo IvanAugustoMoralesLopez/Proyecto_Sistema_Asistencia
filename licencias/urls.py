@@ -5,6 +5,7 @@ from .views import (
     listado_licencias_otorgadas,
     editar_licencia_otorgada,
     reporte_mensual_licencias,
+    generador_disposiciones,
 )
 
 app_name = "licencias"
@@ -29,5 +30,10 @@ urlpatterns = [
         "reporte/<int:anio>/<int:mes>/",
         reporte_mensual_licencias,
         name="reporte_mensual_licencias",
+    ),
+    path(
+        "generador-disposiciones/",
+        generador_disposiciones,
+        name="generador_disposiciones",
     ),
 ]
