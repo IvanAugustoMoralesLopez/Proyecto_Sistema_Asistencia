@@ -6,7 +6,7 @@ from django.db import transaction
 from django.db.models import Q
 
 from .clasificacion import planilla_para_categoria
-from .dias import contar_dias_habiles, obtener_feriados, rango_en_anio
+from .dias import contar_dias_habiles, fecha_de_hoy, obtener_feriados, rango_en_anio
 from .models import LicenciaOtorgada
 
 
@@ -31,7 +31,7 @@ def dias_usados_en_anio(dni: str, articulo: str, anio: int, excluir_id: int = No
 
     # Una sola consulta de feriados para todo el año (antes era una por licencia).
     feriados = obtener_feriados(date(anio, 1, 1), date(anio, 12, 31))
-    hoy = date.today()
+    hoy = fecha_de_hoy()
 
     total_dias = 0
     for lic in licencias:

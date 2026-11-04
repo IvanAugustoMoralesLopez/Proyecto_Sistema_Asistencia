@@ -5,7 +5,7 @@ from django.core.validators import FileExtensionValidator
 from django.db import models
 
 from .clasificacion import CATEGORIA_CHOICES
-from .dias import contar_dias_habiles, rango_en_anio
+from .dias import contar_dias_habiles, fecha_de_hoy, rango_en_anio
 
 
 class LicenciaArticulo(models.Model):
@@ -160,7 +160,7 @@ class LicenciaOtorgada(models.Model):
 
         # El tope es anual: una licencia que cruza de año se reparte y cada
         # parte se controla contra el tope de su propio año.
-        hoy = date.today()
+        hoy = fecha_de_hoy()
         fin_calculo = self.hasta or hoy  # licencia abierta: hasta hoy
         anios = range(self.desde.year, fin_calculo.year + 1)
 

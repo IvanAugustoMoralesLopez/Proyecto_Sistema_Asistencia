@@ -5,7 +5,16 @@ Este módulo NO importa modelos a nivel de módulo (solo dentro de
 `obtener_feriados`), así que puede importarse desde models.py, services.py
 y views.py sin generar importaciones circulares.
 """
-from datetime import date, timedelta
+from datetime import date, timedelta 
+from django.utils import timezone 
+
+
+def fecha_de_hoy() -> date:
+    """
+    Fecha de hoy según la zona horaria del proyecto (TIME_ZONE). Es el único
+    punto de "hoy" del módulo: así se fija en un solo lugar en los tests.
+    """
+    return timezone.localdate()
 
 
 def obtener_feriados(desde: date, hasta: date) -> set:
@@ -58,7 +67,7 @@ def rango_en_anio(desde: date, hasta, anio: int, hoy: date = None):
       para no proyectar consumos futuros.
     - Devuelve (inicio, fin) o None si el período no toca ese año.
     """
-    hoy = hoy or date.today()
+    hoy = hoy or fecha_de_hoy()
     inicio = max(desde, date(anio, 1, 1))
     fin = min(hasta if hasta else hoy, date(anio, 12, 31))
     if fin < inicio:
