@@ -2927,4 +2927,44 @@ class MarcarLicenciaTests(TestCase):
 
         marcar_licencia(self.licencia)
 
-        self.assertEqual(registros_huerfanos_de_licencia(self.licencia), [])
+        self.assertEqual(registros_huerfanos_de_licencia(self.licencia), []) 
+
+class InasistenciasDelPeriodoTests(TestCase):
+    """RF-12: el reporte mensual necesita las inasistencias del registro."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo="HC", descripcion="Hora catedra")
+        persona = Persona.objects.create(
+            dni="99000061", apellido_nombre="Faltadora, Docente",
+        )
+        cls.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+            situacion_revista="TIT",
+        )
+
+    def _registrar(self, fecha, codigo, horas="0"):
+        return RegistroAsistencia.objects.create(
+            designacion=self.designacion,
+            fecha=fecha,
+            marca=MarcaAsistencia.objects.get(codigo=codigo),
+            horas_inasistidas=Decimal(horas),
+        )
+
+    def test_devuelve_solo_las_inasistencias_del_periodo(self):
+        from .services import inasistencias_del_periodo
+
+        self._registrar(date(2026, 3, 10), "I", "2")
+        self._registrar(date(2026, 3, 11), "PR", "1")
+        self._registrar(date(2026, 3, 12), "LIC", "2")  # ya cuenta como licencia
+        self._registrar(date(2026, 3, 13), "P")
+        self._registrar(date(2026, 4, 1), "I", "2")  # fuera del periodo
+
+        registros = inasistencias_del_periodo(
+            date(2026, 3, 1), date(2026, 3, 31),
+        )
+
+        self.assertEqual(
+            [(registro.fecha, registro.marca.codigo) for registro in registros],
+            [(date(2026, 3, 10), "I"), (date(2026, 3, 11), "PR")],
+        )
