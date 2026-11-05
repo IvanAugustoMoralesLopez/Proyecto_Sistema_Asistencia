@@ -22,10 +22,10 @@ from .reglas import (
     _ajustar_justificacion,
     _datos_registro,
     _validar_designacion_vigente,
+    _validar_licencia,
     _validar_periodo_abierto,
     motivo_dia_no_laborable,
 )
-
 # Clave de personal.Horario.dia para cada dia de la semana (lunes = 0).
 _DIA_HORARIO = {0: "LUN", 1: "MAR", 2: "MIE", 3: "JUE", 4: "VIE"}
 
@@ -180,4 +180,29 @@ def marcar_licencia(licencia, usuario=None):
 
         fecha += timedelta(days=1)
 
-    return resumen
+    return resumen 
+
+def registros_huerfanos_de_licencia(licencia):
+    """
+    Registros de asistencia vinculados a la licencia que ya no la cumplen:
+    su fecha quedo fuera del periodo o son de otra designacion (por ejemplo,
+    despues de editar la licencia).
+
+    No modifica nada: solo los detecta, para avisar al operador, que los
+    corrige a mano desde la carga diaria. Usa la misma regla que la carga
+    manual (_validar_licencia).
+    """
+    huerfanos = []
+    registros = (
+        licencia.asistencias_relacionadas
+        .select_related("licencia", "designacion")
+        .order_by("fecha")
+    )
+
+    for registro in registros:
+        try:
+            _validar_licencia(registro)
+        except ValidationError:
+            huerfanos.append(registro)
+
+    return huerfanos

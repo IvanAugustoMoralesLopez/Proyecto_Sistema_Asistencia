@@ -2907,3 +2907,24 @@ class MarcarLicenciaTests(TestCase):
         )
         self.assertEqual(resumen["omitidos"], [])
         self.assertEqual(resumen["sin_horario"], [date(2026, 3, 11)])
+
+    def test_detecta_los_dias_que_quedaron_fuera_de_la_licencia(self):
+        from .services import marcar_licencia, registros_huerfanos_de_licencia
+
+        marcar_licencia(self.licencia)
+        # Se acorta la licencia: jueves 12 y viernes 13 quedan marcados de mas.
+        licencia = self._licencia_en(date(2026, 3, 9), date(2026, 3, 11))
+
+        huerfanos = registros_huerfanos_de_licencia(licencia)
+
+        self.assertEqual(
+            [registro.fecha for registro in huerfanos],
+            [date(2026, 3, 12), date(2026, 3, 13)],
+        )
+
+    def test_una_licencia_sin_cambios_no_tiene_dias_huerfanos(self):
+        from .services import marcar_licencia, registros_huerfanos_de_licencia
+
+        marcar_licencia(self.licencia)
+
+        self.assertEqual(registros_huerfanos_de_licencia(self.licencia), [])
