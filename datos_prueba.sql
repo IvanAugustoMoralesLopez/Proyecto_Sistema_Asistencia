@@ -11,8 +11,13 @@
 --   * 11 feriados 2026                  * 35 registros de asistencia de octubre 2026
 --   * 9 usuarios del sistema (3 Bedelía, 3 Secretaría, 3 Subsecretaría)
 -- Contraseña de todos los usuarios: Prueba2026!
--- Es 100 % ficticio. Se corre UNA vez (los datos con id fijo fallan si ya existen).
+-- Es 100 % ficticio y el script es seguro de re-ejecutar (todos los INSERT
+-- usan IGNORE: si ya existen, los salta en vez de cortar el script).
 -- Para borrar lo cargado mirá el bloque de limpieza al final.
+--
+-- En DBeaver: pegá todo el archivo en el editor SQL y ejecutá el script
+-- completo con "Execute SQL Script" (Alt+X / ícono de rayo doble), NO
+-- "Execute SQL Statement" (Ctrl+Enter), que solo corre una sentencia.
 -- =============================================================================
 SET NAMES utf8mb4;
 START TRANSACTION;
@@ -67,7 +72,7 @@ INSERT IGNORE INTO personal_persona (dni, apellido_nombre, apellido, nombres, ti
   ('99000020', 'VILLALBA, Joaquín', 'Villalba', 'Joaquín', 'DNI', 'M', '1970-09-01', '', 'Argentina', '', '', '', '', 'Resistencia', '', 'Chaco', '3794000020', 'villalba20@ejemplo.test', 1);
 
 -- ───────────── Designaciones (ids 9001 a 9022; entran por SQL, por eso no generan historial) ─────────────
-INSERT INTO personal_designacion (id, persona_id, cargo_id, espacio_curricular_id, unidad_educativa_id, especialidad_id, reemplaza_id, situacion_revista, anio_curso, division_seccion, turno, hs_catedra, jornada, disp_alta_nro, sello_regional_as, motivo_id, norma_tipo, norma_numero, norma_anio, organismo_emisor, desde, hasta, pof, anio_pof, novedad, activo, observaciones) VALUES
+INSERT IGNORE INTO personal_designacion (id, persona_id, cargo_id, espacio_curricular_id, unidad_educativa_id, especialidad_id, reemplaza_id, situacion_revista, anio_curso, division_seccion, turno, hs_catedra, jornada, disp_alta_nro, sello_regional_as, motivo_id, norma_tipo, norma_numero, norma_anio, organismo_emisor, desde, hasta, pof, anio_pof, novedad, activo, observaciones) VALUES
   (9001, '99000001', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Programación I' AND c.nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 6, '', '', '', NULL, 'Resolución', '100', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba'),
   (9002, '99000002', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Bases de Datos' AND c.nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 6, '', '', '', NULL, 'Resolución', '101', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba'),
   (9003, '99000003', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Ingeniería de Software' AND c.nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'INT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '102', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba'),
@@ -92,7 +97,7 @@ INSERT INTO personal_designacion (id, persona_id, cargo_id, espacio_curricular_i
   (9022, '99000009', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Gestión de Personal' AND c.nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '121', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba');
 
 -- ───────────── Horarios por designación ─────────────
-INSERT INTO personal_horario (designacion_id, dia, horas_catedra, hora_inicio, hora_fin) VALUES
+INSERT IGNORE INTO personal_horario (designacion_id, dia, horas_catedra, hora_inicio, hora_fin) VALUES
   (9001, 'LUN', 3, '18:00:00', '20:00:00'),
   (9001, 'MIE', 3, '18:00:00', '19:30:00'),
   (9002, 'MAR', 3, '18:00:00', '20:00:00'),
@@ -161,7 +166,7 @@ INSERT IGNORE INTO asistencia_dia_no_laborable (fecha, tipo, descripcion) VALUES
   ('2026-12-25', 'FERIADO', 'Navidad');
 
 -- ───────────── Licencias otorgadas (ids 9001 a 9012) ─────────────
-INSERT INTO licencia_otorgada (id, designacion_id, articulo_id, sit_rev, disp_tipo, disp_oficina, disp_numero, disp_anio, sello_regional_as, justifica, desde, hasta, observaciones) VALUES
+INSERT IGNORE INTO licencia_otorgada (id, designacion_id, articulo_id, sit_rev, disp_tipo, disp_oficina, disp_numero, disp_anio, sello_regional_as, justifica, desde, hasta, observaciones) VALUES
   (9001, 9003, (SELECT id FROM licencia_articulo WHERE cod_licencia = 'T-14'), 'Interino', 'Disposición', '1452', '11', 2026, NULL, 1, '2026-05-04', '2026-06-12', 'Reposo médico'),
   (9002, 9006, (SELECT id FROM licencia_articulo WHERE cod_licencia = 'T-14'), 'Titular', 'Disposición', '1452', '12', 2026, NULL, 1, '2026-08-03', '2026-08-21', 'Gripe'),
   (9003, 9011, (SELECT id FROM licencia_articulo WHERE cod_licencia = 'T-20'), 'Interino', 'Disposición', '1452', '13', 2026, NULL, NULL, '2026-04-13', '2026-04-20', 'Trámite personal'),
