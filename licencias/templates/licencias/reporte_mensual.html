@@ -77,13 +77,65 @@
     {% endfor %}
 
     <p class="text-end fw-semibold">
-        Total de horas afectadas del mes (todas las planillas): {{ total_horas }}
+        Total de horas afectadas por licencias del mes (todas las planillas): {{ total_horas }}
     </p>
-{% else %}
+{% endif %}
+
+{% if inasistencias %}
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-dark text-white">
+            <h2 class="h5 mb-0">Inasistencias del registro diario</h2>
+        </div>
+
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Docente</th>
+                            <th>Espacio curricular</th>
+                            <th>Cargo</th>
+                            <th class="text-end">Días</th>
+                            <th class="text-end">Horas inasistidas</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for fila in inasistencias %}
+                            <tr>
+                                <td>
+                                    {{ fila.docente }}
+                                    <br><small class="text-secondary">DNI {{ fila.dni_docente }}</small>
+                                </td>
+                                <td>{{ fila.espacio_curricular|default:"-" }}</td>
+                                <td>{{ fila.cargo|default:"-" }}</td>
+                                <td class="text-end">{{ fila.dias }}</td>
+                                <td class="text-end">{{ fila.horas }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+
+                    <tfoot>
+                        <tr class="table-light fw-semibold">
+                            <td colspan="4" class="text-end">Subtotal de horas inasistidas</td>
+                            <td class="text-end">{{ total_horas_inasistencias }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <p class="small text-secondary mb-0">
+                Incluye inasistencias y presentes retirados del registro diario.
+                Los días de licencia se cuentan en las tablas de licencias.
+            </p>
+        </div>
+    </div>
+{% endif %}
+
+{% if not desglose and not inasistencias %}
     <div class="card shadow-sm border-0">
         <div class="card-body">
             <div class="alert alert-info mb-0">
-                No hay licencias que afecten a este mes.
+                No hay licencias ni inasistencias que afecten a este mes.
             </div>
         </div>
     </div>

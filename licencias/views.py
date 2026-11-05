@@ -13,6 +13,7 @@ from django.views.decorators.http import require_http_methods
 from personal.models import Horario
 
 from asistencias.services import (
+    inasistencias_del_periodo,
     marcar_licencia,
     motivo_dia_no_laborable,
     registros_huerfanos_de_licencia,
@@ -138,6 +139,39 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
             'total_horas': sum(fila['horas_descontadas'] for fila in filas),
         })
 
+    # RF-12: inasistencias del registro diario (marcas I y PR), una fila por
+    # designacion. Las licencias (LIC y LT) ya estan contadas mas arriba.
+    por_designacion = {}
+    for registro in inasistencias_del_periodo(primer_dia, ultimo_dia):
+        designacion = registro.designacion
+        fila = por_designacion.get(designacion.pk)
+
+        if fila is None:
+            fila = por_designacion[designacion.pk] = {
+                'dni_docente': designacion.persona_id,
+                'docente': designacion.persona.apellido_nombre,
+                'espacio_curricular': (
+                    designacion.espacio_curricular.nombre
+                    if designacion.espacio_curricular
+                    else None
+                ),
+                'cargo': (
+                    designacion.cargo.descripcion
+                    if designacion.cargo_id
+                    else None
+                ),
+                'dias': 0,
+                'horas': 0,
+            }
+
+        fila['dias'] += 1
+        fila['horas'] += registro.horas_inasistidas
+
+    inasistencias = sorted(
+        por_designacion.values(), key=lambda fila: fila['docente'],
+    )
+    total_horas_inasistencias = sum(fila['horas'] for fila in inasistencias)
+
     anio_anterior, mes_anterior = mes_vecino(anio, mes, -1)
     anio_siguiente, mes_siguiente = mes_vecino(anio, mes, 1)
 
@@ -149,6 +183,8 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
         'grupos': grupos,
         'mes_anterior': {'anio': anio_anterior, 'mes': mes_anterior},
         'mes_siguiente': {'anio': anio_siguiente, 'mes': mes_siguiente},
+        'inasistencias': inasistencias,
+        'total_horas_inasistencias': total_horas_inasistencias,
     })
 
 

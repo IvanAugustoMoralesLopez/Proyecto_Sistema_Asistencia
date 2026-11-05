@@ -39,6 +39,7 @@ from .calendario import (
     registros_cargados,
 )
 from .cierres import cerrar_dia, cerrar_mes, reabrir_mes 
+from .consultas import inasistencias_del_periodo
 from .licencia_marcado import marcar_licencia, registros_huerfanos_de_licencia
 
 from .recepcion import (
@@ -91,4 +92,5 @@ __all__ = [
     "copiar_calendario",
     "cargar_calendario_masivo",
     "validar_multiples",
+    "inasistencias_del_periodo",
 ]
