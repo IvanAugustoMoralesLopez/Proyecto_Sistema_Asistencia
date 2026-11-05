@@ -12,7 +12,11 @@ from django.views.decorators.http import require_http_methods
 
 from personal.models import Horario
 
-from asistencias.services import marcar_licencia, motivo_dia_no_laborable
+from asistencias.services import (
+    marcar_licencia,
+    motivo_dia_no_laborable,
+    registros_huerfanos_de_licencia,
+)
 
 from .clasificacion import CategoriaSinPlanillaError, PLANILLA_IL01, PLANILLA_IL02
 from .dias import fecha_de_hoy, mes_vecino, obtener_feriados
@@ -176,6 +180,19 @@ def _marcar_y_avisar(request, licencia):
 
     for advertencia in resumen["advertencias"]:
         messages.warning(request, advertencia)
+
+    # Dias que quedaron marcados como licencia pero ya no estan cubiertos
+    # (por ejemplo, despues de acortar las fechas). No se corrigen solos:
+    # el operador los ajusta a mano desde la carga diaria.
+    huerfanos = registros_huerfanos_de_licencia(licencia)
+    if huerfanos:
+        fechas = ", ".join(f"{registro.fecha:%d/%m/%Y}" for registro in huerfanos)
+        messages.warning(
+            request,
+            "Estos días quedaron marcados como licencia pero ya no están "
+            f"cubiertos por ella: {fechas}. Corregilos desde la carga diaria "
+            "de asistencias.",
+        )
 
 @login_required 
 @permission_required("licencias.add_licenciaotorgada", raise_exception=True)

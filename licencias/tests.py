@@ -1537,4 +1537,25 @@ class MarcadoDeAsistenciasAlGuardarTests(TestCase):
         self.assertEqual(respuesta.status_code, 302, errores)
         self.assertEqual(registros.count(), 5)
         textos = [str(m) for m in get_messages(respuesta.wsgi_request)]
-        self.assertIn('Se marcaron 5 días en asistencias.', textos)
+        self.assertIn('Se marcaron 5 días en asistencias.', textos) 
+
+    def test_la_edicion_avisa_de_los_dias_que_quedaron_marcados_de_mas(self):
+        from django.contrib.messages import get_messages
+
+        self.client.force_login(self.operador)
+        self.client.post(
+            reverse('licencias:nueva_licencia_otorgada'), self._datos_alta(),
+        )
+        licencia = LicenciaOtorgada.objects.get(designacion=self.designacion)
+
+        # Se acorta la licencia: el jueves 12 y el viernes 13 quedan de mas.
+        respuesta = self.client.post(
+            reverse('licencias:editar_licencia_otorgada', args=[licencia.pk]),
+            self._datos_alta(hasta='2026-03-11'),
+        )
+
+        errores = respuesta.context['form'].errors if respuesta.context else ''
+        self.assertEqual(respuesta.status_code, 302, errores)
+        textos = [str(m) for m in get_messages(respuesta.wsgi_request)]
+        avisos = [t for t in textos if '12/03/2026' in t and '13/03/2026' in t]
+        self.assertTrue(avisos, textos)
