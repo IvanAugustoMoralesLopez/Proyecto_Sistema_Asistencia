@@ -109,6 +109,9 @@
                 <a class="sidebar__link" data-match="/licencias/reporte/" href="{% url 'licencias:reporte_mensual_licencias' anio=anio_actual mes=mes_actual %}">
                     <i class="bi bi-clipboard2-pulse"></i><span>Reporte mensual</span>
                 </a>
+                <a class="sidebar__link" href=" {% url 'licencias:generador_disposiciones' %}">
+                    <i class="bi bi-file-earmark-text"></i><span>Generador de disposiciones</span>
+                </a>
                 {% endif %}
                 {% endif %}
 
