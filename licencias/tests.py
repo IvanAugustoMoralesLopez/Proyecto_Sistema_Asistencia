@@ -1559,3 +1559,81 @@ class MarcadoDeAsistenciasAlGuardarTests(TestCase):
         textos = [str(m) for m in get_messages(respuesta.wsgi_request)]
         avisos = [t for t in textos if '12/03/2026' in t and '13/03/2026' in t]
         self.assertTrue(avisos, textos)
+
+class ReporteMensualInasistenciasTests(TestCase):
+    """RF-12: el reporte mensual incluye las inasistencias del registro."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from decimal import Decimal
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Permission
+        from asistencias.models import MarcaAsistencia, RegistroAsistencia
+        from personal.models import Carrera, EspacioCurricular
+
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        carrera = Carrera.objects.create(nombre='Profesorado de Matemática')
+        espacio = EspacioCurricular.objects.create(
+            nombre='Álgebra', carrera=carrera,
+        )
+        persona = Persona.objects.create(
+            dni='99000071', apellido_nombre='Faltadora, Docente',
+        )
+        designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, espacio_curricular=espacio,
+            desde=date(2026, 1, 1), situacion_revista='TIT',
+        )
+
+        def registrar(fecha, codigo, horas):
+            RegistroAsistencia.objects.create(
+                designacion=designacion, fecha=fecha,
+                marca=MarcaAsistencia.objects.get(codigo=codigo),
+                horas_inasistidas=Decimal(horas),
+            )
+
+        registrar(date(2026, 3, 10), 'I', '2')
+        registrar(date(2026, 3, 11), 'PR', '1')
+        registrar(date(2026, 3, 12), 'LIC', '2')  # ya cuenta como licencia
+        registrar(date(2026, 4, 1), 'I', '2')  # otro mes
+
+        cls.lector = get_user_model().objects.create_user(
+            username='lector', password='x',
+        )
+        cls.lector.user_permissions.add(
+            Permission.objects.get(codename='view_licenciaotorgada'),
+        )
+
+    def test_el_reporte_incluye_las_inasistencias_por_designacion(self):
+        from decimal import Decimal
+
+        self.client.force_login(self.lector)
+        respuesta = self.client.get(
+            reverse('licencias:reporte_mensual_licencias', args=[2026, 3]),
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        filas = respuesta.context['inasistencias']
+        self.assertEqual(len(filas), 1)
+        fila = filas[0]
+        self.assertEqual(fila['docente'], 'Faltadora, Docente')
+        self.assertEqual(fila['espacio_curricular'], 'Álgebra')
+        self.assertEqual(fila['cargo'], 'Hora cátedra')
+        self.assertEqual(fila['dias'], 2)
+        self.assertEqual(fila['horas'], Decimal('3'))
+        self.assertEqual(
+            respuesta.context['total_horas_inasistencias'], Decimal('3'),
+        )
+
+    def test_la_pantalla_muestra_la_seccion_de_inasistencias(self):
+        self.client.force_login(self.lector)
+        respuesta = self.client.get(
+            reverse('licencias:reporte_mensual_licencias', args=[2026, 3]),
+        )
+
+        self.assertContains(respuesta, 'Inasistencias del registro diario')
+        self.assertContains(respuesta, 'Faltadora, Docente')
+        self.assertContains(respuesta, 'Álgebra')
+        # Hay inasistencias aunque no haya licencias: no se esconde todo.
+        self.assertNotContains(
+            respuesta, 'No hay licencias que afecten a este mes',
+        )
