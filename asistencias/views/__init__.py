@@ -1,9 +1,6 @@
 """
 Vistas de asistencias.
 
-Este paquete reemplaza al antiguo `views.py` (un solo archivo de ~910
-líneas), dividido por pantalla para que sea más fácil de leer y
-navegar:
 
 - `registro`: registro diario, alta/edición individual, historial y
   validación de registros.
