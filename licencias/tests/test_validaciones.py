@@ -311,4 +311,145 @@ class DesignacionDeBajaEdicionTests(TestCase):
         from licencias.forms import LicenciaOtorgadaForm
         form = LicenciaOtorgadaForm(instance=self.licencia)
         self.assertIn('value="2026-07-13"', str(form['desde']))
-        self.assertIn('value="2026-07-14"', str(form['hasta'])) 
+        self.assertIn('value="2026-07-14"', str(form['hasta']))  
+
+class TopeAnualEdicionTests(TestCase):
+    """RN-08: el tope anual también se valida al editar una licencia."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni=99000099, apellido_nombre='Prueba, Docente')
+        cls.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='T-25', articulo='25', tipo_licencia='Duelo',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo', tope_dias_anual=5,
+        )
+        # Lunes 13/07/2026 a viernes 17/07/2026: 5 días hábiles (justo el tope).
+        cls.licencia = LicenciaOtorgada.objects.create(
+            designacion=cls.designacion, articulo=cls.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 13), hasta=date(2026, 7, 17),
+        )
+
+    def test_dias_usados_cuenta_todas_las_licencias(self):
+        self.assertEqual(dias_usados_en_anio('99000099', '25', 2026), 5)
+
+    def test_dias_usados_puede_excluir_una_licencia(self):
+        self.assertEqual(
+            dias_usados_en_anio('99000099', '25', 2026, excluir_id=self.licencia.pk), 0,
+        )
+
+    def test_alta_que_supera_el_tope_se_rechaza(self):
+        nueva = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 20), hasta=date(2026, 7, 20),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            nueva.full_clean()
+        self.assertIn('hasta', ctx.exception.message_dict)
+
+    def test_edicion_que_supera_el_tope_se_rechaza(self):
+        self.licencia.hasta = date(2026, 7, 24)  # 10 días hábiles
+        with self.assertRaises(ValidationError) as ctx:
+            self.licencia.full_clean()
+        self.assertIn('hasta', ctx.exception.message_dict)
+
+
+    def test_edicion_dentro_del_tope_se_acepta(self):
+        self.licencia.observaciones = 'Duelo familiar'
+        self.licencia.full_clean()  # no debe lanzar ValidationError  
+
+    def test_edicion_dentro_del_tope_se_acepta(self):
+        self.licencia.observaciones = 'Duelo familiar'
+        self.licencia.full_clean()  # no debe lanzar ValidationError
+
+    def test_alta_que_supera_el_tope_con_resolucion_se_acepta(self):
+        nueva = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 20), hasta=date(2026, 7, 20),
+            resolucion_excepcion='Res. 123/2026',
+        )
+        nueva.full_clean()  # la resolución de excepción habilita pasar el tope
+
+    def test_alta_que_supera_el_tope_con_resolucion_en_blanco_se_rechaza(self):
+        nueva = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 20), hasta=date(2026, 7, 20),
+            resolucion_excepcion='   ',
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            nueva.full_clean()
+        self.assertIn('hasta', ctx.exception.message_dict)
+
+    def test_edicion_que_supera_el_tope_con_resolucion_se_acepta(self):
+        self.licencia.hasta = date(2026, 7, 24)  # 10 días hábiles
+        self.licencia.resolucion_excepcion = 'Res. 123/2026'
+        self.licencia.full_clean()  # no debe lanzar ValidationError 
+
+
+    def test_el_mensaje_de_tope_nombra_el_articulo_y_la_situacion_de_revista(self):
+        nueva = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 7, 20), hasta=date(2026, 7, 20),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            nueva.full_clean()
+        mensaje = ' '.join(ctx.exception.message_dict['hasta'])
+        self.assertIn('artículo 25', mensaje)
+        self.assertIn('Estatuto Docente de la provincia del Chaco', mensaje)
+        self.assertIn('personal titular', mensaje)
+        self.assertIn('5 días', mensaje)
+
+class FechasInvertidasTests(TestCase):
+    """N4: Hasta anterior a Desde da un único error, sin un error de tope engañoso."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cargo = Cargo.objects.create(codigo='HC', descripcion='Hora cátedra')
+        persona = Persona.objects.create(dni=99000096, apellido_nombre='Diaz, Eva')
+        cls.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 1, 1),
+        )
+        cls.articulo = LicenciaArticulo.objects.create(
+            cod_licencia='A-3', articulo='3', tipo_licencia='Tres',
+            categoria_informe='Duelo', sit_rev='Titular',
+            goce_haberes='Con goce de haberes', autoridad='Dirección',
+            plazo='Según artículo', tope_dias_anual=5,
+        )
+        usuario = User.objects.create_user('cargador', password='x')
+        usuario.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label='licencias', codename='add_licenciaotorgada',
+            )
+        )
+
+    def setUp(self):
+        self.client.login(username='cargador', password='x')
+
+    def test_hasta_anterior_a_desde_da_un_solo_error(self):
+        respuesta = self.client.post('/licencias/nueva/', {
+            'designacion': self.designacion.pk,
+            'articulo': self.articulo.pk,
+            'sit_rev': 'Titular',
+            'desde': '2026-10-20',
+            'hasta': '2026-10-10',
+            'justifica': '',
+        })
+        self.assertEqual(respuesta.status_code, 200)
+        errores = respuesta.context['form'].errors['hasta']
+        self.assertEqual(len(errores), 1)
+        self.assertIn('anterior', errores[0])
+        self.assertEqual(LicenciaOtorgada.objects.count(), 0)
+
+    def test_hasta_anterior_a_desde_se_rechaza_en_el_modelo(self):
+        licencia = LicenciaOtorgada(
+            designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 10, 20), hasta=date(2026, 10, 10),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            licencia.full_clean()
+        self.assertIn('hasta', ctx.exception.message_dict) 
