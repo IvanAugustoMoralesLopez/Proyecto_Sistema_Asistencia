@@ -1,41 +1,11 @@
 from datetime import date
-from unittest import mock
 
-from io import StringIO
-
-from django.core.management import call_command
-from django.core.management.base import CommandError
-
-from django.contrib.auth.models import Permission, User
-
-from django.core.exceptions import ValidationError
-from django.test import SimpleTestCase, TestCase 
-
+from django.test import TestCase
 from django.urls import reverse
 
-from personal.models import (
-    Carrera,
-    Cargo,
-    Designacion,
-    EspacioCurricular,
-    Horario,
-    Persona,
-)
-
-from licencias.clasificacion import (
-    CATEGORIAS_POR_PLANILLA,
-    CategoriaSinPlanillaError,
-    PLANILLA_IL01,
-    PLANILLA_IL02,
-    planilla_para_categoria,
-)
-from licencias.dias import contar_dias_habiles, listar_dias_habiles, mes_vecino, rango_en_anio
 from licencias.models import LicenciaArticulo, LicenciaOtorgada
-from licencias.services import dias_usados_en_anio 
-import tempfile
+from personal.models import Cargo, Designacion, Persona
 
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import override_settings
 
 class MarcadoDeAsistenciasAlGuardarTests(TestCase):
     """RN-07 / RF-14: guardar una licencia marca sus dias en asistencias."""
