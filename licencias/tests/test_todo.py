@@ -22,16 +22,16 @@ from personal.models import (
     Persona,
 )
 
-from .clasificacion import (
+from licencias.clasificacion import (
     CATEGORIAS_POR_PLANILLA,
     CategoriaSinPlanillaError,
     PLANILLA_IL01,
     PLANILLA_IL02,
     planilla_para_categoria,
 )
-from .dias import contar_dias_habiles, listar_dias_habiles, mes_vecino, rango_en_anio
-from .models import LicenciaArticulo, LicenciaOtorgada
-from .services import dias_usados_en_anio 
+from licencias.dias import contar_dias_habiles, listar_dias_habiles, mes_vecino, rango_en_anio
+from licencias.models import LicenciaArticulo, LicenciaOtorgada
+from licencias.services import dias_usados_en_anio 
 import tempfile
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -561,7 +561,7 @@ class EmitirDisposicionesTests(TestCase):
         )
 
     def _emitir(self, anio=2026, mes=10, oficina=None):
-        from .services import emitir_disposiciones_mes
+        from licencias.services import emitir_disposiciones_mes
         return emitir_disposiciones_mes(anio, mes, oficina)
 
     def test_ordena_alfabeticamente_y_numera_en_forma_correlativa(self):
@@ -904,14 +904,14 @@ class DesignacionDeBajaEdicionTests(TestCase):
         )
 
     def test_al_editar_se_ofrece_la_designacion_dada_de_baja(self):
-        from .forms import LicenciaOtorgadaForm
+        from licencias.forms import LicenciaOtorgadaForm
         form = LicenciaOtorgadaForm(instance=self.licencia)
         self.assertIn(
             self.designacion_baja, form.fields['designacion'].queryset,
         )
 
     def test_en_un_alta_no_se_ofrecen_designaciones_dadas_de_baja(self):
-        from .forms import LicenciaOtorgadaForm
+        from licencias.forms import LicenciaOtorgadaForm
         form = LicenciaOtorgadaForm()
         self.assertNotIn(
             self.designacion_baja, form.fields['designacion'].queryset,
@@ -919,7 +919,7 @@ class DesignacionDeBajaEdicionTests(TestCase):
 
     def test_al_editar_las_fechas_se_precargan_en_formato_iso(self):
         # El navegador solo entiende aaaa-mm-dd en un input type="date".
-        from .forms import LicenciaOtorgadaForm
+        from licencias.forms import LicenciaOtorgadaForm
         form = LicenciaOtorgadaForm(instance=self.licencia)
         self.assertIn('value="2026-07-13"', str(form['desde']))
         self.assertIn('value="2026-07-14"', str(form['hasta'])) 
@@ -954,7 +954,7 @@ class PrevisualizarDisposicionesTests(TestCase):
         cls.sin_formulario = licencia(99000083, 'MEDINA, Mario', '')
 
     def test_la_vista_previa_no_guarda_nada(self):
-        from .services import previsualizar_disposiciones_mes
+        from licencias.services import previsualizar_disposiciones_mes
         previsualizar_disposiciones_mes(2026, 3, oficina='1452')
         self.alfa.refresh_from_db()
         self.zeta.refresh_from_db()
@@ -962,7 +962,7 @@ class PrevisualizarDisposicionesTests(TestCase):
         self.assertFalse(self.zeta.disp_numero)
 
     def test_la_vista_previa_numera_por_orden_alfabetico(self):
-        from .services import previsualizar_disposiciones_mes
+        from licencias.services import previsualizar_disposiciones_mes
         previa = previsualizar_disposiciones_mes(2026, 3, oficina='1452')
         self.assertEqual(
             [(numero, lic.pk) for numero, lic in previa['a_emitir']],
@@ -970,12 +970,12 @@ class PrevisualizarDisposicionesTests(TestCase):
         )
 
     def test_la_vista_previa_lista_las_omitidas_sin_formulario(self):
-        from .services import previsualizar_disposiciones_mes
+        from licencias.services import previsualizar_disposiciones_mes
         previa = previsualizar_disposiciones_mes(2026, 3, oficina='1452')
         self.assertEqual([l.pk for l in previa['omitidas']], [self.sin_formulario.pk])
 
     def test_la_vista_previa_coincide_con_lo_que_se_emite(self):
-        from .services import emitir_disposiciones_mes, previsualizar_disposiciones_mes
+        from licencias.services import emitir_disposiciones_mes, previsualizar_disposiciones_mes
         previa = previsualizar_disposiciones_mes(2026, 3, oficina='1452')
         emitido = emitir_disposiciones_mes(2026, 3, oficina='1452')
         self.assertEqual(
@@ -1088,7 +1088,7 @@ class ResolucionAdjuntaTests(TestCase):
         self.addCleanup(self._override.disable)
 
     def _resolucion(self, nombre='resolucion.pdf', contenido=b'%PDF-1.4 prueba'):
-        from .models import ResolucionAdjunta
+        from licencias.models import ResolucionAdjunta
         return ResolucionAdjunta(
             licencia=self.licencia,
             descripcion='Resolución ministerial N° 123/2026',
@@ -1161,7 +1161,7 @@ class ResolucionesVistasTests(TestCase):
         self._override.enable()
         self.addCleanup(self._override.disable)
 
-        from .models import ResolucionAdjunta
+        from licencias.models import ResolucionAdjunta
         self.resolucion = ResolucionAdjunta.objects.create(
             licencia=self.licencia,
             descripcion='Resolución ministerial N° 123/2026',
@@ -1293,7 +1293,7 @@ class FechaDeHoyTests(TestCase):
         )
 
     def test_fecha_de_hoy_usa_la_fecha_local_del_proyecto(self):
-        from .dias import fecha_de_hoy
+        from licencias.dias import fecha_de_hoy
         with mock.patch('django.utils.timezone.localdate', return_value=date(2026, 3, 6)):
             self.assertEqual(fecha_de_hoy(), date(2026, 3, 6))
 
@@ -1321,7 +1321,7 @@ class AsistenteDeImputacionServicioTests(TestCase):
         cls.rara = articulo('T-99', '99', 'Rara', 'Categoría inventada', 'Titular', 10)
 
     def _por_id(self, situacion=None):
-        from .services import articulos_para_asistente
+        from licencias.services import articulos_para_asistente
         return {dato['id']: dato for dato in articulos_para_asistente(situacion)}
 
     def test_cada_articulo_trae_su_planilla_y_sus_datos(self):
@@ -1380,7 +1380,7 @@ class AsistenteDeImputacionPantallaTests(TestCase):
         )
 
     def test_cada_designacion_lleva_su_situacion_de_revista(self):
-        from .forms import LicenciaOtorgadaForm
+        from licencias.forms import LicenciaOtorgadaForm
         html = str(LicenciaOtorgadaForm()['designacion'])
         self.assertIn('data-situacion="interino"', html)
 
