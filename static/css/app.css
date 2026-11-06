@@ -298,6 +298,10 @@ body.menu-colapsado .sidebar__link {
     background: var(--fila-seleccion);
 }
 
+.tabla-planilla tbody tr[data-edit-url] {
+    cursor: pointer;
+}
+
 .tabla-planilla .centro,
 .tabla-planilla th.centro {
     text-align: center;

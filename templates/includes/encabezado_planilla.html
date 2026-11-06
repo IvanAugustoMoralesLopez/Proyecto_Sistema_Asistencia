@@ -10,10 +10,16 @@ Encabezado común de las planillas. Uso:
     </div>
 
     <div class="encabezado-planilla__acciones">
-        <form method="get" class="buscador">
+        <form method="get" class="buscador position-relative">
             <i class="bi bi-search"></i>
             <input type="search" name="q" value="{{ request.GET.q }}"
-                   placeholder="Buscar por docente, DNI, espacio curricular o carrera...">
+                   placeholder="Buscar por docente, DNI, espacio curricular o carrera..."
+                   {% if autocomplete_url %}data-autocomplete-url="{{ autocomplete_url }}"{% endif %}
+                   autocomplete="off"
+                   {% if autocomplete_url %}data-busqueda-viva="true"{% endif %}>
+            {% if autocomplete_url %}
+                <div class="list-group position-absolute top-100 start-0 w-100 shadow-sm" data-autocomplete-resultados style="z-index:1050;"></div>
+            {% endif %}
         </form>
 
         <button type="button" class="btn btn-primario-suave" id="btnModificar" disabled>Modificar</button>

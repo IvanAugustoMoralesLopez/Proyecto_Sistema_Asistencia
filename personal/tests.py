@@ -102,6 +102,23 @@ class DesignacionTests(TestCase):
         self.assertTrue(designacion.vigente_en(date(2026, 7, 1)))
         self.assertFalse(designacion.vigente_en(date(2026, 12, 1)))
 
+    def test_csv_importa_suplencia_con_plazo_indeterminado(self):
+        contenido = (
+            "dni,apellido_nombre,cargo_codigo,desde,es_suplencia,"
+            "plazo_indeterminado\n"
+            "30999888,Suplente CSV,PROF,2026-03-01,true,true\n"
+        ).encode("utf-8")
+        archivo = SimpleUploadedFile("suplencias.csv", contenido, content_type="text/csv")
+
+        total, rechazadas = _procesar_csv(archivo)
+
+        designacion = Designacion.objects.get(persona_id="30999888")
+        self.assertEqual(total, 1)
+        self.assertEqual(rechazadas, 0)
+        self.assertTrue(designacion.es_suplencia)
+        self.assertTrue(designacion.plazo_indeterminado)
+        self.assertIsNone(designacion.hasta)
+
     def test_formulario_mantiene_el_dni_inmutable_al_editar(self):
         form = PersonaForm(
             data={
@@ -349,7 +366,7 @@ class DesignacionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "Legajos del personal docente",
+            "Personal docente",
             html=False,
         )
 
@@ -372,7 +389,7 @@ class DesignacionTests(TestCase):
         self.assertEqual(respuesta_autenticada.status_code, 200)
         self.assertContains(
             respuesta_autenticada,
-            "Legajos del personal docente",
+            "Personal docente",
         )
 
     def test_planilla_muestra_designacion_guardada_y_links_de_creacion(self):
@@ -454,3 +471,26 @@ class DesignacionTests(TestCase):
             designacion.horarios.get(dia=Horario.Dia.LUNES).horas_catedra,
             2,
         )
+
+    def test_editar_designacion_abre_y_guarda_sobre_el_registro(self):
+        designacion = Designacion.objects.create(
+            persona=self.persona,
+            cargo=self.cargo,
+            situacion_revista=Designacion.Situacion.TITULAR,
+            desde=date(2026, 3, 1),
+        )
+        usuario = get_user_model().objects.create_user(
+            username="designaciones-edit-test",
+            password="test-password",
+        )
+        cliente = Client()
+        cliente.force_login(usuario)
+        self.otorgar_permiso(usuario, "change_designacion")
+
+        respuesta = cliente.get(
+            reverse("personal:editar_designacion", args=[designacion.pk])
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Modificar designación docente")
+        self.assertContains(respuesta, self.persona.dni)

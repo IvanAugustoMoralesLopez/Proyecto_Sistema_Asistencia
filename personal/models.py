@@ -87,6 +87,9 @@ class Carrera(models.Model):
     plan_estudio = models.CharField(max_length=60, blank=True)
     anio_plan = models.PositiveSmallIntegerField(blank=True, null=True)
     activa = models.BooleanField(default=True)
+    plan_vigente = models.BooleanField(default=True)
+    plan_vigente_desde = models.DateField(blank=True, null=True)
+    plan_vigente_hasta = models.DateField(blank=True, null=True)
 
     class Meta:
         db_table = "personal_carrera"
@@ -266,6 +269,8 @@ class Designacion(models.Model):
     novedad = models.CharField(max_length=40, blank=True)
     activo = models.BooleanField(default=True)
     observaciones = models.TextField(blank=True)
+    es_suplencia = models.BooleanField(default=False)
+    plazo_indeterminado = models.BooleanField(default=False)
 
     class Meta:
         db_table = "personal_designacion"

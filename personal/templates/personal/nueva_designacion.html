@@ -7,7 +7,7 @@
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
     <div>
         <p class="ruta mb-1">Administración / Personal docente / Nuevo registro</p>
-        <h1 class="h3 mb-1">Registrar designación docente</h1>
+        <h1 class="h3 mb-1">{% if renovando %}Renovar / extender designación docente{% elif editando %}Modificar designación docente{% else %}Registrar designación docente{% endif %}</h1>
         <p class="text-secondary mb-0">
             Seleccione el legajo y complete los datos del cargo, espacio curricular, horario y vigencia.
         </p>
@@ -19,15 +19,24 @@
 
 <div class="card shadow-sm border-0">
     <div class="card-header bg-dark text-white">
-        <h2 class="h5 mb-0">Nueva designación</h2>
+        <h2 class="h5 mb-0">{% if renovando %}Nueva vigencia de la designación{% elif editando %}Modificar designación{% else %}Nueva designación{% endif %}</h2>
     </div>
     <div class="card-body">
         <form method="post">
             {% csrf_token %}
 
-            <div class="mb-4">
+            <div class="mb-4" data-wizard-step="1">
                 {{ form.persona.label_tag }}
                 {{ form.persona }}
+                <label class="form-label" for="buscadorDocente">Buscar docente por DNI o nombre</label>
+                <input
+                    id="buscadorDocente"
+                    class="form-control"
+                    type="search"
+                    autocomplete="off"
+                    placeholder="Ej.: 30123456 o López, María"
+                >
+                <div id="resultadosDocente" class="list-group mt-2" aria-live="polite"></div>
                 {% for error in form.persona.errors %}
                     <div class="text-danger small">{{ error }}</div>
                 {% endfor %}
@@ -37,6 +46,7 @@
                 </div>
             </div>
 
+            <div data-wizard-step="2">
             <h3 class="h6 border-bottom pb-2">Cargo y situación administrativa</h3>
             <div class="row g-3 mb-4">
                 <div class="col-md-3">{{ form.cargo.label_tag }}{{ form.cargo }}</div>
@@ -47,11 +57,17 @@
                 <div class="col-md-3">{{ form.division_seccion.label_tag }}{{ form.division_seccion }}</div>
                 <div class="col-md-3">{{ form.turno.label_tag }}{{ form.turno }}</div>
                 <div class="col-md-3">{{ form.hs_catedra.label_tag }}{{ form.hs_catedra }}</div>
-                <div class="col-md-3">{{ form.jornada.label_tag }}{{ form.jornada }}</div>
                 <div class="col-md-3">{{ form.especialidad.label_tag }}{{ form.especialidad }}</div>
-                <div class="col-md-3">{{ form.motivo.label_tag }}{{ form.motivo }}</div>
+                <div class="col-md-3">
+                    <div class="form-check mt-4">{{ form.es_suplencia }} {{ form.es_suplencia.label_tag }}</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check mt-4">{{ form.plazo_indeterminado }} {{ form.plazo_indeterminado.label_tag }}</div>
+                </div>
+            </div>
             </div>
 
+            <div data-wizard-step="3">
             <h3 class="h6 border-bottom pb-2">Carga horaria semanal</h3>
             <div class="row g-3 mb-4">
                 <div class="col">{{ form.horas_lun.label_tag }}{{ form.horas_lun }}</div>
@@ -60,7 +76,9 @@
                 <div class="col">{{ form.horas_jue.label_tag }}{{ form.horas_jue }}</div>
                 <div class="col">{{ form.horas_vie.label_tag }}{{ form.horas_vie }}</div>
             </div>
+            </div>
 
+            <div data-wizard-step="4">
             <h3 class="h6 border-bottom pb-2">Normativa</h3>
             <div class="row g-3 mb-4">
                 <div class="col-md-3">{{ form.norma_tipo.label_tag }}{{ form.norma_tipo }}</div>
@@ -71,14 +89,22 @@
                 <div class="col-md-3">{{ form.sello_regional_as.label_tag }}{{ form.sello_regional_as }}</div>
                 <div class="col-md-3">{{ form.novedad.label_tag }}{{ form.novedad }}</div>
             </div>
+            </div>
 
+            <div data-wizard-step="5">
             <h3 class="h6 border-bottom pb-2">Vigencia y plan de estudio</h3>
+            {% if renovando %}
+            <div class="alert alert-info">
+                Defina la nueva fecha <strong>Hasta</strong>. El cambio quedará registrado en el historial de la designación.
+            </div>
+            {% endif %}
             <div class="row g-3 mb-4">
                 <div class="col-md-3">{{ form.desde.label_tag }}{{ form.desde }}</div>
                 <div class="col-md-3">{{ form.hasta.label_tag }}{{ form.hasta }}</div>
                 <div class="col-md-3">{{ form.pof.label_tag }}{{ form.pof }}</div>
                 <div class="col-md-3">{{ form.anio_pof.label_tag }}{{ form.anio_pof }}</div>
                 <div class="col-12">{{ form.observaciones.label_tag }}{{ form.observaciones }}</div>
+            </div>
             </div>
 
             {% if form.non_field_errors %}
@@ -93,10 +119,112 @@
             {% endfor %}
 
             <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary">Guardar designación</button>
+                <button type="button" class="btn btn-outline-secondary" id="wizardAnterior">Anterior</button>
+                <button type="button" class="btn btn-outline-primary" id="wizardSiguiente">Avanzar</button>
+                <button type="submit" class="btn btn-primary" id="wizardGuardar" hidden>{% if editando %}Guardar cambios{% else %}Guardar designación{% endif %}</button>
                 <a class="btn btn-outline-secondary" href="{% url 'pantalla_personal' %}">Cancelar</a>
             </div>
+            <div id="wizardAlerta" class="mt-3" aria-live="polite"></div>
         </form>
     </div>
 </div>
+<script>
+(() => {
+    const pasos = [...document.querySelectorAll('[data-wizard-step]')];
+    const buscador = document.getElementById('buscadorDocente');
+    const resultados = document.getElementById('resultadosDocente');
+    const persona = document.querySelector('[name="persona"]');
+    const alerta = document.getElementById('wizardAlerta');
+    let actual = 1;
+    let temporizador;
+
+    const mostrar = paso => {
+        actual = paso;
+        alerta.innerHTML = '';
+        pasos.forEach(elemento => {
+            elemento.hidden = elemento.dataset.wizardStep !== String(paso);
+        });
+        document.getElementById('wizardAnterior').disabled = paso === 1;
+        document.getElementById('wizardSiguiente').hidden = paso === pasos.length;
+        document.getElementById('wizardGuardar').hidden = paso !== pasos.length;
+    };
+
+    const informar = mensaje => {
+        alerta.innerHTML = `<div class="alert alert-warning mb-0">${mensaje}</div>`;
+    };
+
+    const validarPaso = paso => {
+        let valido = true;
+        if (paso === 1 && !persona.value) {
+            informar('Seleccione un docente de los resultados antes de avanzar.');
+            valido = false;
+        } else if (paso === 2) {
+            const cargo = document.querySelector('[name="cargo"]');
+            const situacion = document.querySelector('[name="situacion_revista"]');
+            if (!cargo.value || !situacion.value) {
+                informar('Complete el cargo y la situación de revista antes de avanzar.');
+                valido = false;
+            }
+        } else if (paso === 5) {
+            const desde = document.querySelector('[name="desde"]');
+            if (!desde.value) {
+                informar('Complete la fecha Desde antes de guardar la designación.');
+                valido = false;
+            }
+        }
+        return valido;
+    };
+
+    const buscar = async termino => {
+        if (termino.length < 2) {
+            resultados.innerHTML = '';
+            return;
+        }
+        const respuesta = await fetch(`{% url 'personal:legajos_autocompletar' %}?q=${encodeURIComponent(termino)}`);
+        if (!respuesta.ok) return;
+        const datos = await respuesta.json();
+        resultados.innerHTML = '';
+        if (!datos.resultados.length) {
+            informar('No se encontró ningún legajo para esa búsqueda.');
+            return;
+        }
+        datos.resultados.forEach(item => {
+            const boton = document.createElement('button');
+            boton.type = 'button';
+            boton.className = 'list-group-item list-group-item-action';
+            boton.textContent = `${item.dni} - ${item.nombre}`;
+            boton.addEventListener('click', () => {
+                persona.value = item.dni;
+                buscador.value = `${item.dni} - ${item.nombre}`;
+                resultados.innerHTML = '<div class="alert alert-success mt-2 mb-0">Legajo seleccionado correctamente.</div>';
+            });
+            resultados.appendChild(boton);
+        });
+    };
+
+    buscador.addEventListener('input', () => {
+        persona.value = '';
+        window.clearTimeout(temporizador);
+        temporizador = window.setTimeout(() => buscar(buscador.value.trim()), 250);
+    });
+
+    document.getElementById('wizardAnterior').addEventListener('click', () => mostrar(Math.max(1, actual - 1)));
+    document.getElementById('wizardSiguiente').addEventListener('click', () => {
+        if (!validarPaso(actual)) return;
+        mostrar(Math.min(pasos.length, actual + 1));
+    });
+    document.getElementById('wizardGuardar').addEventListener('click', event => {
+        if (!validarPaso(actual)) event.preventDefault();
+    });
+    if (persona.value) {
+        fetch(`{% url 'personal:legajos_autocompletar' %}?q=${encodeURIComponent(persona.value)}`)
+            .then(respuesta => respuesta.ok ? respuesta.json() : {resultados: []})
+            .then(datos => {
+                const seleccionado = datos.resultados.find(item => item.dni === persona.value);
+                if (seleccionado) buscador.value = `${seleccionado.dni} - ${seleccionado.nombre}`;
+            });
+    }
+    mostrar({{ paso_inicial|default:1 }});
+})();
+</script>
 {% endblock %}

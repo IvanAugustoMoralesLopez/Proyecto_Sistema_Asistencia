@@ -4,9 +4,12 @@
 {% block seccion %}datos-personal{% endblock %}
 
 {% block content %}
-{% include "includes/encabezado_planilla.html" with ruta="Administración / Personal docente" titulo="Registro de designaciones docentes" subtitulo="Consulta de legajos, cargos, espacios curriculares y situación de revista." nuevo_registro_url="/personal/designaciones/nueva/" %}
+{% include "includes/encabezado_planilla.html" with ruta="Administración / Personal docente" titulo="Registro de designaciones docentes" subtitulo="Consulta de legajos, cargos, espacios curriculares y situación de revista." nuevo_registro_url="/personal/designaciones/nueva/" autocomplete_url="/personal/designaciones/autocompletar/" %}
 
-<div class="d-flex justify-content-end mb-3">
+<div class="d-flex justify-content-end gap-2 mb-3">
+    <button type="button" class="btn btn-outline-success" id="btnRenovarDesignacion" disabled>
+        <i class="bi bi-arrow-repeat"></i> Renovar / Extender
+    </button>
     <a class="btn btn-outline-primary" href="{% url 'personal:gestion_legajos' %}">
         <i class="bi bi-person-vcard"></i> Nuevo legajo docente
     </a>
@@ -15,7 +18,7 @@
 <div class="planilla">
     <table class="tabla-planilla">
         <thead>
-            <tr data-edit-url="{% url 'personal:gestion_legajos' %}?dni={{ designacion.persona.dni }}&amp;designacion={{ designacion.pk }}">
+            <tr>
                 <th>D.N.I</th>
                 <th>Apellido y nombre</th>
                 <th class="centro">Sexo</th>
@@ -38,7 +41,10 @@
         </thead>
         <tbody>
             {% for designacion in designaciones %}
-                <tr>
+                <tr data-edit-url="{% url 'personal:editar_designacion' designacion.pk %}"
+                    tabindex="0"
+                    role="button"
+                    aria-label="Seleccionar designación de {{ designacion.persona.apellido_nombre }}">
                     <td>{{ designacion.persona.dni }}</td>
                     <td>{{ designacion.persona.apellido_nombre }}</td>
                     <td class="centro">{{ designacion.persona.get_sexo_display|default:"—" }}</td>
@@ -89,19 +95,100 @@
 {% block extra_js %}
 <script>
 (function () {
-    var filas = document.querySelectorAll('.tabla-planilla tbody tr[data-edit-url]');
+    var buscador = document.querySelector('[data-autocomplete-url]');
+    var contenedor = document.querySelector('[data-autocomplete-resultados]');
+    var temporizador;
+    if (buscador && contenedor) {
+        buscador.addEventListener('input', function () {
+            window.clearTimeout(temporizador);
+            var termino = buscador.value.trim();
+            if (termino.length < 2) {
+                contenedor.innerHTML = '';
+                return;
+            }
+            temporizador = window.setTimeout(function () {
+                fetch(buscador.dataset.autocompleteUrl + '?q=' + encodeURIComponent(termino))
+                    .then(function (respuesta) { return respuesta.ok ? respuesta.json() : {resultados: []}; })
+                    .then(function (datos) {
+                        contenedor.innerHTML = '';
+                        datos.resultados.forEach(function (item) {
+                            var boton = document.createElement('button');
+                            boton.type = 'button';
+                            boton.className = 'list-group-item list-group-item-action';
+                            boton.textContent = item.texto + (item.espacio ? ' - ' + item.espacio : '');
+                            boton.addEventListener('click', function () {
+                                buscador.value = item.dni;
+                                contenedor.innerHTML = '';
+                                buscador.form.submit();
+                            });
+                            contenedor.appendChild(boton);
+                        });
+                    });
+            }, 250);
+        });
+        var temporizadorBusqueda;
+        buscador.addEventListener('input', function () {
+            window.clearTimeout(temporizadorBusqueda);
+            temporizadorBusqueda = window.setTimeout(function () {
+                var termino = buscador.value.trim();
+                if (termino.length === 0 || termino.length >= 2) {
+                    buscador.form.submit();
+                }
+            }, 500);
+        });
+    }
+    var tabla = document.querySelector('.tabla-planilla');
     var modificar = document.getElementById('btnModificar');
-    filas.forEach(function (fila) {
-        fila.addEventListener('click', function () {
-            filas.forEach(function (otra) { otra.classList.remove('fila-seleccionada'); });
-            fila.classList.add('fila-seleccionada');
-            modificar.disabled = false;
+    var renovar = document.getElementById('btnRenovarDesignacion');
+    function seleccionarFila(fila) {
+        if (!fila || !fila.dataset.editUrl) return;
+        tabla.querySelectorAll('tbody tr[data-edit-url]').forEach(function (otra) {
+            otra.classList.remove('fila-seleccionada');
+            otra.setAttribute('aria-selected', 'false');
+        });
+        fila.classList.add('fila-seleccionada');
+        fila.setAttribute('aria-selected', 'true');
+        if (modificar) modificar.disabled = false;
+        if (renovar) renovar.disabled = false;
+    }
+    if (tabla) {
+        tabla.addEventListener('click', function (evento) {
+            if (evento.target.closest('a')) return;
+            var fila = evento.target.closest('tbody tr[data-edit-url]');
+            seleccionarFila(fila);
+        });
+        tabla.addEventListener('keydown', function (evento) {
+            var fila = evento.target.closest('tbody tr[data-edit-url]');
+            if (!fila) return;
+            if (evento.key === 'Enter' || evento.key === ' ') {
+                evento.preventDefault();
+                seleccionarFila(fila);
+            }
+        });
+    }
+    document.querySelectorAll('.tabla-planilla tbody tr[data-edit-url]').forEach(function (fila) {
+        fila.addEventListener('mousedown', function () {
+            seleccionarFila(fila);
         });
     });
     if (modificar) {
         modificar.addEventListener('click', function () {
             var fila = document.querySelector('.tabla-planilla tr.fila-seleccionada');
-            if (fila) window.location.href = fila.dataset.editUrl;
+            if (!fila) {
+                alert('Seleccione primero una designación en la tabla.');
+                return;
+            }
+            window.location.assign(fila.dataset.editUrl);
+        });
+    }
+    if (renovar) {
+        renovar.addEventListener('click', function () {
+            var fila = document.querySelector('.tabla-planilla tr.fila-seleccionada');
+            if (!fila) {
+                alert('Seleccione primero una designación en la tabla.');
+                return;
+            }
+            window.location.assign(fila.dataset.editUrl + '?renovar=1');
         });
     }
 })();

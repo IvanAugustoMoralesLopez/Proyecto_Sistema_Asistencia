@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -8,9 +8,11 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError, RestrictedError
 from django.db.models import Q
+from django.apps import apps
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
+from django.http import JsonResponse
 
 from reportes.auditoria import AccionesReportes, registrar_evento
 
@@ -156,6 +158,12 @@ def _importar_fila_personal(fila, usuario=None):
         norma_numero=(fila.get("norma_numero") or "").strip(),
         organismo_emisor=(fila.get("organismo_emisor") or "").strip(),
         desde=desde,
+        es_suplencia=(fila.get("es_suplencia") or "").strip().lower()
+        in {"1", "si", "sí", "true"},
+        plazo_indeterminado=(fila.get("plazo_indeterminado") or "")
+        .strip()
+        .lower()
+        in {"1", "si", "sí", "true"},
     )
     fecha_fin = (fila.get("hasta") or "").strip()
     if fecha_fin:
@@ -165,6 +173,8 @@ def _importar_fila_personal(fila, usuario=None):
             raise ValidationError(
                 "La fecha 'hasta' debe tener formato AAAA-MM-DD."
             ) from exc
+    elif designacion.plazo_indeterminado:
+        designacion.hasta = None
 
     designacion.full_clean()
     if Designacion.objects.filter(
@@ -398,7 +408,10 @@ def _contexto_pantalla(
         cargo = filtro.cleaned_data.get("cargo")
         espacio = filtro.cleaned_data.get("espacio_curricular")
         if dni_filtro:
-            resultados = resultados.filter(persona__dni__icontains=dni_filtro)
+            resultados = resultados.filter(
+                Q(persona__dni__icontains=dni_filtro)
+                | Q(persona__apellido_nombre__icontains=dni_filtro)
+            )
         if cargo:
             resultados = resultados.filter(cargo=cargo)
         if espacio:
@@ -412,6 +425,18 @@ def _contexto_pantalla(
         ).prefetch_related("horarios", "historial")
     else:
         designaciones = Designacion.objects.none()
+
+    alertas_licencias = []
+    try:
+        LicenciaOtorgada = apps.get_model("licencias", "LicenciaOtorgada")
+        alertas_licencias = list(
+            LicenciaOtorgada.objects.filter(
+                hasta__gte=date.today(),
+                hasta__lte=date.today() + timedelta(days=30),
+            ).select_related("designacion__persona", "designacion__cargo")[:20]
+        )
+    except (LookupError, ValueError):
+        pass
 
     return {
         "filtro": filtro,
@@ -427,6 +452,13 @@ def _contexto_pantalla(
         .order_by("carrera__nombre", "nombre"),
         "errores_importacion": ImportacionPersonalError.objects.all()[:10],
         "licencias_admin_url": "/admin/licencias/licenciaarticulo/",
+        "alertas_designaciones": Designacion.objects.filter(
+            activo=True,
+            hasta__gte=date.today(),
+            hasta__lte=date.today() + timedelta(days=30),
+        ).select_related("persona", "cargo"),
+        "alertas_hoy": date.today(),
+        "alertas_licencias": alertas_licencias,
     }
 
 
@@ -629,4 +661,96 @@ def nueva_designacion(request):
         request,
         "personal/nueva_designacion.html",
         {"form": form},
+    )
+
+
+@login_required
+@permission_required("personal.change_designacion", raise_exception=True)
+@require_http_methods(["GET", "POST"])
+def editar_designacion(request, designacion_id):
+    designacion = get_object_or_404(Designacion, pk=designacion_id)
+    if request.method == "POST":
+        form = NuevaDesignacionForm(request.POST, instance=designacion)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "La designación docente se modificó correctamente.")
+            return redirect(reverse("inicio_personal"))
+        messages.error(request, "Revise los datos de la designación.")
+    else:
+        form = NuevaDesignacionForm(instance=designacion, initial={"persona": designacion.persona_id})
+
+    renovando = request.GET.get("renovar") == "1"
+    return render(
+        request,
+        "personal/nueva_designacion.html",
+        {
+            "form": form,
+            "editando": True,
+            "renovando": renovando,
+            "paso_inicial": 5 if renovando else 1,
+            "designacion": designacion,
+        },
+    )
+
+
+@login_required
+def autocompletar_legajos(request):
+    termino = request.GET.get("q", "").strip()
+    legajos = Persona.objects.filter(activa=True)
+    if termino:
+        legajos = legajos.filter(
+            Q(dni__icontains=termino)
+            | Q(apellido_nombre__icontains=termino)
+        )
+    return JsonResponse(
+        {
+            "resultados": [
+                {"dni": persona.dni, "nombre": persona.apellido_nombre}
+                for persona in legajos.order_by("apellido_nombre", "dni")[:20]
+            ]
+        }
+    )
+
+
+@login_required
+@permission_required("personal.change_designacion", raise_exception=True)
+def autocompletar_designaciones(request):
+    termino = request.GET.get("q", "").strip()
+    designaciones = Designacion.objects.select_related(
+        "persona",
+        "cargo",
+        "espacio_curricular",
+        "espacio_curricular__carrera",
+    )
+    if termino:
+        designaciones = designaciones.filter(
+            Q(persona__dni__icontains=termino)
+            | Q(persona__apellido_nombre__icontains=termino)
+            | Q(cargo__codigo__icontains=termino)
+            | Q(cargo__descripcion__icontains=termino)
+            | Q(espacio_curricular__nombre__icontains=termino)
+        )
+    return JsonResponse(
+        {
+            "resultados": [
+                {
+                    "id": designacion.pk,
+                    "dni": designacion.persona.dni,
+                    "nombre": designacion.persona.apellido_nombre,
+                    "cargo": designacion.cargo.descripcion,
+                    "espacio": (
+                        designacion.espacio_curricular.nombre
+                        if designacion.espacio_curricular
+                        else ""
+                    ),
+                    "texto": (
+                        f"{designacion.persona.apellido_nombre} - "
+                        f"{designacion.persona.dni} - {designacion.cargo.descripcion}"
+                    ),
+                }
+                for designacion in designaciones.order_by(
+                    "persona__apellido_nombre", "desde", "pk"
+                )[:20]
+            ]
+        }
     )
