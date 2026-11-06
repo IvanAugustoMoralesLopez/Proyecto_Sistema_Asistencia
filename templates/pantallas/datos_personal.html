@@ -42,8 +42,6 @@
         <tbody>
             {% for designacion in designaciones %}
                 <tr data-edit-url="{% url 'personal:editar_designacion' designacion.pk %}"
-                    tabindex="0"
-                    role="button"
                     aria-label="Seleccionar designación de {{ designacion.persona.apellido_nombre }}">
                     <td>{{ designacion.persona.dni }}</td>
                     <td>{{ designacion.persona.apellido_nombre }}</td>
@@ -140,12 +138,21 @@
     var tabla = document.querySelector('.tabla-planilla');
     var modificar = document.getElementById('btnModificar');
     var renovar = document.getElementById('btnRenovarDesignacion');
-    function seleccionarFila(fila) {
-        if (!fila || !fila.dataset.editUrl) return;
+    function quitarSeleccion() {
         tabla.querySelectorAll('tbody tr[data-edit-url]').forEach(function (otra) {
             otra.classList.remove('fila-seleccionada');
             otra.setAttribute('aria-selected', 'false');
         });
+        if (modificar) modificar.disabled = true;
+        if (renovar) renovar.disabled = true;
+    }
+    function seleccionarFila(fila) {
+        if (!fila || !fila.dataset.editUrl) return;
+        if (fila.classList.contains('fila-seleccionada')) {
+            quitarSeleccion();
+            return;
+        }
+        quitarSeleccion();
         fila.classList.add('fila-seleccionada');
         fila.setAttribute('aria-selected', 'true');
         if (modificar) modificar.disabled = false;
@@ -156,21 +163,11 @@
             if (evento.target.closest('a')) return;
             var fila = evento.target.closest('tbody tr[data-edit-url]');
             seleccionarFila(fila);
-        });
-        tabla.addEventListener('keydown', function (evento) {
-            var fila = evento.target.closest('tbody tr[data-edit-url]');
-            if (!fila) return;
-            if (evento.key === 'Enter' || evento.key === ' ') {
-                evento.preventDefault();
-                seleccionarFila(fila);
+            if (!fila && !evento.target.closest('button')) {
+                quitarSeleccion();
             }
         });
     }
-    document.querySelectorAll('.tabla-planilla tbody tr[data-edit-url]').forEach(function (fila) {
-        fila.addEventListener('mousedown', function () {
-            seleccionarFila(fila);
-        });
-    });
     if (modificar) {
         modificar.addEventListener('click', function () {
             var fila = document.querySelector('.tabla-planilla tr.fila-seleccionada');
