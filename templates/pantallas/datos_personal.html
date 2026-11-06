@@ -6,7 +6,10 @@
 {% block content %}
 {% include "includes/encabezado_planilla.html" with ruta="Administración / Personal docente" titulo="Registro de designaciones docentes" subtitulo="Consulta de legajos, cargos, espacios curriculares y situación de revista." nuevo_registro_url="/personal/designaciones/nueva/" autocomplete_url="/personal/designaciones/autocompletar/" %}
 
-<div class="d-flex justify-content-end mb-3">
+<div class="d-flex justify-content-end gap-2 mb-3">
+    <button type="button" class="btn btn-outline-success" id="btnRenovarDesignacion" disabled>
+        <i class="bi bi-arrow-repeat"></i> Renovar / Extender
+    </button>
     <a class="btn btn-outline-primary" href="{% url 'personal:gestion_legajos' %}">
         <i class="bi bi-person-vcard"></i> Nuevo legajo docente
     </a>
@@ -136,6 +139,7 @@
     }
     var tabla = document.querySelector('.tabla-planilla');
     var modificar = document.getElementById('btnModificar');
+    var renovar = document.getElementById('btnRenovarDesignacion');
     function seleccionarFila(fila) {
         if (!fila || !fila.dataset.editUrl) return;
         tabla.querySelectorAll('tbody tr[data-edit-url]').forEach(function (otra) {
@@ -145,6 +149,7 @@
         fila.classList.add('fila-seleccionada');
         fila.setAttribute('aria-selected', 'true');
         if (modificar) modificar.disabled = false;
+        if (renovar) renovar.disabled = false;
     }
     if (tabla) {
         tabla.addEventListener('click', function (evento) {
@@ -174,6 +179,16 @@
                 return;
             }
             window.location.assign(fila.dataset.editUrl);
+        });
+    }
+    if (renovar) {
+        renovar.addEventListener('click', function () {
+            var fila = document.querySelector('.tabla-planilla tr.fila-seleccionada');
+            if (!fila) {
+                alert('Seleccione primero una designación en la tabla.');
+                return;
+            }
+            window.location.assign(fila.dataset.editUrl + '?renovar=1');
         });
     }
 })();

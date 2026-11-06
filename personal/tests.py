@@ -366,7 +366,7 @@ class DesignacionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "Legajos del personal docente",
+            "Personal docente",
             html=False,
         )
 
@@ -389,7 +389,7 @@ class DesignacionTests(TestCase):
         self.assertEqual(respuesta_autenticada.status_code, 200)
         self.assertContains(
             respuesta_autenticada,
-            "Legajos del personal docente",
+            "Personal docente",
         )
 
     def test_planilla_muestra_designacion_guardada_y_links_de_creacion(self):

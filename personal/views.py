@@ -679,10 +679,17 @@ def editar_designacion(request, designacion_id):
     else:
         form = NuevaDesignacionForm(instance=designacion, initial={"persona": designacion.persona_id})
 
+    renovando = request.GET.get("renovar") == "1"
     return render(
         request,
         "personal/nueva_designacion.html",
-        {"form": form, "editando": True, "designacion": designacion},
+        {
+            "form": form,
+            "editando": True,
+            "renovando": renovando,
+            "paso_inicial": 5 if renovando else 1,
+            "designacion": designacion,
+        },
     )
 
 

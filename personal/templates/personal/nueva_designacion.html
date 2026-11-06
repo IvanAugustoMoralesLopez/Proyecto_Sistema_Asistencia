@@ -7,7 +7,7 @@
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
     <div>
         <p class="ruta mb-1">Administración / Personal docente / Nuevo registro</p>
-        <h1 class="h3 mb-1">{% if editando %}Modificar designación docente{% else %}Registrar designación docente{% endif %}</h1>
+        <h1 class="h3 mb-1">{% if renovando %}Renovar / extender designación docente{% elif editando %}Modificar designación docente{% else %}Registrar designación docente{% endif %}</h1>
         <p class="text-secondary mb-0">
             Seleccione el legajo y complete los datos del cargo, espacio curricular, horario y vigencia.
         </p>
@@ -19,7 +19,7 @@
 
 <div class="card shadow-sm border-0">
     <div class="card-header bg-dark text-white">
-        <h2 class="h5 mb-0">Nueva designación</h2>
+        <h2 class="h5 mb-0">{% if renovando %}Nueva vigencia de la designación{% elif editando %}Modificar designación{% else %}Nueva designación{% endif %}</h2>
     </div>
     <div class="card-body">
         <form method="post">
@@ -93,6 +93,11 @@
 
             <div data-wizard-step="5">
             <h3 class="h6 border-bottom pb-2">Vigencia y plan de estudio</h3>
+            {% if renovando %}
+            <div class="alert alert-info">
+                Defina la nueva fecha <strong>Hasta</strong>. El cambio quedará registrado en el historial de la designación.
+            </div>
+            {% endif %}
             <div class="row g-3 mb-4">
                 <div class="col-md-3">{{ form.desde.label_tag }}{{ form.desde }}</div>
                 <div class="col-md-3">{{ form.hasta.label_tag }}{{ form.hasta }}</div>
@@ -219,7 +224,7 @@
                 if (seleccionado) buscador.value = `${seleccionado.dni} - ${seleccionado.nombre}`;
             });
     }
-    mostrar(1);
+    mostrar({{ paso_inicial|default:1 }});
 })();
 </script>
 {% endblock %}
