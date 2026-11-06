@@ -76,6 +76,13 @@ class SelectDesignacion(forms.Select):
             )
         return opcion
 
+def _etiqueta_designacion(designacion):
+    """Texto de cada opción del desplegable: la designación y su situación de revista."""
+    etiqueta = str(designacion)
+    if designacion.situacion_revista:
+        etiqueta += f" - {designacion.get_situacion_revista_display()}"
+    return etiqueta
+
 class LicenciaOtorgadaForm(forms.ModelForm):
     justifica = forms.TypedChoiceField(
         choices=[
@@ -120,6 +127,8 @@ class LicenciaOtorgadaForm(forms.ModelForm):
                 "persona", "cargo"
             ).order_by("persona__apellido_nombre")
         )
+        # La opción muestra también la situación de revista de la designación.
+        self.fields["designacion"].label_from_instance = _etiqueta_designacion
 
     def datos_articulos(self):
         """RF-15: catálogo con su planilla de salida, para el asistente."""

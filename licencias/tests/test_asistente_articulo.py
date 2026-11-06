@@ -89,6 +89,11 @@ class AsistenteDeImputacionPantallaTests(TestCase):
         html = str(LicenciaOtorgadaForm()['designacion'])
         self.assertIn('data-situacion="interino"', html)
 
+    def test_la_etiqueta_de_la_designacion_incluye_su_situacion_de_revista(self):
+        from licencias.forms import LicenciaOtorgadaForm
+        html = str(LicenciaOtorgadaForm()['designacion'])
+        self.assertIn(' - Interino</option>', html)
+
     def test_el_alta_lleva_los_datos_del_catalogo(self):
         self.client.force_login(self.operador)
         respuesta = self.client.get(reverse('licencias:nueva_licencia_otorgada'))
