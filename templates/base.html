@@ -196,6 +196,8 @@
         document.addEventListener('click', function (event) {
             const fila = event.target.closest('.tabla-planilla tbody tr');
             if (!fila) return;
+            // Personal gestiona la selección de sus designaciones en su propia plantilla.
+            if (fila.hasAttribute('data-edit-url')) return;
 
             const yaActiva = fila.classList.contains('fila-seleccionada');
             document.querySelectorAll('.tabla-planilla .fila-seleccionada')
