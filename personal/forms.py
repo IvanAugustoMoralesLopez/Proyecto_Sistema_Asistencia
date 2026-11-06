@@ -27,12 +27,29 @@ class CargoForm(forms.ModelForm):
 class CarreraForm(forms.ModelForm):
     class Meta:
         model = Carrera
-        fields = ["nombre", "plan_estudio", "anio_plan", "activa"]
+        fields = [
+            "nombre",
+            "plan_estudio",
+            "anio_plan",
+            "activa",
+            "plan_vigente",
+            "plan_vigente_desde",
+            "plan_vigente_hasta",
+        ]
         widgets = {
             "nombre": forms.TextInput(attrs={"class": "form-control"}),
             "plan_estudio": forms.TextInput(attrs={"class": "form-control"}),
             "anio_plan": forms.NumberInput(attrs={"class": "form-control"}),
             "activa": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "plan_vigente": forms.CheckboxInput(
+                attrs={"class": "form-check-input"}
+            ),
+            "plan_vigente_desde": forms.DateInput(
+                attrs={"class": "form-control", "type": "date"}
+            ),
+            "plan_vigente_hasta": forms.DateInput(
+                attrs={"class": "form-control", "type": "date"}
+            ),
         }
 
 
@@ -50,11 +67,12 @@ class EspacioCurricularForm(forms.ModelForm):
 class BuscarLegajoForm(forms.Form):
     dni = forms.CharField(
         required=False,
-        label="DNI",
+        label="DNI o apellido/nombre",
         widget=forms.TextInput(
             attrs={
                 "class": "form-control",
-                "placeholder": "Buscar por DNI",
+                "placeholder": "Buscar por DNI, apellido o nombre",
+                "list": "legajos-autocompletado",
             }
         ),
     )
@@ -192,11 +210,9 @@ class DesignacionForm(forms.ModelForm):
             "division_seccion",
             "turno",
             "hs_catedra",
-            "jornada",
             "especialidad",
             "disp_alta_nro",
             "sello_regional_as",
-            "motivo",
             "norma_tipo",
             "norma_numero",
             "norma_anio",
@@ -207,6 +223,8 @@ class DesignacionForm(forms.ModelForm):
             "anio_pof",
             "novedad",
             "observaciones",
+            "es_suplencia",
+            "plazo_indeterminado",
         ]
         widgets = {
             "cargo": forms.Select(attrs={"class": "form-select"}),
@@ -219,11 +237,9 @@ class DesignacionForm(forms.ModelForm):
             "hs_catedra": forms.NumberInput(
                 attrs={"class": "form-control", "min": "0"}
             ),
-            "jornada": forms.TextInput(attrs={"class": "form-control"}),
             "especialidad": forms.Select(attrs={"class": "form-select"}),
             "disp_alta_nro": forms.TextInput(attrs={"class": "form-control"}),
             "sello_regional_as": forms.TextInput(attrs={"class": "form-control"}),
-            "motivo": forms.Select(attrs={"class": "form-select"}),
             "norma_tipo": forms.Select(attrs={"class": "form-select"}),
             "norma_numero": forms.TextInput(attrs={"class": "form-control"}),
             "norma_anio": forms.NumberInput(
@@ -243,6 +259,12 @@ class DesignacionForm(forms.ModelForm):
             "novedad": forms.TextInput(attrs={"class": "form-control"}),
             "observaciones": forms.Textarea(
                 attrs={"class": "form-control", "rows": 3}
+            ),
+            "es_suplencia": forms.CheckboxInput(
+                attrs={"class": "form-check-input"}
+            ),
+            "plazo_indeterminado": forms.CheckboxInput(
+                attrs={"class": "form-check-input"}
             ),
         }
 
@@ -269,8 +291,11 @@ class DesignacionForm(forms.ModelForm):
         cleaned_data = super().clean()
         desde = cleaned_data.get("desde")
         hasta = cleaned_data.get("hasta")
+        plazo_indeterminado = cleaned_data.get("plazo_indeterminado")
         if desde and hasta and hasta < desde:
             self.add_error("hasta", "La fecha de finalización no puede ser anterior al inicio.")
+        if plazo_indeterminado:
+            cleaned_data["hasta"] = None
         return cleaned_data
 
     @transaction.atomic
@@ -300,7 +325,7 @@ class NuevaDesignacionForm(DesignacionForm):
     persona = forms.ModelChoiceField(
         queryset=Persona.objects.filter(activa=True).order_by("apellido_nombre"),
         label="Legajo del agente",
-        widget=forms.Select(attrs={"class": "form-select"}),
+        widget=forms.HiddenInput(),
     )
 
     @transaction.atomic

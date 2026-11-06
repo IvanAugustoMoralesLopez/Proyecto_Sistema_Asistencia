@@ -20,6 +20,7 @@
 
 <form method="get" class="card card-body shadow-sm border-0 mb-4">
     <div class="row g-3 align-items-end">
+        <datalist id="legajos-autocompletado"></datalist>
         <div class="col-md-4">
             {{ filtro.dni.label_tag }}{{ filtro.dni }}
         </div>
@@ -34,6 +35,24 @@
         </div>
     </div>
 </form>
+
+{% if alertas_licencias %}
+<div class="alert alert-info" role="alert">
+    <strong>{{ alertas_licencias|length }} licencia(s) vencen en los próximos 30 días.</strong>
+    {% for licencia in alertas_licencias %}
+        <div>{{ licencia.designacion.persona.apellido_nombre }} — {{ licencia.designacion.cargo.descripcion }} — vence {{ licencia.hasta }}</div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if alertas_designaciones %}
+<div class="alert alert-warning" role="alert">
+    <strong>{{ alertas_designaciones.count }} designación(es) vencen en los próximos 30 días.</strong>
+    {% for designacion in alertas_designaciones %}
+        <div>{{ designacion.persona.apellido_nombre }} — {{ designacion.cargo.descripcion }} — vence {{ designacion.hasta }}</div>
+    {% endfor %}
+</div>
+{% endif %}
 
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-header bg-dark text-white">
@@ -106,7 +125,6 @@
                 <div class="col-md-2">{{ designacion_form.division_seccion.label_tag }}{{ designacion_form.division_seccion }}</div>
                 <div class="col-md-2">{{ designacion_form.turno.label_tag }}{{ designacion_form.turno }}</div>
                 <div class="col-md-3">{{ designacion_form.hs_catedra.label_tag }}{{ designacion_form.hs_catedra }}</div>
-                <div class="col-md-3">{{ designacion_form.jornada.label_tag }}{{ designacion_form.jornada }}</div>
             </div>
             <div class="row g-3 mb-3">
                 <div class="col-md-2">{{ designacion_form.horas_lun.label_tag }}{{ designacion_form.horas_lun }}</div>
@@ -117,7 +135,6 @@
             </div>
             <div class="row g-3 mb-3">
                 <div class="col-md-6">{{ designacion_form.especialidad.label_tag }}{{ designacion_form.especialidad }}</div>
-                <div class="col-md-6">{{ designacion_form.motivo.label_tag }}{{ designacion_form.motivo }}</div>
             </div>
             <div class="row g-3 mb-3">
                 <div class="col-md-3">{{ designacion_form.norma_tipo.label_tag }}{{ designacion_form.norma_tipo }}</div>
@@ -158,7 +175,7 @@
         <h2 class="h5 mb-0">Cargos, espacios y vigencia</h2>
     </div>
     <div class="table-responsive">
-        <table class="table table-striped table-hover align-middle mb-0">
+        <table class="table table-striped table-hover align-middle mb-0" id="tablaConsultaDesignaciones">
             <thead class="table-dark">
                 <tr>
                     <th>Código</th>
@@ -269,7 +286,7 @@
     <div class="card-body">
         <p class="text-secondary">
             Codificación UTF-8. Columnas admitidas:
-            <code>dni,apellido,nombres,apellido_nombre,sexo,telefono,email,localidad,domicilio_calle,cargo_codigo,espacio_curricular,situacion_revista,desde,hasta,norma_tipo,norma_numero,organismo_emisor</code>.
+            <code>dni,apellido,nombres,apellido_nombre,sexo,telefono,email,localidad,domicilio_calle,cargo_codigo,espacio_curricular,situacion_revista,desde,hasta,norma_tipo,norma_numero,organismo_emisor,es_suplencia,plazo_indeterminado</code>.
             Para importar sólo datos personales, deje vacía la columna de cargo. Las designaciones requieren una fecha <code>desde</code> en formato AAAA-MM-DD y un cargo ya registrado.
         </p>
         <form method="post" action="/personal/legajos/" enctype="multipart/form-data" class="row g-3 align-items-end">
@@ -308,4 +325,40 @@
         <a class="btn btn-outline-secondary" href="{% url 'personal:catalogos' %}?seccion=licencias">Tipos de licencia</a>
     </div>
 </div>
+<script>
+(() => {
+    const input = document.querySelector('input[name="dni"][placeholder*="apellido"]');
+    const lista = document.getElementById('legajos-autocompletado');
+    if (!input || !lista) return;
+    let temporizador;
+    input.addEventListener('input', () => {
+        window.clearTimeout(temporizador);
+        temporizador = window.setTimeout(async () => {
+            const termino = input.value.trim();
+            if (termino.length < 2) return;
+            const respuesta = await fetch(`{% url 'personal:legajos_autocompletar' %}?q=${encodeURIComponent(termino)}`);
+            if (!respuesta.ok) return;
+            const datos = await respuesta.json();
+            lista.innerHTML = datos.resultados.map(
+                item => `<option value="${item.dni}">${item.nombre}</option>`
+            ).join('');
+        }, 250);
+    });
+})();
+
+(() => {
+    const buscador = document.querySelector('input[name="dni"][placeholder*="apellido"]');
+    const tabla = document.getElementById('tablaConsultaDesignaciones');
+    if (!buscador || !tabla) return;
+    const filas = [...tabla.querySelectorAll('tbody tr')].filter(fila => fila.querySelector('td'));
+    buscador.addEventListener('input', () => {
+        const termino = buscador.value.trim().toLocaleLowerCase('es');
+        filas.forEach(fila => {
+            fila.hidden = Boolean(
+                termino && !fila.textContent.toLocaleLowerCase('es').includes(termino)
+            );
+        });
+    });
+})();
+</script>
 {% endblock %}
