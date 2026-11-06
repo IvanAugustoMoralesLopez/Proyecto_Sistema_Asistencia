@@ -135,3 +135,18 @@ class AsistenteDeImputacionPantallaTests(TestCase):
             enlace.group(1),
             reverse('licencias:listado_licencias_otorgadas'),
         ) 
+
+    def test_la_etiqueta_de_la_designacion_incluye_la_materia(self):
+        from licencias.forms import LicenciaOtorgadaForm
+        from personal.models import Carrera, EspacioCurricular
+
+        carrera = Carrera.objects.create(nombre='Profesorado de Matemática')
+        espacio = EspacioCurricular.objects.create(nombre='Álgebra', carrera=carrera)
+        persona = Persona.objects.create(dni=99000032, apellido_nombre='Con Materia, Docente')
+        Designacion.objects.create(
+            persona=persona, cargo=self.designacion.cargo, espacio_curricular=espacio,
+            desde=date(2026, 1, 1), situacion_revista='TIT',
+        )
+
+        html = str(LicenciaOtorgadaForm()['designacion'])
+        self.assertIn(' - Titular - Álgebra</option>', html)

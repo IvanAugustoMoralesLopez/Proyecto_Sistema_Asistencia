@@ -77,10 +77,13 @@ class SelectDesignacion(forms.Select):
         return opcion
 
 def _etiqueta_designacion(designacion):
-    """Texto de cada opción del desplegable: la designación y su situación de revista."""
+    """Texto de cada opción del desplegable: la designación, su situación de
+    revista y su materia (para distinguir designaciones del mismo docente)."""
     etiqueta = str(designacion)
     if designacion.situacion_revista:
         etiqueta += f" - {designacion.get_situacion_revista_display()}"
+    if designacion.espacio_curricular_id:
+        etiqueta += f" - {designacion.espacio_curricular.nombre}"
     return etiqueta
 
 class LicenciaOtorgadaForm(forms.ModelForm):
@@ -124,7 +127,7 @@ class LicenciaOtorgadaForm(forms.ModelForm):
 
         self.fields["designacion"].queryset = (
             designaciones.select_related(
-                "persona", "cargo"
+                "persona", "cargo","espacio_curricular"
             ).order_by("persona__apellido_nombre")
         )
         # La opción muestra también la situación de revista de la designación.
