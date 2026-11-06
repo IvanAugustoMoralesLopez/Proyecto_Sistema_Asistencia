@@ -65,4 +65,6 @@ class MesVecinoTests(SimpleTestCase):
         self.assertEqual(mes_vecino(2026, 1, -1), (2025, 12))
 
     def test_sin_desplazamiento_devuelve_el_mismo_mes(self):
-        self.assertEqual(mes_vecino(2026, 3, 0), (2026, 3))
+        self.assertEqual(mes_vecino(2026, 3, 0), (2026, 3)) 
+
+
