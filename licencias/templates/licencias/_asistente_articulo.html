@@ -5,12 +5,32 @@
     const selDesignacion = document.getElementById('id_designacion');
     const selArticulo = document.getElementById('id_articulo');
     const panel = document.getElementById('panel-articulo');
+    const campoSituacion = document.getElementById('id_sit_rev');
     if (!selDesignacion || !selArticulo || !panel) return;
 
     // Situación de revista de la designación elegida ('' si no hay o no se conoce).
     function situacionElegida() {
         const opcion = selDesignacion.options[selDesignacion.selectedIndex];
         return opcion ? (opcion.dataset.situacion || '') : '';
+    }
+
+    // Copia la situación de revista de la designación al campo de abajo.
+    // Con forzar = false solo completa si el campo está vacío: así, al editar,
+    // no se pisa lo que la licencia ya tenía guardado.
+    // El campo queda de solo lectura cuando la designación tiene situación
+    // cargada; si no la tiene, se deja editable para poder escribirla.
+    function completarSituacion(forzar) {
+        if (!campoSituacion) return;
+        const situacion = situacionElegida();
+        campoSituacion.readOnly = Boolean(situacion);
+        if (!situacion) {
+            // La designación elegida no tiene situación cargada: al cambiar de
+            // designación se borra la anterior para no dejar un dato equivocado.
+            if (forzar) campoSituacion.value = '';
+            return;
+        }
+        if (!forzar && campoSituacion.value) return;
+        campoSituacion.value = situacion.charAt(0).toUpperCase() + situacion.slice(1);
     }
 
     // Muestra planilla, tope, goce, plazo y autoridad del artículo elegido.
@@ -70,8 +90,12 @@
         mostrarPanel();
     }
 
-    selDesignacion.addEventListener('change', armarArticulos);
+    selDesignacion.addEventListener('change', function () {
+        completarSituacion(true);
+        armarArticulos();
+    });
     selArticulo.addEventListener('change', mostrarPanel);
+    completarSituacion(false);
     armarArticulos();
 })();
 </script>

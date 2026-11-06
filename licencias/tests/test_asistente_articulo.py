@@ -89,6 +89,16 @@ class AsistenteDeImputacionPantallaTests(TestCase):
         html = str(LicenciaOtorgadaForm()['designacion'])
         self.assertIn('data-situacion="interino"', html)
 
+    def test_la_etiqueta_de_la_designacion_incluye_su_situacion_de_revista(self):
+        from licencias.forms import LicenciaOtorgadaForm
+        html = str(LicenciaOtorgadaForm()['designacion'])
+        self.assertIn(' - Interino</option>', html) 
+
+    def test_el_alta_lleva_el_codigo_que_completa_la_situacion_de_revista(self):
+        self.client.force_login(self.operador)
+        respuesta = self.client.get(reverse('licencias:nueva_licencia_otorgada'))
+        self.assertContains(respuesta, "getElementById('id_sit_rev')")
+
     def test_el_alta_lleva_los_datos_del_catalogo(self):
         self.client.force_login(self.operador)
         respuesta = self.client.get(reverse('licencias:nueva_licencia_otorgada'))
@@ -125,3 +135,18 @@ class AsistenteDeImputacionPantallaTests(TestCase):
             enlace.group(1),
             reverse('licencias:listado_licencias_otorgadas'),
         ) 
+
+    def test_la_etiqueta_de_la_designacion_incluye_la_materia(self):
+        from licencias.forms import LicenciaOtorgadaForm
+        from personal.models import Carrera, EspacioCurricular
+
+        carrera = Carrera.objects.create(nombre='Profesorado de Matemática')
+        espacio = EspacioCurricular.objects.create(nombre='Álgebra', carrera=carrera)
+        persona = Persona.objects.create(dni=99000032, apellido_nombre='Con Materia, Docente')
+        Designacion.objects.create(
+            persona=persona, cargo=self.designacion.cargo, espacio_curricular=espacio,
+            desde=date(2026, 1, 1), situacion_revista='TIT',
+        )
+
+        html = str(LicenciaOtorgadaForm()['designacion'])
+        self.assertIn(' - Titular - Álgebra</option>', html)
