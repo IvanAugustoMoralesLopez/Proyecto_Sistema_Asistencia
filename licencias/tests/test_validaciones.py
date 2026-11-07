@@ -334,9 +334,6 @@ class TopeAnualEdicionTests(TestCase):
         self.licencia.observaciones = 'Duelo familiar'
         self.licencia.full_clean()  # no debe lanzar ValidationError  
 
-    def test_edicion_dentro_del_tope_se_acepta(self):
-        self.licencia.observaciones = 'Duelo familiar'
-        self.licencia.full_clean()  # no debe lanzar ValidationError
 
     def test_alta_que_supera_el_tope_con_resolucion_se_acepta(self):
         nueva = LicenciaOtorgada(
