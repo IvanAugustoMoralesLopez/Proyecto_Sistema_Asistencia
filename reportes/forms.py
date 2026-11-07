@@ -247,3 +247,28 @@ class FiltroAlertasForm(forms.Form):
         coerce=int,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
+
+
+class FiltroDesignacionesForm(forms.Form):
+    ANTICIPACIONES = [(15, "15 días"), (30, "30 días"), (60, "60 días"), (90, "90 días")]
+
+    dias = forms.TypedChoiceField(
+        label="Avisar con",
+        choices=ANTICIPACIONES,
+        coerce=int,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    incluir_vencidas = forms.BooleanField(
+        label="Incluir ya vencidas (sin renovar ni dar de baja)",
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
+
+class FiltroLicenciasVencimientoForm(forms.Form):
+    dias = forms.TypedChoiceField(
+        label="Avisar con",
+        choices=FiltroDesignacionesForm.ANTICIPACIONES,
+        coerce=int,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )

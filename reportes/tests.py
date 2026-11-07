@@ -633,6 +633,121 @@ class AlertasTests(TestCase):
         self.assertEqual(respuesta.context["alertas"], [])
 
 
+# ───────────── Alertas de vencimiento de designaciones ─────────────
+
+from .selectors import calcular_designaciones_por_vencer
+
+
+class AlertasDesignacionesTests(TestCase):
+    HOY = date(2026, 11, 6)
+
+    def setUp(self):
+        self.cargo = Cargo.objects.create(codigo="166", descripcion="Hs cátedra")
+        self.persona = Persona.objects.create(dni="44444444", apellido_nombre="LOPEZ, LEO")
+        self.url = reverse("reportes:alertas_designaciones")
+        self.client.force_login(crear_usuario("bedel", "consultar_licencias"))
+
+    def designacion(self, hasta, **extra):
+        return Designacion.objects.create(
+            persona=self.persona, cargo=self.cargo, desde=date(2026, 3, 1), hasta=hasta, **extra
+        )
+
+    def test_por_vencer_dentro_de_la_ventana(self):
+        d = self.designacion(date(2026, 11, 20))
+        (fila,) = calcular_designaciones_por_vencer(30, hoy=self.HOY)
+        self.assertEqual(fila["pk"], d.pk)
+        self.assertEqual(fila["dias_restantes"], 14)
+        self.assertFalse(fila["vencida"])
+
+    def test_fuera_de_ventana_no_avisa(self):
+        self.designacion(date(2027, 3, 1))
+        self.assertEqual(calcular_designaciones_por_vencer(30, hoy=self.HOY), [])
+
+    def test_vencida_se_incluye_o_se_excluye(self):
+        self.designacion(date(2026, 11, 1))
+        (fila,) = calcular_designaciones_por_vencer(30, True, hoy=self.HOY)
+        self.assertTrue(fila["vencida"])
+        self.assertEqual(calcular_designaciones_por_vencer(30, False, hoy=self.HOY), [])
+
+    def test_ignora_indeterminadas_sin_hasta_e_inactivas(self):
+        self.designacion(date(2026, 11, 10), plazo_indeterminado=True)
+        self.designacion(None)
+        self.designacion(date(2026, 11, 10), activo=False)
+        self.assertEqual(calcular_designaciones_por_vencer(30, hoy=self.HOY), [])
+
+    def test_ordena_por_fecha_de_vencimiento(self):
+        a = self.designacion(date(2026, 11, 25))
+        b = self.designacion(date(2026, 11, 8))
+        pks = [f["pk"] for f in calcular_designaciones_por_vencer(30, hoy=self.HOY)]
+        self.assertEqual(pks, [b.pk, a.pk])
+
+    def test_vista_requiere_permiso(self):
+        self.client.force_login(crear_usuario("sin"))
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_vista_responde_con_valores_por_defecto(self):
+        respuesta = self.client.get(self.url)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.context["alertas"], [])
+
+
+# ───────────── Alertas de vencimiento de licencias ─────────────
+
+from .selectors import calcular_licencias_por_vencer
+
+
+class AlertasLicenciasVencimientoTests(TestCase):
+    HOY = date(2026, 11, 6)
+
+    def setUp(self):
+        cargo = Cargo.objects.create(codigo="166", descripcion="Hs cátedra")
+        persona = Persona.objects.create(dni="55555555", apellido_nombre="PEREZ, PAULA")
+        self.designacion = Designacion.objects.create(
+            persona=persona, cargo=cargo, desde=date(2026, 3, 1)
+        )
+        self.articulo = LicenciaArticulo.objects.create(
+            cod_licencia="V.1", articulo="V1", tipo_licencia="Enfermedad",
+            sit_rev="Titular", goce_haberes="Con goce", autoridad="Dirección", plazo="-",
+        )
+        self.url = reverse("reportes:alertas_licencias_vencimiento")
+        self.client.force_login(crear_usuario("bedel", "consultar_licencias"))
+
+    def licencia(self, desde, hasta):
+        return LicenciaOtorgada.objects.create(
+            designacion=self.designacion, articulo=self.articulo, sit_rev="TIT",
+            desde=desde, hasta=hasta,
+        )
+
+    def test_avisa_dentro_de_la_ventana(self):
+        lic = self.licencia(date(2026, 11, 2), date(2026, 11, 13))
+        (fila,) = calcular_licencias_por_vencer(30, hoy=self.HOY)
+        self.assertEqual(fila["pk"], lic.pk)
+        self.assertEqual(fila["dias_restantes"], 7)
+
+    def test_vence_hoy(self):
+        self.licencia(date(2026, 11, 2), date(2026, 11, 6))
+        (fila,) = calcular_licencias_por_vencer(30, hoy=self.HOY)
+        self.assertTrue(fila["vence_hoy"])
+
+    def test_ignora_finalizadas_abiertas_y_lejanas(self):
+        self.licencia(date(2026, 10, 1), date(2026, 10, 5))   # ya terminó
+        self.licencia(date(2026, 12, 20), date(2027, 3, 1))   # lejos
+        self.assertEqual(calcular_licencias_por_vencer(30, hoy=self.HOY), [])
+
+    def test_licencia_abierta_no_vence(self):
+        self.licencia(date(2026, 11, 2), None)
+        self.assertEqual(calcular_licencias_por_vencer(30, hoy=self.HOY), [])
+
+    def test_vista_requiere_permiso(self):
+        self.client.force_login(crear_usuario("sin"))
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_vista_responde(self):
+        respuesta = self.client.get(self.url)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn("alertas", respuesta.context)
+
+
 # ───────────── Correcciones de la revisión técnica (A2, M11, B5, B6) ─────────────
 
 from django.contrib import admin as django_admin
