@@ -1,10 +1,21 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Bitácora de auditoría{% endblock %}
 {% block seccion %}reportes-bitacora{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/bitacora.css' %}">
+{% endblock %}
+
 {% block content %}
-<h1 class="h3 mb-4">Bitácora de auditoría</h1>
+<div class="mb-4">
+    <h1 class="h3 mb-1">Bitácora de auditoría</h1>
+    <p class="text-secondary mb-0">
+        Registro de lo que se hizo en el sistema: quién, cuándo y qué cambió.
+        No se puede editar ni borrar.
+    </p>
+</div>
 
 <form method="get" class="card card-body mb-4">
     <div class="row g-3">
@@ -28,6 +39,12 @@
     </div>
 </form>
 
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+    <span class="text-secondary small">
+        {{ pagina.paginator.count }} evento{{ pagina.paginator.count|pluralize }}
+    </span>
+</div>
+
 <div class="table-responsive">
     <table class="table table-striped align-middle">
         <thead class="table-dark">
@@ -45,33 +62,48 @@
                 <tr>
                     <td class="text-nowrap">{{ evento.creado_en|date:"d/m/Y H:i:s" }}</td>
                     <td>{{ evento.usuario|default:"—" }}</td>
-                    <td>{{ evento.accion_texto }}</td>
+                    <td>
+                        <span class="badge {% if evento.accion == 'CREAR' or evento.accion == 'LICENCIA_ALTA' or evento.accion == 'CATALOGO_ALTA' or evento.accion == 'USUARIO_ALTA' %}text-bg-success{% elif evento.accion == 'LICENCIA_BAJA' or evento.accion == 'CATALOGO_BAJA' %}text-bg-danger{% elif evento.accion == 'EDITAR' or evento.accion == 'LICENCIA_EDITAR' or evento.accion == 'CATALOGO_EDITAR' or evento.accion == 'USUARIO_EDITAR' or evento.accion == 'PARAMETROS' or evento.accion == 'REABRIR' %}text-bg-warning{% elif evento.accion == 'IMPORTACION' %}text-bg-info{% elif evento.accion == 'VALIDAR' or evento.accion == 'RECEPCIONAR' %}text-bg-primary{% else %}text-bg-secondary{% endif %}">
+                            {{ evento.accion_texto }}
+                        </span>
+                    </td>
                     <td>{{ evento.objetivo }}</td>
                     <td>{{ evento.motivo|default:"—" }}</td>
-                    <td class="small">
-                        {% for campo, antes, despues in evento.cambios %}
-                            <div><strong>{{ campo }}:</strong> {{ antes }} → {{ despues }}</div>
-                        {% empty %}—{% endfor %}
+                    <td>
+                        {% if evento.cambios %}
+                            <table class="table table-sm table-borderless bitacora-cambios mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Campo</th>
+                                        <th>Antes</th>
+                                        <th>Después</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for campo, antes, despues in evento.cambios %}
+                                        <tr>
+                                            <td class="bitacora-campo">{{ campo }}</td>
+                                            <td class="bitacora-antes">{{ antes }}</td>
+                                            <td class="bitacora-despues">{{ despues }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        {% else %}
+                            —
+                        {% endif %}
                     </td>
                 </tr>
             {% empty %}
-                <tr><td colspan="6" class="text-center text-muted py-4">No hay eventos para los filtros elegidos.</td></tr>
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                        No hay eventos para los filtros elegidos.
+                    </td>
+                </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
 
-{% if pagina.has_other_pages %}
-<nav aria-label="Paginación">
-    <ul class="pagination">
-        {% if pagina.has_previous %}
-            <li class="page-item"><a class="page-link" href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.previous_page_number }}">Anterior</a></li>
-        {% endif %}
-        <li class="page-item disabled"><span class="page-link">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span></li>
-        {% if pagina.has_next %}
-            <li class="page-item"><a class="page-link" href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ pagina.next_page_number }}">Siguiente</a></li>
-        {% endif %}
-    </ul>
-</nav>
-{% endif %}
+{% include "asistencias/includes/paginacion.html" with etiqueta="Paginación de la bitácora" %}
 {% endblock %}
