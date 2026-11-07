@@ -1,0 +1,26 @@
+/* Bitácora de auditoría (Pantalla 4) */
+.bitacora-cambios {
+    min-width: 320px;
+    font-size: 0.85rem;
+}
+
+.bitacora-cambios th {
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+    border-bottom-width: 1px;
+}
+
+.bitacora-antes {
+    background: rgba(var(--bs-danger-rgb), 0.12);
+    word-break: break-word;
+}
+
+.bitacora-despues {
+    background: rgba(var(--bs-success-rgb), 0.12);
+    word-break: break-word;
+}
+
+.bitacora-campo {
+    white-space: nowrap;
+    font-weight: 600;
+}
