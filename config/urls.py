@@ -17,7 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
-from django.views.generic import RedirectView, TemplateView
+from django.views.generic import RedirectView
 from personal.views import registro_designaciones
 
 urlpatterns = [
@@ -33,7 +33,5 @@ urlpatterns = [
         RedirectView.as_view(pattern_name="inicio_personal", permanent=False),
         name="pantalla_personal",
     ),
-    path("pantallas/licencias/", TemplateView.as_view(template_name="pantallas/codigos_licencia.html"), name="pantalla_licencias"),
-    path("pantallas/informe/", TemplateView.as_view(template_name="pantallas/informe_licencias.html"), name="pantalla_informe"),
     path("", registro_designaciones, name="inicio_personal"),
 ]
