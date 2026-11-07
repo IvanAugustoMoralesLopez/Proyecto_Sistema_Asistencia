@@ -4,7 +4,8 @@
 {% block seccion %}reportes-alertas{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-4">Alertas de agotamiento de licencias</h1>
+<h1 class="h3 mb-3">Alertas</h1>
+{% include "reportes/_tabs_alertas.html" with tab_alertas="licencias" %}
 
 <form method="get" class="card card-body mb-4">
     <div class="row g-3 align-items-end">

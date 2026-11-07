@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Designaciones por vencer{% endblock %}
+{% block seccion %}reportes-alertas{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Alertas</h1>
+{% include "reportes/_tabs_alertas.html" with tab_alertas="designaciones" %}
+
+<form method="get" class="card card-body mb-4">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label" for="{{ form.dias.id_for_label }}">{{ form.dias.label }}</label>
+            {{ form.dias }}
+            {% for error in form.dias.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="col-md-5">
+            <div class="form-check">
+                {{ form.incluir_vencidas }}
+                <label class="form-check-label" for="{{ form.incluir_vencidas.id_for_label }}">{{ form.incluir_vencidas.label }}</label>
+            </div>
+        </div>
+        <div class="col-md-4 d-flex gap-2">
+            <button class="btn btn-primary" type="submit">Ver alertas</button>
+            <a class="btn btn-outline-secondary" href="{% url 'reportes:alertas_designaciones' %}">Restablecer</a>
+        </div>
+    </div>
+</form>
+
+<p class="text-muted small">
+    Se listan las designaciones activas con fecha «hasta» cercana. No se incluyen las de plazo indeterminado
+    ni las que no tienen fecha de fin.
+    {% if cant_vencidas %}<strong class="text-danger">{{ cant_vencidas }} ya vencida{{ cant_vencidas|pluralize }}.</strong>{% endif %}
+</p>
+
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>Estado</th>
+                <th>DNI</th>
+                <th>Docente</th>
+                <th>Cargo</th>
+                <th>Materia / Carrera</th>
+                <th>Sit. revista</th>
+                <th>Norma</th>
+                <th>Desde</th>
+                <th>Hasta</th>
+                <th class="text-end">Días</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in alertas %}
+                <tr>
+                    <td>
+                        {% if a.vencida %}<span class="badge text-bg-danger">Vencida</span>
+                        {% elif a.vence_hoy %}<span class="badge text-bg-danger">Vence hoy</span>
+                        {% elif a.dias_restantes <= 7 %}<span class="badge text-bg-warning">Vence pronto</span>
+                        {% else %}<span class="badge text-bg-info">Por vencer</span>{% endif %}
+                    </td>
+                    <td>{{ a.dni }}</td>
+                    <td>{{ a.docente }}</td>
+                    <td>{{ a.cargo }}</td>
+                    <td>{{ a.materia|default:"—" }}{% if a.carrera %}<br><span class="text-muted small">{{ a.carrera }}</span>{% endif %}</td>
+                    <td>{{ a.situacion|default:"—" }}{% if a.es_suplencia %} <span class="badge text-bg-secondary">Suplencia</span>{% endif %}</td>
+                    <td>{{ a.norma }}</td>
+                    <td>{{ a.desde|date:"d/m/Y" }}</td>
+                    <td>{{ a.hasta|date:"d/m/Y" }}</td>
+                    <td class="text-end">{% if a.vencida %}-{{ a.dias_restantes|cut:"-" }}{% else %}{{ a.dias_restantes }}{% endif %}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="10" class="text-center text-muted py-4">No hay designaciones por vencer con estos criterios.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

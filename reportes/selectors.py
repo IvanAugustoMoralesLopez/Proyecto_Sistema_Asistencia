@@ -13,6 +13,8 @@ from django.db.models import Q
 from django.utils import timezone
 
 from asistencias.models import EventoAsistencia, RegistroAsistencia
+from personal.models import Designacion
+from licencias.dias import fecha_de_hoy
 from licencias.models import LicenciaOtorgada
 from licencias.services import dias_usados_en_anio
 
@@ -440,3 +442,104 @@ def calcular_alertas(anio, umbral=UMBRAL_POR_DEFECTO):
 
     alertas.sort(key=lambda a: (-a["porcentaje"], a["docente"]))
     return alertas
+
+
+# ───────────── Alertas de vencimiento de designaciones ─────────────
+
+DIAS_ANTICIPACION_POR_DEFECTO = 30  # ventana para avisar antes del "hasta"
+
+
+def _texto_norma(designacion):
+    """Texto legible de la norma de designación, ej. 'Disposición 12/2026'."""
+    numero = designacion.norma_numero or ""
+    if designacion.norma_anio:
+        numero = f"{numero}/{designacion.norma_anio}" if numero else str(designacion.norma_anio)
+    return " ".join(p for p in (designacion.norma_tipo, numero) if p) or "—"
+
+
+def calcular_designaciones_por_vencer(dias=DIAS_ANTICIPACION_POR_DEFECTO,
+                                      incluir_vencidas=True, hoy=None):
+    """
+    Designaciones activas con fecha «hasta» próxima o ya vencida.
+
+    - Por vencer: «hasta» entre hoy y hoy + `dias` (inclusive).
+    - Vencida: «hasta» anterior a hoy y la designación sigue activa
+      (hay que renovarla o darla de baja).
+    Quedan afuera las de plazo indeterminado y las que no tienen «hasta».
+    Orden: primero las que vencen antes (las vencidas arriba de todo).
+    """
+    hoy = hoy or fecha_de_hoy()
+    limite = hoy + timedelta(days=dias)
+
+    designaciones = Designacion.objects.filter(
+        activo=True,
+        plazo_indeterminado=False,
+        hasta__isnull=False,
+    ).select_related("persona", "cargo", "espacio_curricular__carrera")
+
+    if incluir_vencidas:
+        designaciones = designaciones.filter(hasta__lte=limite)
+    else:
+        designaciones = designaciones.filter(hasta__gte=hoy, hasta__lte=limite)
+
+    filas = []
+    for d in designaciones.order_by("hasta", "persona__apellido_nombre", "pk"):
+        restantes = (d.hasta - hoy).days
+        espacio = d.espacio_curricular
+        filas.append({
+            "pk": d.pk,
+            "dni": d.persona.dni,
+            "docente": d.persona.apellido_nombre,
+            "cargo": str(d.cargo),
+            "materia": espacio.nombre if espacio else "",
+            "carrera": str(espacio.carrera) if espacio and espacio.carrera_id else "",
+            "situacion": d.get_situacion_revista_display() if d.situacion_revista else "",
+            "es_suplencia": d.es_suplencia,
+            "norma": _texto_norma(d),
+            "desde": d.desde,
+            "hasta": d.hasta,
+            "dias_restantes": restantes,
+            "vencida": restantes < 0,
+            "vence_hoy": restantes == 0,
+        })
+    return filas
+
+
+# ───────────── Alertas de vencimiento de licencias ─────────────
+
+def calcular_licencias_por_vencer(dias=DIAS_ANTICIPACION_POR_DEFECTO, hoy=None):
+    """
+    Licencias otorgadas cuyo «hasta» cae entre hoy y hoy + `dias` (inclusive).
+
+    Sirve para anticipar la renovación o el alta del reemplazo antes de que
+    el docente vuelva o la licencia caduque. Las licencias sin «hasta»
+    (abiertas) no tienen vencimiento y no se listan; las ya finalizadas
+    tampoco. Orden: las que vencen antes, primero.
+    """
+    hoy = hoy or fecha_de_hoy()
+    limite = hoy + timedelta(days=dias)
+
+    licencias = (
+        LicenciaOtorgada.objects.filter(hasta__gte=hoy, hasta__lte=limite)
+        .select_related("designacion__persona", "designacion__cargo", "articulo")
+        .order_by("hasta", "designacion__persona__apellido_nombre", "pk")
+    )
+
+    filas = []
+    for lic in licencias:
+        restantes = (lic.hasta - hoy).days
+        designacion = lic.designacion
+        filas.append({
+            "pk": lic.pk,
+            "dni": designacion.persona.dni,
+            "docente": designacion.persona.apellido_nombre,
+            "cargo": str(designacion.cargo),
+            "articulo": lic.articulo.articulo,
+            "tipo_licencia": lic.articulo.tipo_licencia,
+            "instrumento": texto_instrumento(lic),
+            "desde": lic.desde,
+            "hasta": lic.hasta,
+            "dias_restantes": restantes,
+            "vence_hoy": restantes == 0,
+        })
+    return filas

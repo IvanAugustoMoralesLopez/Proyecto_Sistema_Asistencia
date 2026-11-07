@@ -18,12 +18,17 @@ from .forms import (
     FiltroAlertasForm,
     FiltroBitacoraForm,
     FiltroConsultaForm,
+    FiltroDesignacionesForm,
+    FiltroLicenciasVencimientoForm,
     ParametroSistemaForm,
     UsuarioForm,
 )
 from .models import ParametroSistema
 from .roles import ROLES
 from .selectors import (
+    DIAS_ANTICIPACION_POR_DEFECTO,
+    calcular_designaciones_por_vencer,
+    calcular_licencias_por_vencer,
     UMBRAL_POR_DEFECTO,
     buscar_eventos,
     calcular_alertas,
@@ -224,3 +229,48 @@ def alertas(request):
         lista = calcular_alertas(form.cleaned_data["anio"], form.cleaned_data["umbral"])
 
     return render(request, "reportes/alertas.html", {"form": form, "alertas": lista})
+
+
+# ───────────── Alertas de vencimiento de designaciones ─────────────
+
+@login_required
+@permission_required("reportes.consultar_licencias", raise_exception=True)
+def alertas_designaciones(request):
+    # Sin filtros elegidos: 30 días de anticipación e incluye las vencidas.
+    if request.GET:
+        form = FiltroDesignacionesForm(request.GET)
+    else:
+        form = FiltroDesignacionesForm(
+            {"dias": DIAS_ANTICIPACION_POR_DEFECTO, "incluir_vencidas": "on"}
+        )
+    lista = []
+    if form.is_valid():
+        lista = calcular_designaciones_por_vencer(
+            form.cleaned_data["dias"], form.cleaned_data["incluir_vencidas"]
+        )
+    return render(
+        request,
+        "reportes/alertas_designaciones.html",
+        {
+            "form": form,
+            "alertas": lista,
+            "cant_vencidas": sum(1 for a in lista if a["vencida"]),
+        },
+    )
+
+
+# ───────────── Alertas de vencimiento de licencias ─────────────
+
+@login_required
+@permission_required("reportes.consultar_licencias", raise_exception=True)
+def alertas_licencias_vencimiento(request):
+    datos = request.GET or {"dias": DIAS_ANTICIPACION_POR_DEFECTO}
+    form = FiltroLicenciasVencimientoForm(datos)
+    lista = []
+    if form.is_valid():
+        lista = calcular_licencias_por_vencer(form.cleaned_data["dias"])
+    return render(
+        request,
+        "reportes/alertas_licencias_vencimiento.html",
+        {"form": form, "alertas": lista},
+    )

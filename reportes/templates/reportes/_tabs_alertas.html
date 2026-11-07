@@ -1,0 +1,17 @@
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        <a class="nav-link {% if tab_alertas == 'licencias' %}active{% endif %}" href="{% url 'reportes:alertas' %}">
+            <i class="bi bi-calendar-x"></i> Topes de licencias
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if tab_alertas == 'licencias_vencimiento' %}active{% endif %}" href="{% url 'reportes:alertas_licencias_vencimiento' %}">
+            <i class="bi bi-calendar-event"></i> Licencias por vencer
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if tab_alertas == 'designaciones' %}active{% endif %}" href="{% url 'reportes:alertas_designaciones' %}">
+            <i class="bi bi-hourglass-split"></i> Designaciones por vencer
+        </a>
+    </li>
+</ul>
