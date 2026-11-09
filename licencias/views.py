@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
+from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -255,6 +256,7 @@ def nueva_licencia_otorgada(request):
         {"form": form}
     )
 
+LICENCIAS_POR_PAGINA = 20
 @login_required
 @permission_required("licencias.view_licenciaotorgada", raise_exception=True)
 def listado_licencias_otorgadas(request):
@@ -301,12 +303,22 @@ def listado_licencias_otorgadas(request):
 
     articulos = LicenciaArticulo.objects.all().order_by("articulo")
 
+    # Se muestran de a LICENCIAS_POR_PAGINA. get_page() tolera un número
+    # inválido (va a la primera) o fuera de rango (va a la última).
+    paginador = Paginator(licencias, LICENCIAS_POR_PAGINA)
+    pagina = paginador.get_page(request.GET.get("page"))
+
+    # Filtros actuales sin "page", para armar los enlaces de paginación.
+    parametros = request.GET.copy()
+    parametros.pop("page", None)
+
     return render(
         request,
         "licencias/listado_licencias_otorgadas.html",
         {
-            "licencias": licencias,
+            "licencias": pagina,
             "articulos": articulos,
+            "querystring": parametros.urlencode(),
         },
     )
 
