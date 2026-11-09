@@ -152,6 +152,33 @@
                     </tbody>
                 </table>
             </div>
+            
+            {% if licencias.paginator.num_pages > 1 %}
+                <nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Paginación del listado">
+                    <span class="text-secondary">
+                        Página {{ licencias.number }} de {{ licencias.paginator.num_pages }}
+                        ({{ licencias.paginator.count }} licencias)
+                    </span>
+                    <div class="d-flex gap-2">
+                        {% if licencias.has_previous %}
+                            <a
+                                class="btn btn-sm btn-outline-secondary"
+                                href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ licencias.previous_page_number }}"
+                            >
+                                Anterior
+                            </a>
+                        {% endif %}
+                        {% if licencias.has_next %}
+                            <a
+                                class="btn btn-sm btn-outline-secondary"
+                                href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ licencias.next_page_number }}"
+                            >
+                                Siguiente
+                            </a>
+                        {% endif %}
+                    </div>
+                </nav>
+            {% endif %}
         {% else %}
             <div class="alert alert-info mb-0">
                 No se encontraron licencias con los filtros seleccionados.
