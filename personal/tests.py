@@ -1,11 +1,13 @@
-from datetime import date
+from datetime import date, timedelta
 
+from django.core.management import call_command
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, RequestFactory, TestCase
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.urls import reverse
+from django.utils import timezone
 
 from asistencias.models import EventoAsistencia
 from reportes.auditoria import AccionesReportes
@@ -18,7 +20,7 @@ from .models import (
     Horario,
     ImportacionPersonalError,
 )
-from .forms import DesignacionForm, PersonaForm
+from .forms import DesignacionForm, NuevaDesignacionForm, PersonaForm
 from .views import _procesar_csv, gestion_legajos
 
 
@@ -90,6 +92,47 @@ class DesignacionTests(TestCase):
             Designacion.Situacion.INTERINO,
         )
 
+    def test_historial_audita_cambios_de_vinculo_de_suplencia(self):
+        titular = Persona.objects.create(
+            dni="30123463",
+            apellido_nombre="Titular",
+        )
+        reemplazo_inicial = Designacion.objects.create(
+            persona=titular,
+            cargo=self.cargo,
+            desde=date(2026, 3, 1),
+            hasta=date(2026, 12, 31),
+        )
+        reemplazo_nuevo = Designacion.objects.create(
+            persona=titular,
+            cargo=self.cargo,
+            desde=date(2026, 4, 1),
+            hasta=date(2026, 12, 31),
+        )
+        suplencia = Designacion.objects.create(
+            persona=self.persona,
+            cargo=self.cargo,
+            desde=date(2026, 5, 1),
+            hasta=date(2026, 5, 31),
+            es_suplencia=True,
+            reemplaza=reemplazo_inicial,
+        )
+
+        suplencia.reemplaza = reemplazo_nuevo
+        suplencia.plazo_indeterminado = True
+        suplencia.hasta = None
+        suplencia.save()
+
+        evento = suplencia.historial.latest("pk")
+        self.assertEqual(evento.accion, HistorialDesignacion.Accion.MODIFICACION)
+        self.assertEqual(
+            evento.datos_anteriores["reemplaza_id"],
+            reemplazo_inicial.pk,
+        )
+        self.assertEqual(evento.datos_nuevos["reemplaza_id"], reemplazo_nuevo.pk)
+        self.assertFalse(evento.datos_anteriores["plazo_indeterminado"])
+        self.assertTrue(evento.datos_nuevos["plazo_indeterminado"])
+
     def test_vigencia_de_designacion_respeta_rango_de_fechas(self):
         designacion = Designacion.objects.create(
             persona=self.persona,
@@ -101,6 +144,88 @@ class DesignacionTests(TestCase):
         self.assertFalse(designacion.vigente_en(date(2026, 2, 28)))
         self.assertTrue(designacion.vigente_en(date(2026, 7, 1)))
         self.assertFalse(designacion.vigente_en(date(2026, 12, 1)))
+
+    def test_suplencia_requiere_fecha_de_cese_o_plazo_indeterminado(self):
+        designacion = Designacion(
+            persona=self.persona,
+            cargo=self.cargo,
+            desde=date(2026, 3, 1),
+            es_suplencia=True,
+        )
+
+        with self.assertRaises(ValidationError):
+            designacion.full_clean()
+
+    def test_mismo_suplente_puede_tener_designaciones_en_periodos_distintos(self):
+        primeras_fechas = {
+            "desde": date(2026, 3, 1),
+            "hasta": date(2026, 6, 30),
+        }
+        segunda_fechas = {
+            "desde": date(2026, 7, 1),
+            "hasta": date(2026, 11, 30),
+        }
+
+        for fechas in (primeras_fechas, segunda_fechas):
+            designacion = Designacion(
+                persona=self.persona,
+                cargo=self.cargo,
+                situacion_revista=Designacion.Situacion.SUPLENTE,
+                es_suplencia=True,
+                **fechas,
+            )
+            designacion.full_clean()
+            designacion.save()
+
+        self.assertEqual(
+            Designacion.objects.filter(persona=self.persona, es_suplencia=True).count(),
+            2,
+        )
+
+    def test_asistente_vincula_suplencia_con_designacion_vigente(self):
+        titular = Persona.objects.create(
+            dni="30123461",
+            apellido_nombre="Docente titular",
+        )
+        designacion_titular = Designacion.objects.create(
+            persona=titular,
+            cargo=self.cargo,
+            desde=date(2026, 3, 1),
+            hasta=date(2026, 12, 31),
+        )
+        form = NuevaDesignacionForm(
+            data={
+                "persona": self.persona.pk,
+                "cargo": self.cargo.pk,
+                "situacion_revista": Designacion.Situacion.SUPLENTE,
+                "desde": "2026-07-01",
+                "hasta": "2026-07-31",
+                "es_suplencia": "on",
+                "reemplaza": designacion_titular.pk,
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        suplencia = form.save()
+        self.assertEqual(suplencia.reemplaza, designacion_titular)
+
+    def test_comando_da_baja_designaciones_vencidas_y_registra_historial(self):
+        hoy = timezone.localdate()
+        designacion = Designacion.objects.create(
+            persona=self.persona,
+            cargo=self.cargo,
+            desde=hoy - timedelta(days=10),
+            hasta=hoy - timedelta(days=1),
+        )
+
+        call_command("cerrar_designaciones_vencidas", verbosity=0)
+
+        designacion.refresh_from_db()
+        self.assertFalse(designacion.activo)
+        self.assertEqual(
+            designacion.historial.latest("pk").accion,
+            HistorialDesignacion.Accion.BAJA,
+        )
 
     def test_csv_importa_suplencia_con_plazo_indeterminado(self):
         contenido = (
@@ -119,22 +244,55 @@ class DesignacionTests(TestCase):
         self.assertTrue(designacion.plazo_indeterminado)
         self.assertIsNone(designacion.hasta)
 
+    def test_csv_importa_suplencia_vinculada_a_designacion_vigente(self):
+        titular = Persona.objects.create(
+            dni="30123462",
+            apellido_nombre="Titular de prueba",
+        )
+        designacion_titular = Designacion.objects.create(
+            persona=titular,
+            cargo=self.cargo,
+            desde=date(2026, 3, 1),
+            hasta=date(2026, 12, 31),
+        )
+        archivo = SimpleUploadedFile(
+            "suplencias.csv",
+            (
+                "dni,apellido_nombre,cargo_codigo,situacion_revista,desde,hasta,"
+                "es_suplencia,reemplaza_id\n"
+                f"30123456,Docente de prueba,PROF,SUP,2026-07-01,2026-07-31,"
+                f"true,{designacion_titular.pk}\n"
+            ).encode("utf-8"),
+        )
+
+        total, rechazadas = _procesar_csv(archivo)
+
+        suplencia = Designacion.objects.get(
+            persona=self.persona,
+            es_suplencia=True,
+        )
+        self.assertEqual((total, rechazadas), (1, 0))
+        self.assertEqual(suplencia.reemplaza, designacion_titular)
+
     def test_formulario_mantiene_el_dni_inmutable_al_editar(self):
         form = PersonaForm(
             data={
-                "apellido_nombre": "Apellido actualizado, Docente",
+                "apellido": "Apellido actualizado",
+                "nombres": "Docente",
                 "sexo": "F",
                 "activa": "on",
             },
             instance=self.persona,
         )
 
-        self.assertNotIn("apellido", form.fields)
-        self.assertNotIn("nombres", form.fields)
+        self.assertIn("apellido", form.fields)
+        self.assertIn("nombres", form.fields)
         self.assertTrue(form.is_valid(), form.errors)
         persona = form.save()
         self.assertEqual(persona.pk, "30123456")
         self.assertEqual(persona.apellido_nombre, "Apellido actualizado, Docente")
+        self.assertEqual(persona.apellido, "Apellido actualizado")
+        self.assertEqual(persona.nombres, "Docente")
 
     def test_formulario_guarda_horas_semanales_por_dia(self):
         form = DesignacionForm(
@@ -251,6 +409,76 @@ class DesignacionTests(TestCase):
         self.assertEqual(evento.despues["filas"], 1)
         self.assertEqual(evento.despues["importadas"], 1)
         self.assertEqual(evento.despues["rechazadas"], 0)
+
+    def test_importacion_csv_funciona_con_permiso_de_alta_sin_change_persona(self):
+        usuario = get_user_model().objects.create_user(
+            username="csv-add-only-test",
+            password="test-password",
+        )
+        self.otorgar_permiso(usuario, "add_persona")
+        cliente = Client()
+        cliente.force_login(usuario)
+        archivo = SimpleUploadedFile(
+            "personal-nuevo.csv",
+            b"dni,apellido_nombre\n30123459,Alta CSV\n",
+        )
+
+        respuesta = cliente.post(
+            reverse("personal:gestion_legajos"),
+            {"accion": "importar_csv", "archivo": archivo},
+            follow=True,
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertTrue(Persona.objects.filter(pk="30123459").exists())
+        self.assertContains(respuesta, "1 filas importadas")
+
+    def test_importacion_csv_exige_alta_de_designacion_y_no_change(self):
+        usuario = get_user_model().objects.create_user(
+            username="csv-designacion-permission-test",
+            password="test-password",
+        )
+        self.otorgar_permiso(usuario, "change_persona")
+        self.otorgar_permiso(usuario, "change_designacion")
+        cliente = Client()
+        cliente.force_login(usuario)
+        archivo = SimpleUploadedFile(
+            "designacion.csv",
+            b"dni,cargo_codigo,desde\n30123456,PROF,2026-03-01\n",
+        )
+
+        respuesta = cliente.post(
+            reverse("personal:gestion_legajos"),
+            {"accion": "importar_csv", "archivo": archivo},
+            follow=True,
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertFalse(Designacion.objects.filter(persona=self.persona).exists())
+        self.assertEqual(ImportacionPersonalError.objects.get().numero_fila, 2)
+
+    def test_importacion_csv_de_designacion_acepta_solo_add_designacion(self):
+        usuario = get_user_model().objects.create_user(
+            username="csv-add-designacion-only-test",
+            password="test-password",
+        )
+        self.otorgar_permiso(usuario, "add_designacion")
+        cliente = Client()
+        cliente.force_login(usuario)
+        archivo = SimpleUploadedFile(
+            "designacion.csv",
+            b"dni,cargo_codigo,desde\n30123456,PROF,2026-03-01\n",
+        )
+
+        respuesta = cliente.post(
+            reverse("personal:gestion_legajos"),
+            {"accion": "importar_csv", "archivo": archivo},
+            follow=True,
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertTrue(Designacion.objects.filter(persona=self.persona).exists())
+        self.assertEqual(ImportacionPersonalError.objects.count(), 0)
 
     def test_catalogo_id_inexistente_no_causa_error_500(self):
         usuario = get_user_model().objects.create_user(
@@ -370,6 +598,18 @@ class DesignacionTests(TestCase):
             html=False,
         )
 
+    def test_pantalla_rechaza_usuario_sin_permisos_de_personal(self):
+        usuario = get_user_model().objects.create_user(
+            username="personal-no-permission-test",
+            password="test-password",
+        )
+        cliente = Client()
+        cliente.force_login(usuario)
+
+        respuesta = cliente.get(reverse("personal:gestion_legajos"))
+
+        self.assertEqual(respuesta.status_code, 403)
+
     def test_ruta_publica_pantalla_redirige_y_usuario_autenticado_la_ve(self):
         cliente = Client()
         url = reverse("personal:gestion_legajos")
@@ -391,6 +631,46 @@ class DesignacionTests(TestCase):
             respuesta_autenticada,
             "Personal docente",
         )
+
+    def test_alta_de_legajo_no_requiere_permiso_de_cambio(self):
+        usuario = get_user_model().objects.create_user(
+            username="personal-add-only-test",
+            password="test-password",
+        )
+        self.otorgar_permiso(usuario, "add_persona")
+        cliente = Client()
+        cliente.force_login(usuario)
+
+        respuesta_get = cliente.get(reverse("personal:gestion_legajos"))
+        respuesta_post = cliente.post(
+            reverse("personal:gestion_legajos"),
+            {
+                "accion": "guardar_persona",
+                "dni": "30123460",
+                "apellido": "Nuevo",
+                "nombres": "Agente",
+                "apellido_nombre": "Nuevo, Agente",
+            },
+        )
+
+        self.assertEqual(respuesta_get.status_code, 200)
+        self.assertRedirects(
+            respuesta_post,
+            f"{reverse('personal:gestion_legajos')}?dni=30123460",
+        )
+        self.assertTrue(Persona.objects.filter(pk="30123460").exists())
+
+        respuesta_edicion_no_autorizada = cliente.post(
+            reverse("personal:gestion_legajos"),
+            {
+                "accion": "guardar_persona",
+                "dni": "30123460",
+                "apellido": "Editado",
+                "nombres": "Agente",
+                "apellido_nombre": "Editado, Agente",
+            },
+        )
+        self.assertEqual(respuesta_edicion_no_autorizada.status_code, 403)
 
     def test_planilla_muestra_designacion_guardada_y_links_de_creacion(self):
         Designacion.objects.create(
@@ -422,6 +702,7 @@ class DesignacionTests(TestCase):
         )
         cliente = Client()
         cliente.force_login(usuario)
+        self.otorgar_permiso(usuario, "add_designacion")
         self.otorgar_permiso(usuario, "change_designacion")
 
         respuesta = cliente.post(
@@ -471,6 +752,67 @@ class DesignacionTests(TestCase):
             designacion.horarios.get(dia=Horario.Dia.LUNES).horas_catedra,
             2,
         )
+
+    def test_alta_de_designacion_no_requiere_permiso_de_cambio(self):
+        usuario = get_user_model().objects.create_user(
+            username="designaciones-add-only-test",
+            password="test-password",
+        )
+        self.otorgar_permiso(usuario, "add_designacion")
+        cliente = Client()
+        cliente.force_login(usuario)
+
+        respuesta = cliente.post(
+            reverse("personal:nueva_designacion"),
+            {
+                "persona": self.persona.pk,
+                "cargo": self.cargo.pk,
+                "situacion_revista": Designacion.Situacion.INTERINO,
+                "desde": "2026-03-01",
+                "horas_lun": "0",
+                "horas_mar": "0",
+                "horas_mie": "0",
+                "horas_jue": "0",
+                "horas_vie": "0",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(respuesta.headers["Location"], reverse("inicio_personal"))
+        self.assertTrue(
+            Designacion.objects.filter(persona=self.persona, cargo=self.cargo).exists()
+        )
+
+    def test_error_de_formulario_de_designacion_se_muestra_sin_error_500(self):
+        usuario = get_user_model().objects.create_user(
+            username="personal-designacion-invalid-form-test",
+            password="test-password",
+        )
+        self.otorgar_permiso(usuario, "add_designacion")
+        cliente = Client()
+        cliente.force_login(usuario)
+
+        respuesta = cliente.post(
+            reverse("personal:gestion_legajos"),
+            {
+                "accion": "guardar_designacion",
+                "dni": self.persona.pk,
+                "cargo": self.cargo.pk,
+                "espacio_curricular": "",
+                "unidad_educativa": "",
+                "situacion_revista": Designacion.Situacion.INTERINO,
+                "desde": "2026-03-10",
+                "hasta": "2026-03-01",
+                "plazo_indeterminado": "",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(
+            respuesta,
+            "La fecha de finalización no puede ser anterior al inicio.",
+        )
+        self.assertFalse(Designacion.objects.filter(persona=self.persona).exists())
 
     def test_editar_designacion_abre_y_guarda_sobre_el_registro(self):
         designacion = Designacion.objects.create(
