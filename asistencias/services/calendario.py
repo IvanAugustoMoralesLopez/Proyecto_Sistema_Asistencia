@@ -11,11 +11,24 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from ..models import DiaNoLaborable, RegistroAsistencia
-from .reglas import _exigir_permiso, _validar_periodo_abierto
+from .reglas import (
+    ANIO_MAXIMO,
+    ANIO_MINIMO,
+    _exigir_permiso,
+    _validar_periodo_abierto,
+)
 
-# Mismo rango de años que el cierre mensual (CierreMensualForm).
-ANIO_MINIMO = 2000
-ANIO_MAXIMO = 2100
+# ANIO_MINIMO y ANIO_MAXIMO viven en `reglas` (son el rango de fechas de todo
+# el módulo) y se reexportan acá para no cambiar las importaciones existentes.
+__all__ = [
+    "ANIO_MAXIMO",
+    "ANIO_MINIMO",
+    "cargar_calendario_masivo",
+    "copiar_calendario",
+    "eliminar_dia_no_laborable",
+    "guardar_dia_no_laborable",
+    "registros_cargados",
+]
 
 
 def _obtener_bloqueado(dia_id):

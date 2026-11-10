@@ -30,6 +30,7 @@ from .planilla import planilla_rapida
 from .recepcion import recepcion_formularios, recepcionar_formulario_view
 from .registro import (
     crear_asistencia,
+    datos_designacion,
     detalle_asistencia,
     editar_asistencia,
     exportar_csv,
@@ -43,6 +44,7 @@ from ._comun import liberar_edicion, renovar_edicion
 __all__ = [
     "registro_diario",
     "crear_asistencia",
+    "datos_designacion",
     "editar_asistencia",
     "historial",
     "detalle_asistencia",

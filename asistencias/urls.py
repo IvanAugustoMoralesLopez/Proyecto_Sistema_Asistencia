@@ -21,6 +21,11 @@ urlpatterns = [
         name="editar_asistencia",
     ),
     path(
+        "datos-designacion/",
+        views.datos_designacion,
+        name="datos_designacion",
+    ),
+    path(
         "historial/",
         views.historial,
         name="historial",

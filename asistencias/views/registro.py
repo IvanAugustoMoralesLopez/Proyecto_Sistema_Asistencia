@@ -4,19 +4,25 @@ asistencia, historial con filtros y validación de registros.
 """
 
 import csv
-from datetime import date, timedelta
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import HttpResponse
+from django.db.models import Q
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
+from licencias.models import LicenciaOtorgada
+from personal.models import Designacion
+
 from ..forms import FiltroAsistenciaForm, RegistroAsistenciaForm
 from ..models import CierreDiario, CierreMensual, EventoAsistencia, RegistroAsistencia
 from ..services import (
+    clave_dia,
     guardar_asistencia,
+    horario_del_dia,
+    horas_del_dia,
     motivo_dia_no_laborable,
     validar_asistencia,
     validar_multiples,
@@ -24,6 +30,10 @@ from ..services import (
 from ._comun import (
     _aplicar_filtros,
     _asegurar_sesion_edicion,
+    _dia_vecino,
+    _fecha_pedida,
+    _id_pedido,
+    _ids_pedidos,
     _mensaje_error,
     _paginar,
     _url_segura,
@@ -33,14 +43,10 @@ from ._comun import (
 
 @vista_protegida("asistencias.view_registroasistencia")
 def registro_diario(request):
-    fecha_seleccionada = request.GET.get(
-        "fecha",
-        timezone.localdate().isoformat(),
-    )
+    hoy = timezone.localdate()
+    fecha_objeto = _fecha_pedida(request.GET.get("fecha"), por_defecto=hoy)
 
-    try:
-        fecha_objeto = date.fromisoformat(fecha_seleccionada)
-    except ValueError:
+    if fecha_objeto is None:
         messages.error(request, "La fecha seleccionada no es válida.")
         return redirect("asistencia:registro_diario")
 
@@ -78,7 +84,7 @@ def registro_diario(request):
         and jornada_cerrada is None
         and not motivo_no_laborable
         and not periodo_cerrado
-        and fecha_objeto <= timezone.localdate()
+        and fecha_objeto <= hoy
     )
 
     total = len(registros)
@@ -99,8 +105,8 @@ def registro_diario(request):
         )
     )
 
-    fecha_anterior = (fecha_objeto - timedelta(days=1)).isoformat()
-    fecha_siguiente = (fecha_objeto + timedelta(days=1)).isoformat()
+    fecha_anterior = _dia_vecino(fecha_objeto, -1).isoformat()
+    fecha_siguiente = _dia_vecino(fecha_objeto, 1).isoformat()
 
     return render(
         request,
@@ -151,16 +157,10 @@ def crear_asistencia(request):
                     f"?fecha={registro.fecha.isoformat()}"
                 )
     else:
-        initial = {}
-        if fecha_inicial:
-            try:
-                initial["fecha"] = date.fromisoformat(fecha_inicial)
-            except ValueError:
-                initial["fecha"] = timezone.localdate()
-        else:
-            initial["fecha"] = timezone.localdate()
-
-        form = RegistroAsistenciaForm(initial=initial)
+        hoy = timezone.localdate()
+        form = RegistroAsistenciaForm(
+            initial={"fecha": _fecha_pedida(fecha_inicial, por_defecto=hoy) or hoy}
+        )
 
     return render(
         request,
@@ -231,6 +231,72 @@ def editar_asistencia(request, pk):
             "url_cancelar": volver or reverse("asistencia:historial"),
         },
     )
+
+
+@vista_protegida("asistencias.view_registroasistencia")
+def datos_designacion(request):
+    """
+    Datos que el alta individual puede completar sola (JSON).
+
+    Dada una designación y una fecha devuelve las horas cátedra que el
+    docente tiene ese día de la semana y las licencias otorgadas que cubren
+    la fecha, para que el operador no tenga que buscarlas ni escribirlas.
+    Es solo lectura: no crea ni modifica nada.
+    """
+    designacion_id = _id_pedido(request.GET.get("designacion"))
+    fecha = _fecha_pedida(request.GET.get("fecha"))
+
+    if designacion_id is None or fecha is None:
+        return JsonResponse(
+            {"error": "Indicá una designación y una fecha válidas."},
+            status=400,
+        )
+
+    designacion = (
+        Designacion.objects.filter(pk=designacion_id)
+        .select_related("persona")
+        .prefetch_related("horarios")
+        .first()
+    )
+
+    if designacion is None:
+        return JsonResponse({"error": "La designación no existe."}, status=404)
+
+    horas = horas_del_dia(designacion, fecha)
+    horario = horario_del_dia(designacion, fecha)
+    licencias = (
+        LicenciaOtorgada.objects.select_related("articulo")
+        .filter(designacion=designacion, desde__lte=fecha)
+        .filter(Q(hasta__isnull=True) | Q(hasta__gte=fecha))
+        .order_by("desde", "pk")
+    )
+
+    return JsonResponse({
+        "dia": clave_dia(fecha),
+        "tiene_clase": horario is not None,
+        "horas_dia": str(horas),
+        "hora_inicio": (
+            horario.hora_inicio.strftime("%H:%M")
+            if horario and horario.hora_inicio
+            else ""
+        ),
+        "hora_fin": (
+            horario.hora_fin.strftime("%H:%M")
+            if horario and horario.hora_fin
+            else ""
+        ),
+        "motivo_no_laborable": motivo_dia_no_laborable(fecha) or "",
+        "licencias": [
+            {
+                "id": licencia.pk,
+                "texto": (
+                    f"{licencia.articulo.articulo} · "
+                    f"{licencia.articulo.tipo_licencia}"
+                ),
+            }
+            for licencia in licencias
+        ],
+    })
 
 
 @vista_protegida("asistencias.view_registroasistencia")
@@ -321,8 +387,7 @@ def validar_registro(request, pk):
 
 @vista_protegida("asistencias.validar_registro", methods=["POST"])
 def validar_multiples_view(request):
-    ids = request.POST.getlist("registro_ids")
-    ids_validos = [int(i) for i in ids if i.isdecimal()]
+    ids_validos = _ids_pedidos(request.POST.getlist("registro_ids"))
 
     if not ids_validos:
         messages.warning(request, "No seleccionaste ningún registro.")

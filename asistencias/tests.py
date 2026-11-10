@@ -17,7 +17,15 @@ from django.urls import reverse
 from django.utils import timezone
 
 from licencias.models import LicenciaArticulo, LicenciaOtorgada
-from personal.models import Cargo, Carrera, Designacion, EspacioCurricular, Persona
+from personal.models import (
+    Cargo,
+    Carrera,
+    Designacion,
+    EspacioCurricular,
+    Horario,
+    Persona,
+)
+from reportes.models import ParametroSistema
 
 from .forms import RegistroAsistenciaForm
 from .models import (
@@ -2968,3 +2976,278 @@ class InasistenciasDelPeriodoTests(TestCase):
             [(registro.fecha, registro.marca.codigo) for registro in registros],
             [(date(2026, 3, 10), "I"), (date(2026, 3, 11), "PR")],
         )
+
+
+class EntradasFueraDeRangoTests(BaseAsistenciaTests):
+    """
+    Valores que el navegador puede enviar y que antes terminaban en un
+    error 500: fechas en los extremos del calendario e ids más grandes que
+    la clave de la base.
+    """
+
+    ID_ENORME = "99999999999999999999"
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.usuario)
+
+    def test_el_registro_diario_acepta_una_fecha_del_ano_9999(self):
+        respuesta = self.client.get(
+            reverse("asistencia:registro_diario"), {"fecha": "9999-12-31"}
+        )
+        self.assertEqual(respuesta.status_code, 302)
+
+    def test_el_registro_diario_acepta_una_fecha_del_ano_1(self):
+        respuesta = self.client.get(
+            reverse("asistencia:registro_diario"), {"fecha": "0001-01-01"}
+        )
+        self.assertEqual(respuesta.status_code, 302)
+
+    def test_la_navegacion_diaria_no_se_sale_del_rango(self):
+        respuesta = self.client.get(
+            reverse("asistencia:registro_diario"), {"fecha": "2100-12-31"}
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.context["fecha_siguiente"], "2100-12-31")
+        self.assertEqual(respuesta.context["fecha_anterior"], "2100-12-30")
+
+    def test_validar_varios_con_un_id_enorme_no_rompe(self):
+        respuesta = self.client.post(
+            reverse("asistencia:validar_multiples"),
+            {"registro_ids": ["abc", self.ID_ENORME]},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+
+    def test_el_cierre_mensual_rechaza_un_ano_enorme_sin_romper(self):
+        respuesta = self.client.post(
+            reverse("asistencia:confirmar_cierre"),
+            {"anio": "99999999999", "mes": "13"},
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIsNone(respuesta.context["resumen"])
+
+    def test_la_planilla_descarta_una_designacion_con_id_enorme(self):
+        respuesta = self.client.post(
+            reverse("asistencia:planilla_rapida"),
+            {"fecha": LUNES.isoformat(), "marca-" + self.ID_ENORME: "1"},
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertFalse(RegistroAsistencia.objects.exists())
+
+    def test_la_planilla_acepta_una_fecha_fuera_del_rango_sin_romper(self):
+        respuesta = self.client.get(
+            reverse("asistencia:planilla_rapida"), {"fecha": "9999-12-31"}
+        )
+        self.assertEqual(respuesta.status_code, 302)
+
+    def test_cerrar_la_jornada_con_una_fecha_fuera_de_rango_no_rompe(self):
+        respuesta = self.client.post(
+            reverse("asistencia:cerrar_jornada"), {"fecha": "9999-12-31"}
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertFalse(CierreDiario.objects.exists())
+
+
+class AutocompletadoPlanillaTests(BasePlanillaTests):
+    """
+    La planilla se completa sola con lo que ya está cargado: el horario del
+    docente, su licencia vigente y, si se pide, lo del día hábil anterior.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.usuario)
+        self.url = reverse("asistencia:planilla_rapida")
+        # PEREZ da clase el lunes (4 horas); GOMEZ no tiene horario cargado.
+        Horario.objects.create(
+            designacion=self.designacion,
+            dia="LUN",
+            horas_catedra=4,
+        )
+
+    def ver(self, **extra):
+        datos = {"fecha": LUNES.isoformat()}
+        datos.update(extra)
+        return self.client.get(self.url, datos)
+
+    def fila_de(self, respuesta, designacion):
+        for fila in respuesta.context["filas"]:
+            if fila["designacion"].pk == designacion.pk:
+                return fila
+        return None
+
+    def test_por_defecto_solo_muestra_a_quien_tiene_clase_ese_dia(self):
+        respuesta = self.ver()
+        ids = [fila["designacion"].pk for fila in respuesta.context["filas"]]
+        self.assertEqual(ids, [self.designacion.pk])
+        self.assertFalse(respuesta.context["sin_horarios"])
+
+    def test_se_pueden_pedir_todas_las_designaciones_vigentes(self):
+        respuesta = self.ver(alcance="todos")
+        ids = [fila["designacion"].pk for fila in respuesta.context["filas"]]
+        self.assertEqual(
+            sorted(ids),
+            sorted([self.gomez.pk, self.designacion.pk, self.perez_2.pk]),
+        )
+
+    def test_sin_ningun_horario_cargado_se_muestran_todas_y_se_avisa(self):
+        Horario.objects.all().delete()
+        respuesta = self.ver()
+        self.assertTrue(respuesta.context["sin_horarios"])
+        self.assertEqual(len(respuesta.context["filas"]), 3)
+
+    def test_la_fila_trae_las_horas_del_horario_de_ese_dia(self):
+        fila = self.fila_de(self.ver(), self.designacion)
+        self.assertEqual(fila["horas_dia"], Decimal("4.00"))
+        self.assertEqual(fila["horario"].dia, "LUN")
+
+    def test_el_martes_la_misma_designacion_no_tiene_horas(self):
+        respuesta = self.client.get(
+            self.url, {"fecha": MARTES.isoformat(), "alcance": "todos"}
+        )
+        fila = self.fila_de(respuesta, self.designacion)
+        self.assertEqual(fila["horas_dia"], Decimal("0.00"))
+        self.assertIsNone(fila["horario"])
+
+    def test_propone_presente_en_las_filas_pendientes(self):
+        fila = self.fila_de(self.ver(), self.designacion)
+        self.assertEqual(fila["valores"]["marca"], str(self.marca_p.pk))
+        self.assertEqual(fila["valores"]["origen"], "presente")
+
+    def test_con_licencia_vigente_propone_la_marca_y_la_licencia(self):
+        licencia = self.crear_licencia(desde=LUNES, hasta=LUNES)
+        fila = self.fila_de(self.ver(), self.designacion)
+        self.assertEqual(fila["valores"]["marca"], str(self.marca_lic.pk))
+        self.assertEqual(fila["valores"]["licencia"], str(licencia.pk))
+        self.assertEqual(fila["valores"]["horas"], "4.00")
+        self.assertEqual(fila["valores"]["origen"], "licencia")
+
+    def test_una_fila_ya_cargada_no_recibe_propuesta(self):
+        self.guardar()
+        fila = self.fila_de(self.ver(), self.designacion)
+        self.assertIsNotNone(fila["registro"])
+        self.assertEqual(fila["valores"], {})
+
+    def test_trae_lo_cargado_el_dia_habil_anterior(self):
+        viernes = LUNES - timedelta(days=3)  # viernes previo
+        guardar_asistencia(
+            usuario=self.usuario,
+            token=self.token,
+            datos={
+                "designacion": self.designacion,
+                "fecha": viernes,
+                "marca": self.marca_i,
+                "horas_inasistidas": Decimal("4"),
+                "licencia": None,
+                "observaciones": "Sin aviso",
+            },
+        )
+
+        respuesta = self.client.post(
+            self.url,
+            {
+                "fecha": LUNES.isoformat(),
+                "alcance": "todos",
+                "accion": "copiar",
+            },
+        )
+
+        fila = self.fila_de(respuesta, self.designacion)
+        self.assertEqual(respuesta.context["copiado_de"], viernes)
+        self.assertEqual(fila["valores"]["marca"], str(self.marca_i.pk))
+        self.assertEqual(fila["valores"]["horas"], "4.00")
+        self.assertEqual(fila["valores"]["obs"], "Sin aviso")
+        self.assertEqual(fila["valores"]["origen"], "copia")
+        # Copiar no guarda nada: solo deja la planilla lista para revisar.
+        self.assertFalse(
+            RegistroAsistencia.objects.filter(fecha=LUNES).exists()
+        )
+
+    def test_copiar_sin_nada_el_dia_anterior_lo_informa(self):
+        respuesta = self.client.post(
+            self.url, {"fecha": LUNES.isoformat(), "accion": "copiar"}
+        )
+        self.assertIsNone(respuesta.context["copiado_de"])
+
+    def test_la_planilla_informa_el_ciclo_lectivo_configurado(self):
+        respuesta = self.ver()
+        self.assertEqual(
+            respuesta.context["ciclo_lectivo"],
+            ParametroSistema.obtener().ciclo_lectivo,
+        )
+
+
+class DatosDesignacionTests(BaseAsistenciaTests):
+    """Endpoint JSON que completa solo el alta individual."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.usuario)
+        self.url = reverse("asistencia:datos_designacion")
+        Horario.objects.create(
+            designacion=self.designacion,
+            dia="LUN",
+            horas_catedra=3,
+        )
+
+    def consultar(self, **extra):
+        datos = {
+            "designacion": self.designacion.pk,
+            "fecha": LUNES.isoformat(),
+        }
+        datos.update(extra)
+        return self.client.get(self.url, datos)
+
+    def test_devuelve_las_horas_del_dia(self):
+        datos = self.consultar().json()
+        self.assertTrue(datos["tiene_clase"])
+        self.assertEqual(datos["horas_dia"], "3.00")
+        self.assertEqual(datos["dia"], "LUN")
+
+    def test_un_dia_sin_clase_lo_informa(self):
+        datos = self.consultar(fecha=MARTES.isoformat()).json()
+        self.assertFalse(datos["tiene_clase"])
+        self.assertEqual(datos["horas_dia"], "0.00")
+
+    def test_un_fin_de_semana_informa_el_motivo(self):
+        datos = self.consultar(fecha=SABADO.isoformat()).json()
+        self.assertIn("fin de semana", datos["motivo_no_laborable"])
+
+    def test_devuelve_la_licencia_que_cubre_la_fecha(self):
+        licencia = self.crear_licencia(desde=LUNES, hasta=LUNES)
+        datos = self.consultar().json()
+        self.assertEqual(
+            [item["id"] for item in datos["licencias"]], [licencia.pk]
+        )
+
+    def test_una_designacion_inexistente_da_404(self):
+        self.assertEqual(self.consultar(designacion=999999).status_code, 404)
+
+    def test_un_id_enorme_no_rompe(self):
+        respuesta = self.consultar(designacion="99999999999999999999")
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_una_fecha_invalida_da_400(self):
+        self.assertEqual(self.consultar(fecha="abc").status_code, 400)
+
+    def test_sin_permiso_de_lectura_se_deniega(self):
+        self.client.force_login(crear_usuario("sinrol"))
+        self.assertEqual(self.consultar().status_code, 403)
+
+
+class MarcaSinCatalogoTests(BaseAsistenciaTests):
+    """Si falta una marca del catálogo cerrado, se avisa en vez de romper."""
+
+    def test_marcar_una_licencia_sin_la_marca_lic_avisa(self):
+        from .services import marcar_licencia
+
+        Horario.objects.create(
+            designacion=self.designacion, dia="LUN", horas_catedra=2
+        )
+        licencia = self.crear_licencia(desde=LUNES, hasta=LUNES)
+        MarcaAsistencia.objects.filter(codigo="LIC").delete()
+
+        with self.assertRaises(ValidationError) as contexto:
+            marcar_licencia(licencia, usuario=self.usuario)
+
+        self.assertIn("LIC", " ".join(contexto.exception.messages))

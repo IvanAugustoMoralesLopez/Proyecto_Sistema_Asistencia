@@ -7,6 +7,7 @@ liberación/renovación manual de sesión.
 
 import functools
 import uuid
+from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -18,9 +19,56 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from ..services import (
     adquirir_sesion_edicion,
+    fecha_admitida,
+    id_admitido,
     liberar_sesion_edicion,
     renovar_sesion_edicion,
 )
+
+
+def _fecha_pedida(texto, por_defecto=None):
+    """
+    Fecha ISO recibida por GET/POST, o None si no sirve.
+
+    Rechaza lo que no es una fecha y también las fechas fuera del rango que
+    el sistema admite (año 2000 a 2100): con `date.max` o `date.min`, sumar o
+    restar un día para los botones «anterior» y «siguiente» desborda el tipo
+    `date` y la pantalla responde con un error 500.
+    """
+    if not texto:
+        return por_defecto
+
+    try:
+        fecha = date.fromisoformat(texto)
+    except (TypeError, ValueError):
+        return None
+
+    return fecha if fecha_admitida(fecha) else None
+
+
+def _dia_vecino(fecha, dias):
+    """Fecha corrida `dias` días, acotada al rango que el sistema admite."""
+    try:
+        vecina = fecha + timedelta(days=dias)
+    except (OverflowError, ValueError):
+        return fecha
+
+    return vecina if fecha_admitida(vecina) else fecha
+
+
+def _id_pedido(valor):
+    """Id de base válido recibido del navegador, o None."""
+    return id_admitido(valor)
+
+
+def _ids_pedidos(valores):
+    """Ids de base válidos de una lista recibida del navegador, sin repetir."""
+    vistos = []
+    for valor in valores:
+        numero = id_admitido(valor)
+        if numero is not None and numero not in vistos:
+            vistos.append(numero)
+    return vistos
 
 
 def vista_protegida(permiso, *, methods=None):

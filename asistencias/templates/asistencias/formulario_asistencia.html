@@ -37,3 +37,94 @@
         </div>
     </div>
 {% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+(function () {
+    // Autocompletado del alta individual: elegido el docente y la fecha, el
+    // sistema trae del horario las horas de ese día y las licencias que
+    // cubren la fecha, para no escribirlas a mano todos los días.
+    var url = "{% url 'asistencia:datos_designacion' %}";
+    var designacion = document.getElementById("id_designacion");
+    var fecha = document.getElementById("id_fecha");
+    var horas = document.getElementById("id_horas_inasistidas");
+    var marca = document.getElementById("id_marca");
+    var licencia = document.getElementById("id_licencia");
+
+    if (!designacion || !fecha) { return; }
+
+    var aviso = document.createElement("div");
+    aviso.className = "form-text";
+    designacion.insertAdjacentElement("afterend", aviso);
+
+    function opcionMarca() {
+        return marca ? marca.options[marca.selectedIndex] : null;
+    }
+
+    function exigeHoras() {
+        var opcion = opcionMarca();
+        return !!(opcion && opcion.dataset.horas === "1");
+    }
+
+    function exigeLicencia() {
+        var opcion = opcionMarca();
+        return !!(opcion && opcion.dataset.licencia === "1");
+    }
+
+    function consultar() {
+        if (!designacion.value || !fecha.value) {
+            aviso.textContent = "";
+            return;
+        }
+
+        var consulta = url + "?designacion=" + encodeURIComponent(designacion.value) +
+                       "&fecha=" + encodeURIComponent(fecha.value);
+
+        fetch(consulta, { headers: { "X-Requested-With": "fetch" } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (datos) {
+                if (!datos) { aviso.textContent = ""; return; }
+
+                var partes = [];
+
+                if (datos.motivo_no_laborable) {
+                    partes.push(datos.motivo_no_laborable);
+                } else if (datos.tiene_clase) {
+                    var franja = datos.hora_inicio && datos.hora_fin
+                        ? " (" + datos.hora_inicio + "–" + datos.hora_fin + ")"
+                        : "";
+                    partes.push("Ese día tiene " + datos.horas_dia + " hs cátedra" + franja);
+
+                    // El campo arranca en 0 (valor por defecto del modelo):
+                    // eso también cuenta como «todavía sin completar».
+                    var vacio = !horas || !horas.value ||
+                                parseFloat(horas.value) === 0;
+
+                    if (horas && vacio && exigeHoras()) {
+                        horas.value = datos.horas_dia;
+                    }
+                } else {
+                    partes.push("Ese día no tiene horario cargado");
+                }
+
+                if (datos.licencias.length) {
+                    partes.push("Licencia vigente: " + datos.licencias[0].texto);
+
+                    if (licencia && !licencia.value && exigeLicencia()) {
+                        licencia.value = String(datos.licencias[0].id);
+                    }
+                }
+
+                aviso.textContent = partes.join(" · ");
+            })
+            .catch(function () { aviso.textContent = ""; });
+    }
+
+    designacion.addEventListener("change", consultar);
+    fecha.addEventListener("change", consultar);
+    if (marca) { marca.addEventListener("change", consultar); }
+    consultar();
+})();
+</script>
+{% endblock %}
