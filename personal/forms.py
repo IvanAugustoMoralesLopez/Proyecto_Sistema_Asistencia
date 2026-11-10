@@ -1,5 +1,6 @@
 from django import forms
 from django.db import transaction
+from django.db.models import Q
 
 from .models import (
     Cargo,
@@ -99,6 +100,8 @@ class PersonaForm(forms.ModelForm):
         model = Persona
         fields = [
             "dni",
+            "apellido",
+            "nombres",
             "apellido_nombre",
             "sexo",
             "fecha_nacimiento",
@@ -123,6 +126,8 @@ class PersonaForm(forms.ModelForm):
                     "maxlength": "10",
                 }
             ),
+            "apellido": forms.TextInput(attrs={"class": "form-control"}),
+            "nombres": forms.TextInput(attrs={"class": "form-control"}),
             "apellido_nombre": forms.TextInput(attrs={"class": "form-control"}),
             "sexo": forms.Select(attrs={"class": "form-select"}),
             "fecha_nacimiento": forms.DateInput(
@@ -144,13 +149,43 @@ class PersonaForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["apellido_nombre"].required = False
         if self.instance and self.instance.pk:
             self.fields["dni"].disabled = True
             self.fields["dni"].help_text = "El DNI identifica el legajo y no se modifica."
 
     def clean(self):
         cleaned_data = super().clean()
+        apellido = (cleaned_data.get("apellido") or "").strip()
+        nombres = (cleaned_data.get("nombres") or "").strip()
         nombre_completo = cleaned_data.get("apellido_nombre", "").strip()
+
+        if self.instance and self.instance.pk:
+            cambios_componentes = (
+                apellido != self.instance.apellido or nombres != self.instance.nombres
+            )
+            cambio_nombre_completo = (
+                nombre_completo != self.instance.apellido_nombre
+            )
+        else:
+            cambios_componentes = bool(apellido or nombres)
+            cambio_nombre_completo = bool(nombre_completo)
+
+        if cambios_componentes:
+            nombre_completo = ", ".join(
+                parte for parte in (apellido, nombres) if parte
+            )
+            cleaned_data["apellido_nombre"] = nombre_completo
+        elif cambio_nombre_completo and nombre_completo:
+            if "," in nombre_completo:
+                apellido, nombres = (
+                    parte.strip() for parte in nombre_completo.split(",", 1)
+                )
+            else:
+                apellido, nombres = nombre_completo, ""
+            cleaned_data["apellido"] = apellido
+            cleaned_data["nombres"] = nombres
+
         if not nombre_completo:
             self.add_error(
                 "apellido_nombre",
@@ -210,6 +245,7 @@ class DesignacionForm(forms.ModelForm):
             "division_seccion",
             "turno",
             "hs_catedra",
+            "reemplaza",
             "especialidad",
             "disp_alta_nro",
             "sello_regional_as",
@@ -237,6 +273,7 @@ class DesignacionForm(forms.ModelForm):
             "hs_catedra": forms.NumberInput(
                 attrs={"class": "form-control", "min": "0"}
             ),
+            "reemplaza": forms.Select(attrs={"class": "form-select"}),
             "especialidad": forms.Select(attrs={"class": "form-select"}),
             "disp_alta_nro": forms.TextInput(attrs={"class": "form-control"}),
             "sello_regional_as": forms.TextInput(attrs={"class": "form-control"}),
@@ -278,6 +315,20 @@ class DesignacionForm(forms.ModelForm):
         self.fields["unidad_educativa"].queryset = UnidadEducativa.objects.order_by(
             "descripcion", "numero"
         )
+        reemplazos = Designacion.objects.filter(activo=True)
+        if self.instance and self.instance.pk:
+            reemplazos = reemplazos.exclude(pk=self.instance.pk)
+            if self.instance.reemplaza_id:
+                reemplazos = Designacion.objects.filter(
+                    Q(activo=True) | Q(pk=self.instance.reemplaza_id)
+                ).exclude(pk=self.instance.pk)
+            if self.instance.persona_id:
+                reemplazos = reemplazos.exclude(
+                    persona_id=self.instance.persona_id
+                )
+        self.fields["reemplaza"].queryset = reemplazos.select_related(
+            "persona", "cargo"
+        ).order_by("persona__apellido_nombre", "desde")
 
         if self.instance and self.instance.pk:
             horarios = {
@@ -292,10 +343,21 @@ class DesignacionForm(forms.ModelForm):
         desde = cleaned_data.get("desde")
         hasta = cleaned_data.get("hasta")
         plazo_indeterminado = cleaned_data.get("plazo_indeterminado")
+        reemplaza = cleaned_data.get("reemplaza")
         if desde and hasta and hasta < desde:
             self.add_error("hasta", "La fecha de finalización no puede ser anterior al inicio.")
         if plazo_indeterminado:
             cleaned_data["hasta"] = None
+        if (
+            reemplaza
+            and self.instance.reemplaza_id != reemplaza.pk
+            and desde
+            and not reemplaza.vigente_en(desde)
+        ):
+            self.add_error(
+                "reemplaza",
+                "La designación reemplazada no está vigente al inicio de la suplencia.",
+            )
         return cleaned_data
 
     @transaction.atomic
@@ -327,6 +389,17 @@ class NuevaDesignacionForm(DesignacionForm):
         label="Legajo del agente",
         widget=forms.HiddenInput(),
     )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        persona = cleaned_data.get("persona")
+        reemplaza = cleaned_data.get("reemplaza")
+        if persona and reemplaza and persona.pk == reemplaza.persona_id:
+            self.add_error(
+                "reemplaza",
+                "El docente suplente no puede reemplazarse a sí mismo.",
+            )
+        return cleaned_data
 
     @transaction.atomic
     def save(self, commit=True):

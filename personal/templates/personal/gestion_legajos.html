@@ -14,7 +14,9 @@
         <a class="btn btn-outline-secondary" href="{% url 'inicio_personal' %}">
             <i class="bi bi-arrow-left"></i> Volver
         </a>
+        {% if puede_importar_csv %}
         <a class="btn btn-outline-primary" href="#importacion">Importar CSV</a>
+        {% endif %}
     </div>
 </div>
 
@@ -59,13 +61,14 @@
         <h2 class="h5 mb-0">Datos centralizados del agente</h2>
     </div>
     <div class="card-body">
-        <form method="post" action="/personal/legajos/">
+        <form method="post" action="{% url 'personal:gestion_legajos' %}">
             {% csrf_token %}
             <input type="hidden" name="accion" value="guardar_persona">
             {% if persona %}<input type="hidden" name="dni" value="{{ persona.dni }}">{% endif %}
+            <fieldset class="border-0 p-0 m-0" {% if not puede_guardar_persona %}disabled{% endif %}>
             <div class="row g-3">
                 {% for field in persona_form %}
-                    <div class="{% if field.name == 'apellido_nombre' %}col-md-6{% elif field.name == 'domicilio_calle' %}col-md-6{% elif field.name == 'dni' or field.name == 'sexo' or field.name == 'fecha_nacimiento' or field.name == 'estado_civil' or field.name == 'nacionalidad' or field.name == 'nro_dgi' or field.name == 'nro_dgr' or field.name == 'barrio' or field.name == 'localidad' or field.name == 'codigo_postal' or field.name == 'provincia' or field.name == 'telefono' or field.name == 'email' %}col-md-3{% else %}col-12{% endif %}">
+                    <div class="{% if field.name == 'apellido_nombre' %}col-md-6{% elif field.name == 'domicilio_calle' %}col-md-6{% elif field.name == 'dni' or field.name == 'sexo' or field.name == 'fecha_nacimiento' or field.name == 'estado_civil' or field.name == 'nacionalidad' or field.name == 'nro_dgi' or field.name == 'nro_dgr' or field.name == 'apellido' or field.name == 'nombres' or field.name == 'barrio' or field.name == 'localidad' or field.name == 'codigo_postal' or field.name == 'provincia' or field.name == 'telefono' or field.name == 'email' %}col-md-3{% else %}col-12{% endif %}">
                         {% if field.name == "activa" %}
                             <div class="form-check mt-4">
                                 {{ field }}{{ field.label_tag }}
@@ -87,11 +90,16 @@
                 <div class="alert alert-danger mt-3">{{ persona_form.non_field_errors }}</div>
             {% endif %}
             <div class="mt-3">
-                <button type="submit" class="btn btn-primary">Guardar legajo</button>
+                {% if puede_guardar_persona %}
+                    <button type="submit" class="btn btn-primary">Guardar legajo</button>
+                {% else %}
+                    <span class="text-secondary">Acceso de solo consulta para este legajo.</span>
+                {% endif %}
                 {% if persona %}
-                    <a class="btn btn-outline-secondary" href="/personal/legajos/?dni={{ persona.dni }}">Cancelar edición</a>
+                    <a class="btn btn-outline-secondary" href="{% url 'personal:gestion_legajos' %}?dni={{ persona.dni|urlencode }}">Cancelar edición</a>
                 {% endif %}
             </div>
+            </fieldset>
         </form>
     </div>
 </div>
@@ -100,10 +108,12 @@
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h2 class="h5 mb-0">Designaciones de {{ persona.apellido_nombre }}</h2>
-        <a class="btn btn-sm btn-light" href="/personal/legajos/?dni={{ persona.dni }}">Nueva designación</a>
+        {% if puede_guardar_designacion %}
+            <a class="btn btn-sm btn-light" href="{% url 'personal:gestion_legajos' %}?dni={{ persona.dni|urlencode }}">Nueva designación</a>
+        {% endif %}
     </div>
     <div class="card-body">
-        <form method="post" action="/personal/legajos/">
+        <form method="post" action="{% url 'personal:gestion_legajos' %}">
             {% csrf_token %}
             <input type="hidden" name="accion" value="guardar_designacion">
             <input type="hidden" name="dni" value="{{ persona.dni }}">
@@ -114,6 +124,7 @@
                 <h3 class="h6 mb-3">Agregar designación</h3>
             {% endif %}
 
+            <fieldset class="border-0 p-0 m-0" {% if not puede_guardar_designacion %}disabled{% endif %}>
             <div class="row g-3 mb-3">
                 <div class="col-md-3">{{ designacion_form.cargo.label_tag }}{{ designacion_form.cargo }}</div>
                 <div class="col-md-3">{{ designacion_form.espacio_curricular.label_tag }}{{ designacion_form.espacio_curricular }}</div>
@@ -162,10 +173,15 @@
             {% if designacion_form.non_field_errors %}
                 <div class="alert alert-danger">{{ designacion_form.non_field_errors }}</div>
             {% endif %}
-            <button type="submit" class="btn btn-primary">Guardar designación</button>
-            {% if designacion_seleccionada %}
-                <a class="btn btn-outline-secondary" href="/personal/legajos/?dni={{ persona.dni }}">Cancelar</a>
+            {% if puede_guardar_designacion %}
+                <button type="submit" class="btn btn-primary">Guardar designación</button>
+            {% else %}
+                <span class="text-secondary">Acceso de solo consulta para las designaciones.</span>
             {% endif %}
+            {% if designacion_seleccionada %}
+                <a class="btn btn-outline-secondary" href="{% url 'personal:gestion_legajos' %}?dni={{ persona.dni|urlencode }}">Cancelar</a>
+            {% endif %}
+            </fieldset>
         </form>
     </div>
 </div>
@@ -222,9 +238,11 @@
                             {% empty %}—{% endfor %}
                         </td>
                         <td class="text-nowrap">
-                            <a class="btn btn-sm btn-outline-primary" href="/personal/legajos/?dni={{ persona.dni }}&designacion={{ designacion.pk }}">Editar</a>
-                            {% if designacion.activo %}
-                                <form method="post" action="/personal/legajos/" class="d-inline">
+                            {% if perms.personal.change_designacion %}
+                                <a class="btn btn-sm btn-outline-primary" href="{% url 'personal:gestion_legajos' %}?dni={{ persona.dni|urlencode }}&amp;designacion={{ designacion.pk }}">Editar</a>
+                            {% endif %}
+                            {% if designacion.activo and perms.personal.change_designacion %}
+                                <form method="post" action="{% url 'personal:gestion_legajos' %}" class="d-inline">
                                     {% csrf_token %}
                                     <input type="hidden" name="accion" value="dar_baja_designacion">
                                     <input type="hidden" name="dni" value="{{ persona.dni }}">
@@ -269,7 +287,7 @@
                         <td>{{ resultado.espacio_curricular|default:"—" }}</td>
                         <td>{{ resultado.get_situacion_revista_display|default:"—" }}</td>
                         <td>{{ resultado.desde|date:"d/m/Y" }} – {{ resultado.hasta|date:"d/m/Y"|default:"Sin término" }}</td>
-                        <td><a class="btn btn-sm btn-outline-secondary" href="/personal/legajos/?dni={{ resultado.persona.dni }}">Ver legajo</a></td>
+                        <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'personal:gestion_legajos' %}?dni={{ resultado.persona.dni|urlencode }}">Ver legajo</a></td>
                     </tr>
                 {% empty %}
                     <tr><td colspan="7" class="text-center py-4 text-secondary">No hay designaciones para los filtros indicados.</td></tr>
@@ -286,10 +304,11 @@
     <div class="card-body">
         <p class="text-secondary">
             Codificación UTF-8. Columnas admitidas:
-            <code>dni,apellido,nombres,apellido_nombre,sexo,telefono,email,localidad,domicilio_calle,cargo_codigo,espacio_curricular,situacion_revista,desde,hasta,norma_tipo,norma_numero,organismo_emisor,es_suplencia,plazo_indeterminado</code>.
-            Para importar sólo datos personales, deje vacía la columna de cargo. Las designaciones requieren una fecha <code>desde</code> en formato AAAA-MM-DD y un cargo ya registrado.
+            <code>dni,apellido,nombres,apellido_nombre,sexo,telefono,email,localidad,domicilio_calle,cargo_codigo,espacio_curricular,situacion_revista,desde,hasta,norma_tipo,norma_numero,organismo_emisor,es_suplencia,plazo_indeterminado,reemplaza_id</code>.
+            Para importar sólo datos personales, deje vacía la columna de cargo. Las designaciones requieren una fecha <code>desde</code> en formato AAAA-MM-DD y un cargo ya registrado. Las suplencias deben incluir <code>hasta</code> o indicar plazo indeterminado; <code>reemplaza_id</code> es opcional.
         </p>
-        <form method="post" action="/personal/legajos/" enctype="multipart/form-data" class="row g-3 align-items-end">
+        {% if puede_importar_csv %}
+        <form method="post" action="{% url 'personal:gestion_legajos' %}" enctype="multipart/form-data" class="row g-3 align-items-end">
             {% csrf_token %}
             <input type="hidden" name="accion" value="importar_csv">
             <div class="col-md-8">
@@ -300,6 +319,7 @@
                 <button type="submit" class="btn btn-primary">Procesar archivo</button>
             </div>
         </form>
+        {% endif %}
         {% if errores_importacion %}
             <h3 class="h6 mt-4">Últimas filas rechazadas</h3>
             <div class="table-responsive">

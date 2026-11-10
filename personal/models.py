@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models, transaction
 from django.db.models import F, Q
@@ -300,28 +301,75 @@ class Designacion(models.Model):
             and (self.hasta is None or fecha <= self.hasta)
         )
 
+    def clean(self):
+        errores = {}
+        if self.plazo_indeterminado and not self.es_suplencia:
+            errores["plazo_indeterminado"] = (
+                "El plazo indeterminado sólo corresponde a una suplencia."
+            )
+        if self.es_suplencia and not self.plazo_indeterminado and self.hasta is None:
+            errores["hasta"] = (
+                "Indique la fecha de cese o marque el plazo como indeterminado."
+            )
+        if self.plazo_indeterminado and self.hasta is not None:
+            errores["hasta"] = (
+                "Una designación con plazo indeterminado no puede tener fecha de cese."
+            )
+        if self.reemplaza_id:
+            if not self.es_suplencia:
+                errores["reemplaza"] = (
+                    "Sólo una suplencia puede reemplazar otra designación."
+                )
+            elif self.persona_id == self.reemplaza.persona_id:
+                errores["reemplaza"] = (
+                    "El docente suplente no puede reemplazarse a sí mismo."
+                )
+            elif (
+                self._state.adding
+                and self.desde
+                and not self.reemplaza.vigente_en(self.desde)
+            ):
+                errores["reemplaza"] = (
+                    "La designación reemplazada no está vigente al inicio de la suplencia."
+                )
+        if errores:
+            raise ValidationError(errores)
+
     def save(self, *args, **kwargs):
         with transaction.atomic():
             es_nueva = self._state.adding
             anterior = None
+            campos_historial = (
+                "persona_id",
+                "cargo_id",
+                "espacio_curricular_id",
+                "unidad_educativa_id",
+                "especialidad_id",
+                "reemplaza_id",
+                "situacion_revista",
+                "anio_curso",
+                "division_seccion",
+                "turno",
+                "hs_catedra",
+                "jornada",
+                "disp_alta_nro",
+                "sello_regional_as",
+                "motivo_id",
+                "norma_tipo",
+                "norma_numero",
+                "norma_anio",
+                "organismo_emisor",
+                "desde",
+                "hasta",
+                "pof",
+                "anio_pof",
+                "novedad",
+                "activo",
+                "observaciones",
+                "es_suplencia",
+                "plazo_indeterminado",
+            )
             if not es_nueva:
-                campos_historial = (
-                    "situacion_revista",
-                    "desde",
-                    "hasta",
-                    "activo",
-                    "cargo_id",
-                    "espacio_curricular_id",
-                    "hs_catedra",
-                    "turno",
-                    "norma_tipo",
-                    "norma_numero",
-                    "norma_anio",
-                    "organismo_emisor",
-                    "pof",
-                    "anio_pof",
-                    "observaciones",
-                )
                 anterior = (
                     type(self).objects.filter(pk=self.pk)
                     .values(*campos_historial)
@@ -331,21 +379,8 @@ class Designacion(models.Model):
             super().save(*args, **kwargs)
 
             actual = {
-                "situacion_revista": self.situacion_revista,
-                "desde": self.desde,
-                "hasta": self.hasta,
-                "activo": self.activo,
-                "cargo_id": self.cargo_id,
-                "espacio_curricular_id": self.espacio_curricular_id,
-                "hs_catedra": self.hs_catedra,
-                "turno": self.turno,
-                "norma_tipo": self.norma_tipo,
-                "norma_numero": self.norma_numero,
-                "norma_anio": self.norma_anio,
-                "organismo_emisor": self.organismo_emisor,
-                "pof": self.pof,
-                "anio_pof": self.anio_pof,
-                "observaciones": self.observaciones,
+                campo: getattr(self, campo)
+                for campo in campos_historial
             }
             if anterior is not None and anterior == actual:
                 return

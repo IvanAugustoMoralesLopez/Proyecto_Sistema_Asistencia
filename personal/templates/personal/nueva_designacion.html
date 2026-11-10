@@ -12,7 +12,7 @@
             Seleccione el legajo y complete los datos del cargo, espacio curricular, horario y vigencia.
         </p>
     </div>
-    <a class="btn btn-outline-secondary" href="{% url 'pantalla_personal' %}">
+    <a class="btn btn-outline-secondary" href="{% url 'inicio_personal' %}">
         Volver a designaciones
     </a>
 </div>
@@ -63,6 +63,14 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-check mt-4">{{ form.plazo_indeterminado }} {{ form.plazo_indeterminado.label_tag }}</div>
+                </div>
+                <div class="col-md-6" id="reemplazaDesignacion">
+                    {{ form.reemplaza.label_tag }}
+                    {{ form.reemplaza }}
+                    <div class="form-text">Opcional: vincule la designación docente que origina la suplencia.</div>
+                    {% for error in form.reemplaza.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                    {% endfor %}
                 </div>
             </div>
             </div>
@@ -122,7 +130,7 @@
                 <button type="button" class="btn btn-outline-secondary" id="wizardAnterior">Anterior</button>
                 <button type="button" class="btn btn-outline-primary" id="wizardSiguiente">Avanzar</button>
                 <button type="submit" class="btn btn-primary" id="wizardGuardar" hidden>{% if editando %}Guardar cambios{% else %}Guardar designación{% endif %}</button>
-                <a class="btn btn-outline-secondary" href="{% url 'pantalla_personal' %}">Cancelar</a>
+                <a class="btn btn-outline-secondary" href="{% url 'inicio_personal' %}">Cancelar</a>
             </div>
             <div id="wizardAlerta" class="mt-3" aria-live="polite"></div>
         </form>
@@ -134,6 +142,8 @@
     const buscador = document.getElementById('buscadorDocente');
     const resultados = document.getElementById('resultadosDocente');
     const persona = document.querySelector('[name="persona"]');
+    const esSuplencia = document.querySelector('[name="es_suplencia"]');
+    const reemplaza = document.getElementById('reemplazaDesignacion');
     const alerta = document.getElementById('wizardAlerta');
     let actual = 1;
     let temporizador;
@@ -147,6 +157,13 @@
         document.getElementById('wizardAnterior').disabled = paso === 1;
         document.getElementById('wizardSiguiente').hidden = paso === pasos.length;
         document.getElementById('wizardGuardar').hidden = paso !== pasos.length;
+    };
+
+    const actualizarSuplencia = () => {
+        reemplaza.hidden = !esSuplencia.checked;
+        if (!esSuplencia.checked) {
+            document.querySelector('[name="reemplaza"]').value = '';
+        }
     };
 
     const informar = mensaje => {
@@ -169,6 +186,13 @@
             const desde = document.querySelector('[name="desde"]');
             if (!desde.value) {
                 informar('Complete la fecha Desde antes de guardar la designación.');
+                valido = false;
+            } else if (
+                document.querySelector('[name="es_suplencia"]').checked
+                && !document.querySelector('[name="plazo_indeterminado"]').checked
+                && !document.querySelector('[name="hasta"]').value
+            ) {
+                informar('Indique la fecha de cese de la suplencia o marque plazo indeterminado.');
                 valido = false;
             }
         }
@@ -216,6 +240,7 @@
     document.getElementById('wizardGuardar').addEventListener('click', event => {
         if (!validarPaso(actual)) event.preventDefault();
     });
+    esSuplencia.addEventListener('change', actualizarSuplencia);
     if (persona.value) {
         fetch(`{% url 'personal:legajos_autocompletar' %}?q=${encodeURIComponent(persona.value)}`)
             .then(respuesta => respuesta.ok ? respuesta.json() : {resultados: []})
@@ -224,6 +249,7 @@
                 if (seleccionado) buscador.value = `${seleccionado.dni} - ${seleccionado.nombre}`;
             });
     }
+    actualizarSuplencia();
     mostrar({{ paso_inicial|default:1 }});
 })();
 </script>

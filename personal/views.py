@@ -8,9 +8,9 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError, RestrictedError
 from django.db.models import Q
-from django.apps import apps
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
 
@@ -33,7 +33,7 @@ from .models import (
     ImportacionPersonalError,
     Persona,
 )
-from licencias.models import LicenciaArticulo
+from licencias.models import LicenciaArticulo, LicenciaOtorgada
 from licencias.forms import LicenciaArticuloForm
 
 MAX_CSV_BYTES = 5 * 1024 * 1024
@@ -56,6 +56,27 @@ def _mensaje_errores(exc):
             )
         return "; ".join(exc.messages)
     return str(exc)
+
+
+def _puede_consultar_legajos(usuario):
+    permisos = (
+        "personal.view_persona",
+        "personal.add_persona",
+        "personal.change_persona",
+        "personal.view_designacion",
+        "personal.add_designacion",
+        "personal.change_designacion",
+    )
+    return any(usuario.has_perm(permiso) for permiso in permisos)
+
+
+def _puede_importar_csv(usuario):
+    permisos = (
+        "personal.add_persona",
+        "personal.change_persona",
+        "personal.add_designacion",
+    )
+    return any(usuario.has_perm(permiso) for permiso in permisos)
 
 
 def _importar_fila_personal(fila, usuario=None):
@@ -83,10 +104,27 @@ def _importar_fila_personal(fila, usuario=None):
                 f"No tiene permiso para registrar el legajo con DNI {dni}."
             )
         persona = persona or Persona(dni=dni)
-        apellido_actual = (fila.get("apellido") or "").strip() if "apellido" in fila else persona.apellido
-        nombres_actuales = (fila.get("nombres") or "").strip() if "nombres" in fila else persona.nombres
+        apellido_actual = (
+            (fila.get("apellido") or "").strip()
+            if "apellido" in fila
+            else persona.apellido
+        )
+        nombres_actuales = (
+            (fila.get("nombres") or "").strip()
+            if "nombres" in fila
+            else persona.nombres
+        )
         if apellido_nombre:
             persona.apellido_nombre = apellido_nombre
+            if "apellido" not in fila and "nombres" not in fila:
+                if "," in apellido_nombre:
+                    apellido_actual, nombres_actuales = (
+                        parte.strip() for parte in apellido_nombre.split(",", 1)
+                    )
+                else:
+                    apellido_actual, nombres_actuales = apellido_nombre, ""
+                persona.apellido = apellido_actual
+                persona.nombres = nombres_actuales
         elif "apellido" in fila or "nombres" in fila:
             persona.apellido_nombre = ", ".join(
                 parte for parte in (apellido_actual, nombres_actuales) if parte
@@ -109,12 +147,7 @@ def _importar_fila_personal(fila, usuario=None):
     if not codigo_cargo:
         return
 
-    permiso_designacion = (
-        "personal.change_designacion"
-        if Designacion.objects.filter(persona_id=dni, cargo_id=codigo_cargo).exists()
-        else "personal.add_designacion"
-    )
-    if usuario and not usuario.has_perm(permiso_designacion):
+    if usuario and not usuario.has_perm("personal.add_designacion"):
         raise ValidationError(
             f"No tiene permiso para registrar la designación del DNI {dni}."
         )
@@ -149,10 +182,23 @@ def _importar_fila_personal(fila, usuario=None):
         "INTERINO": Designacion.Situacion.INTERINO,
         "SUPLENTE": Designacion.Situacion.SUPLENTE,
     }.get(situacion, situacion)
+    reemplaza = None
+    reemplaza_id = (fila.get("reemplaza_id") or "").strip()
+    if reemplaza_id:
+        if not reemplaza_id.isdigit():
+            raise ValidationError(
+                "La columna 'reemplaza_id' debe contener un identificador numérico."
+            )
+        reemplaza = Designacion.objects.filter(pk=reemplaza_id).first()
+        if reemplaza is None:
+            raise ValidationError(
+                f"No existe la designación reemplazada '{reemplaza_id}'."
+            )
     designacion = Designacion(
         persona=persona,
         cargo=cargo,
         espacio_curricular=espacio,
+        reemplaza=reemplaza,
         situacion_revista=situacion,
         norma_tipo=(fila.get("norma_tipo") or "").strip(),
         norma_numero=(fila.get("norma_numero") or "").strip(),
@@ -230,19 +276,15 @@ def _procesar_csv(archivo, usuario=None):
 
 
 @login_required
-@permission_required("personal.change_persona", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def gestion_legajos(request):
+    if request.method == "GET" and not _puede_consultar_legajos(request.user):
+        raise PermissionDenied
+
     if request.method == "POST":
         accion = request.POST.get("accion")
         if accion == "importar_csv":
-            puede_importar_personas = request.user.has_perm(
-                "personal.add_persona"
-            ) or request.user.has_perm("personal.change_persona")
-            puede_importar_designaciones = request.user.has_perm(
-                "personal.add_designacion"
-            ) or request.user.has_perm("personal.change_designacion")
-            if not (puede_importar_personas or puede_importar_designaciones):
+            if not _puede_importar_csv(request.user):
                 raise PermissionDenied
             archivo = request.FILES.get("archivo")
             if not archivo:
@@ -310,16 +352,19 @@ def gestion_legajos(request):
                     pk=designacion_id,
                     persona=persona,
                 )
-            permiso = (
-                "personal.change_designacion"
-                if designacion
-                else "personal.add_designacion"
-            )
+            permiso = "personal.change_designacion"
+            if accion == "guardar_designacion" and not designacion:
+                permiso = "personal.add_designacion"
             if not request.user.has_perm(permiso):
                 raise PermissionDenied
 
             if accion == "dar_baja_designacion":
-                if designacion and designacion.activo:
+                if designacion is None:
+                    messages.error(request, "La designación indicada no existe.")
+                    return redirect(
+                        f"{reverse('personal:gestion_legajos')}?dni={persona.pk}"
+                    )
+                if designacion.activo:
                     designacion.activo = False
                     designacion.save()
                     messages.success(
@@ -331,8 +376,8 @@ def gestion_legajos(request):
                 )
 
             form = DesignacionForm(request.POST, instance=designacion)
+            form.instance.persona = persona
             if form.is_valid():
-                form.instance.persona = persona
                 designacion = form.save()
                 messages.success(request, "La designación se guardó correctamente.")
                 return redirect(
@@ -426,17 +471,13 @@ def _contexto_pantalla(
     else:
         designaciones = Designacion.objects.none()
 
-    alertas_licencias = []
-    try:
-        LicenciaOtorgada = apps.get_model("licencias", "LicenciaOtorgada")
-        alertas_licencias = list(
-            LicenciaOtorgada.objects.filter(
-                hasta__gte=date.today(),
-                hasta__lte=date.today() + timedelta(days=30),
-            ).select_related("designacion__persona", "designacion__cargo")[:20]
-        )
-    except (LookupError, ValueError):
-        pass
+    hoy = timezone.localdate()
+    alertas_licencias = list(
+        LicenciaOtorgada.objects.filter(
+            hasta__gte=hoy,
+            hasta__lte=hoy + timedelta(days=30),
+        ).select_related("designacion__persona", "designacion__cargo")[:20]
+    )
 
     return {
         "filtro": filtro,
@@ -451,13 +492,21 @@ def _contexto_pantalla(
         .select_related("carrera")
         .order_by("carrera__nombre", "nombre"),
         "errores_importacion": ImportacionPersonalError.objects.all()[:10],
-        "licencias_admin_url": "/admin/licencias/licenciaarticulo/",
+        "puede_guardar_persona": request.user.has_perm(
+            "personal.change_persona" if persona else "personal.add_persona"
+        ),
+        "puede_guardar_designacion": request.user.has_perm(
+            "personal.change_designacion"
+            if designacion_seleccionada
+            else "personal.add_designacion"
+        ),
+        "puede_importar_csv": _puede_importar_csv(request.user),
         "alertas_designaciones": Designacion.objects.filter(
             activo=True,
-            hasta__gte=date.today(),
-            hasta__lte=date.today() + timedelta(days=30),
+            hasta__gte=hoy,
+            hasta__lte=hoy + timedelta(days=30),
         ).select_related("persona", "cargo"),
-        "alertas_hoy": date.today(),
+        "alertas_hoy": hoy,
         "alertas_licencias": alertas_licencias,
     }
 
@@ -637,7 +686,7 @@ def catalogos_personal(request):
 
 
 @login_required
-@permission_required("personal.change_designacion", raise_exception=True)
+@permission_required("personal.add_designacion", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def nueva_designacion(request):
     if request.method == "POST":
