@@ -24,11 +24,20 @@ leer y navegar:
   mensuales.
 - `calendario`: alta, modificación y baja de feriados, asuetos y días
   inhábiles (RF-10).
+- `agenda`: qué docentes dan clase cada día y con cuántas horas; es lo
+  que permite autocompletar la carga diaria.
 
 Todo lo que antes se importaba con `from asistencias.services import X`
 se sigue importando igual: este archivo reexporta la misma API pública.
 """
 
+from .agenda import (
+    ciclo_lectivo_actual,
+    dias_con_clase,
+    horario_del_dia,
+    horas_del_dia,
+    licencias_por_designacion,
+)
 from .calendario import (
     ANIO_MAXIMO,
     ANIO_MINIMO,
@@ -50,8 +59,14 @@ from .recepcion import (
 )
 from .registro import PlanillaConErrores, guardar_asistencia, guardar_planilla
 from .reglas import (
+    DIA_HORARIO,
     DIAS_HABILES,
+    ID_MAXIMO,
+    clave_dia,
     MOTIVO_MINIMO,
+    anio_admitido,
+    fecha_admitida,
+    id_admitido,
     motivo_dia_no_laborable,
     validar_dia_laborable,
 )
@@ -70,6 +85,17 @@ __all__ = [
     "MINUTOS_EXPIRACION_SESION",
     "MOTIVO_MINIMO",
     "DIAS_HABILES",
+    "DIA_HORARIO",
+    "ID_MAXIMO",
+    "clave_dia",
+    "ciclo_lectivo_actual",
+    "dias_con_clase",
+    "horario_del_dia",
+    "horas_del_dia",
+    "licencias_por_designacion",
+    "anio_admitido",
+    "fecha_admitida",
+    "id_admitido",
     "TRANSICIONES_JUSTIFICACION",
     "PlanillaConErrores",
     "adquirir_sesion_edicion",

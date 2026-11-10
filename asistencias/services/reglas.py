@@ -24,6 +24,42 @@ from ..models import (
 
 MOTIVO_MINIMO = 10
 
+# Rango de fechas que admite el sistema. Es el mismo del cierre mensual y del
+# calendario escolar: fuera de él, sumar o restar un dia desborda el tipo
+# `date` de Python y una consulta por año desborda el entero de la base.
+ANIO_MINIMO = 2000
+ANIO_MAXIMO = 2100
+
+# Mayor valor que entra en una clave BIGINT. Un id mas grande no identifica a
+# ningun registro y, enviado a la base, provoca un error de rango.
+ID_MAXIMO = 2**63 - 1
+
+
+def anio_admitido(anio):
+    """El año está dentro del rango que el sistema puede consultar."""
+    return isinstance(anio, int) and ANIO_MINIMO <= anio <= ANIO_MAXIMO
+
+
+def fecha_admitida(fecha):
+    """La fecha está dentro del rango que el sistema puede operar."""
+    return fecha is not None and anio_admitido(fecha.year)
+
+
+def id_admitido(valor):
+    """
+    Pasa `valor` a un id de base válido, o devuelve None.
+
+    Acepta texto o entero. Un id negativo, no numérico o mayor que BIGINT no
+    puede existir en la base: se descarta acá en vez de dejar que la consulta
+    falle con un error de rango.
+    """
+    try:
+        numero = int(valor)
+    except (TypeError, ValueError):
+        return None
+
+    return numero if 0 < numero <= ID_MAXIMO else None
+
 # Largo de la columna donde el motivo queda en el evento: más texto que eso
 # lo rechaza la base de datos con un error 500.
 MOTIVO_MAXIMO = EventoAsistencia._meta.get_field("motivo").max_length
@@ -37,6 +73,15 @@ def _validar_motivo_maximo(motivo):
 
 # Días en los que existe obligación de marcado (lunes a viernes).
 DIAS_HABILES = (0, 1, 2, 3, 4)
+
+# Clave de `personal.Horario.dia` para cada día de la semana (lunes = 0).
+# Es la traducción entre el calendario y el horario cargado en la designación.
+DIA_HORARIO = {0: "LUN", 1: "MAR", 2: "MIE", 3: "JUE", 4: "VIE"}
+
+
+def clave_dia(fecha):
+    """Clave de horario de la fecha ('LUN'…'VIE'), o None si es fin de semana."""
+    return DIA_HORARIO.get(fecha.weekday())
 
 
 def _exigir_permiso(usuario, permiso, mensaje):

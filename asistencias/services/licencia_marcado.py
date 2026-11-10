@@ -19,6 +19,7 @@ from ..models import (
     RegistroAsistencia,
 )
 from .reglas import (
+    DIA_HORARIO as _DIA_HORARIO,
     _ajustar_justificacion,
     _datos_registro,
     _validar_designacion_vigente,
@@ -26,8 +27,6 @@ from .reglas import (
     _validar_periodo_abierto,
     motivo_dia_no_laborable,
 )
-# Clave de personal.Horario.dia para cada dia de la semana (lunes = 0).
-_DIA_HORARIO = {0: "LUN", 1: "MAR", 2: "MIE", 3: "JUE", 4: "VIE"}
 
 # Un articulo de licencia es de largo tratamiento (marca LT) si su tipo
 # contiene este texto. Si el catalogo cambia la redaccion, se ajusta aca.
@@ -159,7 +158,17 @@ def marcar_licencia(licencia, usuario=None):
         )
         return resumen
 
-    marca = MarcaAsistencia.objects.get(codigo=_codigo_de_marca(licencia))
+    codigo = _codigo_de_marca(licencia)
+    marca = MarcaAsistencia.objects.filter(codigo=codigo).first()
+
+    if marca is None:
+        # El catálogo de marcas es cerrado (RF-08) y lo carga una migración:
+        # si falta, es un problema de datos, no del operador.
+        raise ValidationError(
+            f"No existe la marca «{codigo}» en el catálogo de asistencias: "
+            "no se pudo marcar la licencia."
+        )
+
     fecha = licencia.desde
 
     while fecha <= licencia.hasta:

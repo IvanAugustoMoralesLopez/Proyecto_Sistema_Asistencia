@@ -22,6 +22,51 @@ from .services import (
 )
 
 
+class SelectMarca(forms.Select):
+    """
+    Combo de marcas que publica en cada opción si la marca exige horas o
+    licencia (`data-horas`, `data-licencia`).
+
+    Así la pantalla puede habilitar o completar esos campos sin repetir en
+    JavaScript las reglas del catálogo (RF-08), que viven en la base.
+    """
+
+    def create_option(self, name, value, *args, **kwargs):
+        opcion = super().create_option(name, value, *args, **kwargs)
+        marca = getattr(value, "instance", None)
+
+        if marca is not None:
+            opcion["attrs"]["data-horas"] = "1" if marca.requiere_horas else "0"
+            opcion["attrs"]["data-licencia"] = (
+                "1" if marca.requiere_licencia else "0"
+            )
+
+        return opcion
+
+
+def _etiqueta_designacion(designacion):
+    """«APELLIDO, Nombre (DNI) — Cargo — Espacio»: identifica la fila sin dudas."""
+    partes = [
+        f"{designacion.persona.apellido_nombre} ({designacion.persona.dni})",
+        designacion.cargo.descripcion,
+    ]
+
+    if designacion.espacio_curricular_id:
+        partes.append(designacion.espacio_curricular.nombre)
+
+    return " — ".join(partes)
+
+
+def _etiqueta_licencia(licencia):
+    """«Art. X · Docente · desde dd/mm/aaaa»."""
+    hasta = f" al {licencia.hasta:%d/%m/%Y}" if licencia.hasta else ""
+    return (
+        f"{licencia.articulo.articulo} · "
+        f"{licencia.designacion.persona.apellido_nombre} · "
+        f"{licencia.desde:%d/%m/%Y}{hasta}"
+    )
+
+
 def _aplicar_clases_bootstrap(fields):
     for field in fields.values():
         clase = (
@@ -57,6 +102,7 @@ class RegistroAsistenciaForm(forms.ModelForm):
             "observaciones": forms.Textarea(
                 attrs={"class": "form-control", "rows": 3}
             ),
+            "marca": SelectMarca,
         }
 
     def __init__(self, *args, **kwargs):
@@ -90,13 +136,30 @@ class RegistroAsistenciaForm(forms.ModelForm):
 
         self.fields["marca"].queryset = marcas_vigentes.distinct()
 
-        self.fields["licencia"].queryset = (
-            LicenciaOtorgada.objects.select_related(
-                "designacion__persona",
-            )
+        # El combo de licencias traía todas las licencias del sistema, de
+        # todos los años: se acota a las de designaciones vigentes (más la
+        # del registro que se está editando, para que siga apareciendo).
+        licencias = LicenciaOtorgada.objects.filter(
+            designacion__activo=True,
+            designacion__persona__activa=True,
         )
 
+        if self.instance and self.instance.pk and self.instance.licencia_id:
+            licencias = licencias | LicenciaOtorgada.objects.filter(
+                pk=self.instance.licencia_id
+            )
+
+        self.fields["licencia"].queryset = (
+            licencias.select_related("designacion__persona", "articulo")
+            .distinct()
+            .order_by("-desde", "-pk")
+        )
         self.fields["licencia"].required = False
+
+        # Etiquetas con DNI: en una lista larga es lo que identifica al
+        # docente sin ambigüedad.
+        self.fields["designacion"].label_from_instance = _etiqueta_designacion
+        self.fields["licencia"].label_from_instance = _etiqueta_licencia
 
         _aplicar_clases_bootstrap(self.fields)
 

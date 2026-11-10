@@ -7,7 +7,8 @@
     <div>
         <h1 class="h3">Planilla rápida de asistencia</h1>
         <p class="text-secondary mb-0">
-            Marcá a todos los docentes del día en una sola carga.
+            La planilla viene cargada con el horario de cada docente:
+            revisá las excepciones y guardá.
         </p>
     </div>
 
@@ -25,20 +26,50 @@
                    value="{{ fecha_texto }}" required>
         </div>
 
-        <div class="col-md-5">
+        <div class="col-md-4">
             <label class="form-label" for="q">Docente o DNI</label>
             <input class="form-control" type="search" id="q" name="q"
                    value="{{ texto }}" placeholder="Filtrar la planilla">
         </div>
 
         <div class="col-md-3">
-            <button class="btn btn-secondary" type="submit">Consultar</button>
+            <label class="form-label" for="alcance">Mostrar</label>
+            <select class="form-select" id="alcance" name="alcance">
+                <option value="{{ alcance_con_clase }}"
+                        {% if alcance == alcance_con_clase %}selected{% endif %}>
+                    Solo quienes tienen clase este día
+                </option>
+                <option value="{{ alcance_todos }}"
+                        {% if alcance == alcance_todos %}selected{% endif %}>
+                    Todas las designaciones vigentes
+                </option>
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <button class="btn btn-secondary w-100" type="submit">Consultar</button>
         </div>
     </div>
 </form>
 
 {% if bloqueo %}
     <div class="alert alert-warning">{{ bloqueo }}</div>
+{% endif %}
+
+{% if sin_horarios %}
+    <div class="alert alert-info">
+        Ninguna designación tiene horario cargado para este día, así que se
+        muestran todas. Cargá los horarios en
+        <strong>Personal → Legajos</strong> y la planilla va a traer solo a
+        quienes dan clase, con sus horas ya completadas.
+    </div>
+{% endif %}
+
+{% if fuera_del_ciclo %}
+    <div class="alert alert-secondary">
+        La fecha elegida no pertenece al ciclo lectivo {{ ciclo_lectivo }}
+        configurado en los parámetros del sistema.
+    </div>
 {% endif %}
 
 {% if jornada_cerrada and not bloqueo %}
@@ -50,7 +81,8 @@
 {% endif %}
 
 <p class="text-secondary">
-    {{ total }} designaciones vigentes · {{ marcadas }} ya marcadas ·
+    Ciclo lectivo {{ ciclo_lectivo }} ·
+    {{ total }} designaciones en la planilla · {{ marcadas }} ya marcadas ·
     {{ pendientes }} pendientes
 </p>
 
@@ -58,6 +90,7 @@
     {% csrf_token %}
     <input type="hidden" name="fecha" value="{{ fecha_texto }}">
     <input type="hidden" name="q" value="{{ texto }}">
+    <input type="hidden" name="alcance" value="{{ alcance }}">
 
     {% if not bloqueo and pendientes %}
         <div class="d-flex flex-wrap gap-2 mb-3">
@@ -67,6 +100,10 @@
                     Marcar presente a todos los pendientes
                 </button>
             {% endif %}
+            <button class="btn btn-outline-primary" type="submit"
+                    name="accion" value="copiar" formnovalidate>
+                Traer lo del día hábil anterior
+            </button>
             <button class="btn btn-outline-secondary" type="button"
                     id="btn-limpiar">
                 Limpiar lo no guardado
@@ -80,6 +117,7 @@
                 <tr>
                     <th>Docente</th>
                     <th>Cargo / espacio</th>
+                    <th>Horario del día</th>
                     <th>Marca</th>
                     <th>Horas</th>
                     <th>Licencia</th>
@@ -105,6 +143,26 @@
                                 <div class="text-secondary small">
                                     {{ fila.designacion.espacio_curricular.nombre }}
                                 </div>
+                            {% endif %}
+                        </td>
+                        <td class="text-nowrap small">
+                            {% if fila.horario %}
+                                {{ fila.horas_dia|floatformat:"-2" }} hs
+                                {% if fila.horario.hora_inicio and fila.horario.hora_fin %}
+                                    <div class="text-secondary">
+                                        {{ fila.horario.hora_inicio|time:"H:i" }}–{{ fila.horario.hora_fin|time:"H:i" }}
+                                        {% if fila.designacion.turno %}
+                                            · {{ fila.designacion.turno }}
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-secondary">
+                                    Sin clase
+                                    {% if fila.dias_con_clase %}
+                                        ({{ fila.dias_con_clase|join:" " }})
+                                    {% endif %}
+                                </span>
                             {% endif %}
                         </td>
 
@@ -138,12 +196,22 @@
                                         </option>
                                     {% endfor %}
                                 </select>
+                                {% if fila.valores.origen == "licencia" %}
+                                    <div class="text-primary small mt-1">
+                                        Licencia vigente en esta fecha
+                                    </div>
+                                {% elif fila.valores.origen == "copia" %}
+                                    <div class="text-primary small mt-1">
+                                        Traído del día anterior
+                                    </div>
+                                {% endif %}
                             </td>
                             <td style="width: 7rem;">
                                 <input class="form-control form-control-sm"
                                        type="number" min="0" step="0.25"
                                        name="horas-{{ fila.designacion.pk }}"
                                        value="{{ fila.valores.horas }}"
+                                       data-horas-dia="{{ fila.horas_dia|stringformat:'s' }}"
                                        {% if bloqueo %}disabled{% endif %}>
                             </td>
                             <td>
@@ -178,7 +246,7 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="6" class="text-center py-4">
+                        <td colspan="7" class="text-center py-4">
                             No hay designaciones vigentes para esta fecha.
                         </td>
                     </tr>
@@ -213,7 +281,8 @@
     var presente = "{{ marca_presente.pk|default:'' }}";
     var selects = document.querySelectorAll("select[name^='marca-']");
 
-    // Habilita horas y licencia solo cuando la marca elegida las exige.
+    // Habilita horas y licencia solo cuando la marca elegida las exige, y
+    // completa las horas con las del horario del docente para ese día.
     function sincronizar(select) {
         var opcion = select.options[select.selectedIndex];
         var fila = select.closest("tr");
@@ -224,11 +293,21 @@
 
         if (horas) {
             horas.readOnly = !usaHoras;
-            if (!usaHoras) { horas.value = ""; }
+            if (!usaHoras) {
+                horas.value = "";
+            } else if (!horas.value) {
+                var delDia = parseFloat(horas.dataset.horasDia || "0");
+                if (delDia > 0) { horas.value = String(delDia); }
+            }
         }
         if (licencia && licencia.options.length > 1) {
             licencia.disabled = !usaLicencia;
-            if (!usaLicencia) { licencia.value = ""; }
+            if (!usaLicencia) {
+                licencia.value = "";
+            } else if (!licencia.value) {
+                // Si hay una sola licencia vigente, se elige sola.
+                licencia.selectedIndex = 1;
+            }
         }
     }
 

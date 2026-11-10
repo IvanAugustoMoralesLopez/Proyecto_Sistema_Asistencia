@@ -3,8 +3,6 @@ Cierre de la jornada diaria, listado de cierres y cierre/reapertura de
 períodos mensuales.
 """
 
-from datetime import date
-
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
@@ -13,15 +11,20 @@ from django.utils import timezone
 
 from ..forms import CierreMensualForm, ReaperturaMensualForm
 from ..models import CierreDiario, CierreMensual, RegistroAsistencia
-from ..services import cerrar_dia, cerrar_mes, reabrir_mes
-from ._comun import _asegurar_sesion_edicion, _mensaje_error, vista_protegida
+from ..services import anio_admitido, cerrar_dia, cerrar_mes, reabrir_mes
+from ._comun import (
+    _asegurar_sesion_edicion,
+    _fecha_pedida,
+    _mensaje_error,
+    vista_protegida,
+)
 
 
 @vista_protegida("asistencias.cerrar_jornada", methods=["POST"])
 def cerrar_jornada(request):
-    try:
-        fecha = date.fromisoformat(request.POST.get("fecha", ""))
-    except ValueError:
+    fecha = _fecha_pedida(request.POST.get("fecha"))
+
+    if fecha is None:
         messages.error(request, "La fecha seleccionada no es válida.")
         return redirect("asistencia:registro_diario")
 
@@ -97,9 +100,16 @@ def confirmar_cierre(request):
 
     hoy = timezone.localdate()
     resumen = None
-    anio_prev = form.data.get("anio", str(hoy.year))
-    mes_prev = form.data.get("mes", str(hoy.month))
-    if anio_prev.isdecimal() and mes_prev.isdecimal():
+    anio_prev = str(form.data.get("anio", hoy.year))
+    mes_prev = str(form.data.get("mes", hoy.month))
+    # Un año fuera del rango admitido desborda el entero de la base y la
+    # pantalla respondería con un error 500 en vez del mensaje del formulario.
+    if (
+        anio_prev.isdecimal()
+        and mes_prev.isdecimal()
+        and anio_admitido(int(anio_prev))
+        and 1 <= int(mes_prev) <= 12
+    ):
         qs = RegistroAsistencia.objects.filter(
             fecha__year=int(anio_prev),
             fecha__month=int(mes_prev),
