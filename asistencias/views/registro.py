@@ -20,6 +20,8 @@ from ..forms import FiltroAsistenciaForm, RegistroAsistenciaForm
 from ..models import CierreDiario, CierreMensual, EventoAsistencia, RegistroAsistencia
 from ..services import (
     clave_dia,
+    conteo_del_dia,
+    dia_habil_mas_cercano,
     guardar_asistencia,
     horario_del_dia,
     horas_del_dia,
@@ -30,6 +32,7 @@ from ..services import (
 from ._comun import (
     _aplicar_filtros,
     _asegurar_sesion_edicion,
+    contexto_sesion,
     _dia_vecino,
     _fecha_pedida,
     _id_pedido,
@@ -108,6 +111,23 @@ def registro_diario(request):
     fecha_anterior = _dia_vecino(fecha_objeto, -1).isoformat()
     fecha_siguiente = _dia_vecino(fecha_objeto, 1).isoformat()
 
+    # Punto 6: si la fecha no es hábil, ofrecer el día en el que sí se carga,
+    # en vez de dejar al operador frente a un aviso sin salida.
+    dia_habil_sugerido = (
+        dia_habil_mas_cercano(fecha_objeto, sentido=-1)
+        if motivo_no_laborable
+        else None
+    )
+
+    # Cuantos docentes corresponden a esta fecha y cuantos faltan cargar: es
+    # lo que permite que la pantalla proponga la accion en vez de limitarse a
+    # mostrar una tabla vacia.
+    conteo = (
+        conteo_del_dia(fecha_objeto)
+        if not motivo_no_laborable
+        else {"total": 0, "cargados": 0, "pendientes": 0}
+    )
+
     return render(
         request,
         "asistencias/registro_diario.html",
@@ -125,6 +145,13 @@ def registro_diario(request):
             "pendientes_formulario": pendientes_formulario,
             "fecha_anterior": fecha_anterior,
             "fecha_siguiente": fecha_siguiente,
+            "dia_habil_sugerido": dia_habil_sugerido,
+            "es_hoy": fecha_objeto == hoy,
+            "total_del_dia": conteo["total"],
+            "cargados_del_dia": conteo["cargados"],
+            "faltan_cargar": conteo["pendientes"],
+            "periodo_cerrado": periodo_cerrado,
+            **contexto_sesion(request),
         },
     )
 
@@ -449,7 +476,9 @@ def exportar_csv(request):
     response["Content-Disposition"] = 'attachment; filename="asistencias.csv"'
     response.write("﻿")
 
-    writer = csv.writer(response)
+    # Excel en español espera «;» como separador: con «,» vuelca todo en una
+    # sola columna y hay que importar a mano (punto 19).
+    writer = csv.writer(response, delimiter=";")
     writer.writerow([
         "Fecha",
         "DNI",

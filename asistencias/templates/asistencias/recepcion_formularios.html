@@ -1,101 +1,102 @@
-{% extends "base.html" %}
+{% extends "asistencias/_base_asistencias.html" %}
 {% load asistencias_extras %}
 
-{% block title %}Recepción de formularios{% endblock %}
+{% block title %}Certificados y justificaciones{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h1 class="h3">Recepción de formularios en papel</h1>
-        <p class="text-secondary mb-0">
-            Seguimiento de las inasistencias: injustificada, en trámite o
-            justificada.
-        </p>
-    </div>
+<div class="asis-cabecera">
+    <div class="encabezado-planilla">
+        <div>
+            <p class="ruta">Asistencia › Certificados</p>
+            <h1 class="encabezado-planilla__titulo">
+                Certificados y justificaciones
+                {% if pendientes %}
+                    <span class="badge text-bg-warning">{{ pendientes }} sin certificado</span>
+                {% endif %}
+            </h1>
+            <p class="encabezado-planilla__subtitulo">
+                Cargá acá el certificado que trae el docente para justificar una falta.
+            </p>
+        </div>
 
-    <div class="d-flex align-items-center gap-2">
-        {% if pendientes %}
-            <span class="badge text-bg-warning fs-6">
-                {{ pendientes }} pendiente{{ pendientes|pluralize:"s" }}
-            </span>
-        {% endif %}
-        <a class="btn btn-outline-secondary"
-           href="{% url 'asistencia:registro_diario' %}">
-            Registro diario
-        </a>
+        <div class="encabezado-planilla__acciones">
+            <a class="btn btn-filtro" href="{% url 'asistencia:registro_diario' %}">
+                Asistencia del día
+            </a>
+        </div>
     </div>
 </div>
 
-<form method="get" class="card card-body mb-4">
-    <div class="row g-3">
-        {% for field in form %}
-            <div class="col-md-4">
-                <label class="form-label" for="{{ field.id_for_label }}">
-                    {{ field.label }}
-                </label>
+<details class="asis-filtros mb-3"{% if querystring %} open{% endif %}>
+    <summary class="btn btn-filtro px-0">
+        Filtros de búsqueda{% if querystring %} (activos){% endif %}
+    </summary>
 
-                {{ field }}
+    <form method="get" class="card card-body mt-2">
+        <div class="row g-3">
+            {% for field in form %}
+                <div class="col-md-4">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
 
-                {% for error in field.errors %}
-                    <div class="text-danger small">{{ error }}</div>
-                {% endfor %}
-            </div>
-        {% endfor %}
-    </div>
+        <div class="mt-3 d-flex gap-2">
+            <button class="btn btn-primario" type="submit" data-sin-espera="1">Buscar</button>
+            <a class="btn btn-filtro" href="{% url 'asistencia:recepcion_formularios' %}">Limpiar</a>
+        </div>
+    </form>
+</details>
 
-    <div class="mt-3 d-flex gap-2">
-        <button class="btn btn-primary" type="submit">
-            Buscar
-        </button>
-        <a class="btn btn-outline-secondary"
-           href="{% url 'asistencia:recepcion_formularios' %}">
-            Limpiar filtros
-        </a>
-    </div>
-</form>
-
-<div class="table-responsive">
-    <table class="table table-striped align-middle">
-        <thead class="table-dark">
+<div class="planilla">
+    <table class="table table-hover align-middle asis-planilla asis-tarjetas">
+        <thead>
             <tr>
                 <th>Fecha</th>
-                <th>DNI</th>
                 <th>Docente</th>
-                <th>Cargo</th>
-                <th>Marca</th>
-                <th>Horas</th>
-                <th>Justificación</th>
-                <th>N° de formulario</th>
-                <th>Recepción</th>
-                <th>Acciones</th>
+                <th>Falta</th>
+                <th>Certificado</th>
+                <th class="text-end">Acciones</th>
             </tr>
         </thead>
         <tbody>
             {% for registro in pagina %}
                 <tr>
-                    <td>{{ registro.fecha|date:"d/m/Y" }}</td>
-                    <td>{{ registro.designacion.persona.dni }}</td>
-                    <td>{{ registro.designacion.persona.apellido_nombre }}</td>
-                    <td>{{ registro.designacion.cargo.descripcion }}</td>
-                    <td>{{ registro.marca.codigo }}</td>
-                    <td>{{ registro.horas_inasistidas }}</td>
-                    <td>
-                        {% include "asistencias/includes/badge_justificacion.html" %}
+                    <td data-rotulo="Fecha" class="text-nowrap">{{ registro.fecha|date:"d/m/Y" }}</td>
+
+                    <td data-rotulo="Docente">
+                        <div class="asis-principal">{{ registro.designacion.persona.apellido_nombre }}</div>
+                        <div class="asis-apoyo">
+                            DNI {{ registro.designacion.persona.dni }} ·
+                            {{ registro.designacion.cargo.descripcion }}
+                        </div>
                     </td>
-                    <td>{{ registro.nro_formulario|default:"—" }}</td>
-                    <td>
-                        {% if registro.fecha_recepcion %}
-                            {{ registro.fecha_recepcion|date:"d/m/Y" }}
-                            {% if registro.recepcionado_por %}
-                                <span class="text-secondary small">
+
+                    <td data-rotulo="Falta">
+                        <div class="asis-principal">{{ registro.marca.etiqueta }}</div>
+                        <div class="asis-apoyo">{{ registro.horas_inasistidas|floatformat:"-2" }} hs sin cubrir</div>
+                    </td>
+
+                    <td data-rotulo="Certificado">
+                        {% include "asistencias/includes/badge_justificacion.html" %}
+                        {% if registro.nro_formulario %}
+                            <div class="asis-apoyo">
+                                N° {{ registro.nro_formulario }}
+                                {% if registro.fecha_recepcion %}
+                                    · {{ registro.fecha_recepcion|date:"d/m/Y" }}
+                                {% endif %}
+                                {% if registro.recepcionado_por %}
                                     · {{ registro.recepcionado_por }}
-                                </span>
-                            {% endif %}
-                        {% else %}
-                            —
+                                {% endif %}
+                            </div>
                         {% endif %}
                     </td>
-                    <td class="text-nowrap">
+
+                    <td data-rotulo="Acciones" class="text-nowrap text-end">
                         <a class="btn btn-sm btn-outline-primary"
                            href="{% url 'asistencia:detalle_asistencia' registro.pk %}?desde={% url 'asistencia:recepcion_formularios' %}{% if querystring %}%3F{{ querystring }}{% endif %}">
                             Ver
@@ -103,15 +104,15 @@
                         {% if registro.estado_justificacion != "JUSTIFICADA" and perms.asistencias.recepcionar_formulario %}
                             <a class="btn btn-sm btn-outline-success"
                                href="{% url 'asistencia:recepcionar_formulario' registro.pk %}">
-                                Recepcionar
+                                Cargar el certificado
                             </a>
                         {% endif %}
                     </td>
                 </tr>
             {% empty %}
                 <tr>
-                    <td colspan="10" class="text-center py-4">
-                        No hay inasistencias para los filtros elegidos.
+                    <td colspan="5" class="text-center py-5 text-secondary">
+                        No hay faltas que coincidan con lo que buscaste.
                     </td>
                 </tr>
             {% endfor %}
@@ -119,9 +120,12 @@
     </table>
 </div>
 
-{% include "asistencias/includes/paginacion.html" %}
+<div class="mt-3">
+    {% include "asistencias/includes/paginacion.html" %}
+</div>
 {% endblock %}
 
 {% block extra_js %}
+{{ block.super }}
 {% include "asistencias/includes/ux_mejoras.html" %}
 {% endblock %}

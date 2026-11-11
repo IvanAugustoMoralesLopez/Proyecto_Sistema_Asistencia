@@ -1,0 +1,30 @@
+{# Una sola linea, no un cuadro: quien esta cargando y si queda lugar. #}
+<div class="asis-sesion-linea">
+    <span class="asis-sesion__punto{% if sesion_libres == 0 %} asis-sesion__punto--lleno{% endif %}"></span>
+
+    {% if sesion_operadores %}
+        <span>Cargando asistencia ahora: {% for o in sesion_operadores %}<strong>{{ o.nombre }}{% if o.soy_yo %} (vos){% endif %}</strong>{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+    {% else %}
+        <span>Nadie está cargando asistencia</span>
+    {% endif %}
+
+    <span>·</span>
+
+    {% if sesion_libres %}
+        <span>{{ sesion_libres }} de {{ sesion_maximo }} lugar{{ sesion_libres|pluralize:"es" }} libre{{ sesion_libres|pluralize:"s" }}</span>
+    {% else %}
+        <span class="text-danger">Sin lugares libres ({{ sesion_maximo }} como máximo)</span>
+    {% endif %}
+
+    {% if sesion_tengo_lugar %}
+        <form method="post" action="{% url 'asistencia:liberar_edicion' %}" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button class="btn btn-filtro p-0 text-decoration-underline" type="submit"
+                    data-sin-espera="1"
+                    title="Deja tu lugar libre para otra persona. No se pierde nada de lo guardado.">
+                Liberar mi lugar
+            </button>
+        </form>
+    {% endif %}
+</div>

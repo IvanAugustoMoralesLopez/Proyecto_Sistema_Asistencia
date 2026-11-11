@@ -1,54 +1,113 @@
+<dialog id="asis-confirmar-salida" class="asis-dialogo">
+    <form method="dialog">
+        <h2 class="h5 mb-3">Tenés cambios sin guardar</h2>
+        <p class="mb-4">
+            Si salís de esta pantalla ahora, lo que cargaste y todavía no
+            guardaste se va a perder.
+        </p>
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-primary" value="quedarme" autofocus>
+                Quedarme y guardar
+            </button>
+            <button class="btn btn-outline-danger" value="salir">
+                Salir sin guardar
+            </button>
+        </div>
+    </form>
+</dialog>
+
+<style>
+    .asis-dialogo {
+        border: 0;
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        max-width: 28rem;
+        box-shadow: 0 1rem 3rem rgba(0, 0, 0, .25);
+    }
+    .asis-dialogo::backdrop { background: rgba(0, 0, 0, .45); }
+</style>
+
 <script>
 (function () {
-    /* Auto-cerrar mensajes de éxito después de 5 s */
+    /* Auto-cerrar los mensajes de exito a los 8 s (antes 5: poco para leer). */
     document.querySelectorAll('.alert-success').forEach(function (el) {
         setTimeout(function () {
             el.style.transition = 'opacity 0.5s';
             el.style.opacity = '0';
             setTimeout(function () { el.remove(); }, 500);
-        }, 5000);
+        }, 8000);
     });
 
-    /* Scroll al primer error visible */
+    /* Llevar la pantalla al primer error. */
     var primerError = document.querySelector('.alert-danger, .table-danger');
     if (primerError) {
         primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    /* Cambios sin guardar (beforeunload) en formularios con campos */
+    /* Punto 2: aviso de cambios sin guardar, en espanol y dentro de la
+       pagina. El aviso del navegador aparece en ingles y sin estilo; queda
+       solo como ultima red para el caso de cerrar la pestana. */
+    var sucio = false;
+    var dialogo = document.getElementById('asis-confirmar-salida');
+
     document.querySelectorAll('form[method="post"]').forEach(function (form) {
-        var tieneInputs = form.querySelector(
-            'input:not([type="hidden"]):not([type="submit"]):not([type="checkbox"]),' +
-            'select, textarea'
+        var tieneCampos = form.querySelector(
+            'input:not([type="hidden"]):not([type="submit"]), select, textarea'
         );
-        if (!tieneInputs) return;
+        if (!tieneCampos) { return; }
+        form.addEventListener('input', function () { sucio = true; });
+        form.addEventListener('change', function () { sucio = true; });
+        form.addEventListener('submit', function () { sucio = false; });
+    });
 
-        var modificado = false;
+    document.addEventListener('click', function (evento) {
+        var enlace = evento.target.closest('a[href]');
+        if (!sucio || !enlace || !dialogo ||
+            typeof dialogo.showModal !== 'function') { return; }
 
-        form.addEventListener('input', function () { modificado = true; });
-        form.addEventListener('change', function () { modificado = true; });
-        form.addEventListener('submit', function () { modificado = false; });
+        var destino = enlace.getAttribute('href');
+        if (!destino || destino.charAt(0) === '#' ||
+            enlace.target === '_blank') { return; }
 
-        window.addEventListener('beforeunload', function (e) {
-            if (modificado) {
-                e.preventDefault();
-                e.returnValue = '';
+        evento.preventDefault();
+        dialogo.returnValue = '';
+        dialogo.showModal();
+        dialogo.addEventListener('close', function alSalir() {
+            dialogo.removeEventListener('close', alSalir);
+            if (dialogo.returnValue === 'salir') {
+                sucio = false;
+                window.location.href = destino;
             }
         });
     });
 
-    /* Prevención de doble clic en todos los submit */
+    window.addEventListener('beforeunload', function (e) {
+        if (sucio) { e.preventDefault(); e.returnValue = ''; }
+    });
+
+    /* Punto 4: avisar que esta guardando. Antes el boton quedaba mudo y
+       bloqueado 5 segundos y no se sabia si habia pasado algo. */
     document.querySelectorAll('form').forEach(function (form) {
-        form.addEventListener('submit', function (e) {
-            setTimeout(function () {
-                if (e.defaultPrevented) return;
-                form.querySelectorAll(
-                    'button[type="submit"]'
-                ).forEach(function (btn) {
-                    btn.disabled = true;
-                    setTimeout(function () { btn.disabled = false; }, 5000);
-                });
-            }, 0);
+        form.addEventListener('submit', function (evento) {
+            if (evento.defaultPrevented) { return; }
+
+            form.querySelectorAll('button[type="submit"]').forEach(function (btn) {
+                if (btn.dataset.sinEspera === '1') { return; }
+
+                var textoOriginal = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML =
+                    '<span class="spinner-border spinner-border-sm me-2"' +
+                    ' aria-hidden="true"></span>' +
+                    (btn.dataset.textoEspera || 'Guardando...');
+
+                /* Si la pagina no llega a cambiar (por ejemplo, porque el
+                   servidor devolvio un error), se recupera el boton. */
+                setTimeout(function () {
+                    btn.disabled = false;
+                    btn.innerHTML = textoOriginal;
+                }, 15000);
+            });
         });
     });
 })();

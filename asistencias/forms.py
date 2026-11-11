@@ -88,6 +88,20 @@ class RegistroAsistenciaForm(forms.ModelForm):
             "licencia",
             "observaciones",
         ]
+        labels = {
+            "designacion": "Docente (cargo / materia)",
+            "fecha": "Día",
+            "marca": "¿Asistió?",
+            "horas_inasistidas": "Horas que no cubrió",
+            "licencia": "Licencia",
+            "observaciones": "Nota",
+        }
+        help_texts = {
+            "horas_inasistidas": (
+                "Se completan solas con las horas que el docente tiene ese día."
+            ),
+            "observaciones": "Opcional, salvo que la opción elegida la pida.",
+        }
         widgets = {
             "fecha": forms.DateInput(
                 attrs={"type": "date", "class": "form-control"}
@@ -96,7 +110,7 @@ class RegistroAsistenciaForm(forms.ModelForm):
                 attrs={
                     "class": "form-control",
                     "min": "0",
-                    "step": "0.25",
+                    "step": "0.5",
                 }
             ),
             "observaciones": forms.Textarea(
@@ -241,7 +255,7 @@ class FiltroAsistenciaForm(forms.Form):
     apellido_nombre = forms.CharField(
         required=False,
         max_length=120,
-        label="Apellido y nombre",
+        label="Apellido y nombre del docente",
     )
     desde = forms.DateField(
         required=False,
@@ -253,8 +267,9 @@ class FiltroAsistenciaForm(forms.Form):
     )
     marca = forms.ModelChoiceField(
         required=False,
+        label="¿Asistió?",
         queryset=MarcaAsistencia.vigentes(),
-        empty_label="Todas las marcas",
+        empty_label="Cualquiera",
     )
     espacio_curricular = forms.ModelChoiceField(
         required=False,
@@ -266,19 +281,24 @@ class FiltroAsistenciaForm(forms.Form):
     )
     estado_registro = forms.ChoiceField(
         required=False,
-        label="Estado",
-        choices=[("", "Todos los estados")]
-        + RegistroAsistencia.Estado.choices,
+        label="Estado de la carga",
+        choices=[
+            ("", "Cualquiera"),
+            (RegistroAsistencia.Estado.BORRADOR, "Guardado, falta revisión"),
+            (RegistroAsistencia.Estado.VALIDADO, "Revisado por Secretaría"),
+        ],
     )
     estado_justificacion = forms.ChoiceField(
         required=False,
-        label="Justificación",
-        choices=[("", "Todos los estados")]
+        label="Certificado",
+        choices=[("", "Cualquiera")]
         + RegistroAsistencia.EstadoJustificacion.choices,
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Mismo vocabulario que la pantalla de carga: «Asistió», «Faltó», …
+        self.fields["marca"].label_from_instance = lambda marca: marca.etiqueta
         _aplicar_clases_bootstrap(self.fields)
 
     def clean(self):
@@ -303,9 +323,9 @@ class FiltroRecepcionForm(FiltroAsistenciaForm):
 
     estado_justificacion = forms.ChoiceField(
         required=False,
-        label="Justificación",
+        label="Certificado",
         choices=[
-            (PENDIENTES, "Pendientes (injustificadas y en trámite)"),
+            (PENDIENTES, "Pendientes (sin certificado o en trámite)"),
             *RegistroAsistencia.EstadoJustificacion.choices[1:],
             (TODAS, "Todas las inasistencias"),
         ],
@@ -313,22 +333,25 @@ class FiltroRecepcionForm(FiltroAsistenciaForm):
 
 
 class RecepcionFormularioForm(forms.Form):
-    estado_justificacion = forms.ChoiceField(label="Nuevo estado")
+    estado_justificacion = forms.ChoiceField(
+        label="¿Qué pasó con el certificado?"
+    )
     nro_formulario = forms.CharField(
         required=False,
         max_length=30,
-        label="N° de formulario",
+        label="N° del formulario en papel",
     )
     fecha_recepcion = forms.DateField(
         required=False,
-        label="Fecha de recepción",
+        label="¿Qué día lo recibiste?",
         widget=forms.DateInput(attrs={"type": "date"}),
     )
     motivo = forms.CharField(
         required=False,
         max_length=500,
         widget=forms.Textarea(attrs={"rows": 3}),
-        help_text="Obligatorio al rechazar un formulario.",
+        label="Motivo",
+        help_text="Hay que completarlo solo si rechazás el certificado.",
     )
 
     def __init__(self, *args, registro, **kwargs):

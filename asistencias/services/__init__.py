@@ -33,6 +33,8 @@ se sigue importando igual: este archivo reexporta la misma API pública.
 
 from .agenda import (
     ciclo_lectivo_actual,
+    conteo_del_dia,
+    designaciones_del_dia,
     dias_con_clase,
     horario_del_dia,
     horas_del_dia,
@@ -67,7 +69,9 @@ from .reglas import (
     anio_admitido,
     fecha_admitida,
     id_admitido,
+    dia_habil_mas_cercano,
     motivo_dia_no_laborable,
+    nombre_del_mes,
     validar_dia_laborable,
 )
 from .sesiones import (
@@ -75,6 +79,8 @@ from .sesiones import (
     MINUTOS_EXPIRACION_SESION,
     adquirir_sesion_edicion,
     liberar_sesion_edicion,
+    nombre_de,
+    operadores_activos,
     renovar_sesion_edicion,
 )
 
@@ -88,7 +94,13 @@ __all__ = [
     "DIA_HORARIO",
     "ID_MAXIMO",
     "clave_dia",
+    "dia_habil_mas_cercano",
+    "nombre_del_mes",
+    "nombre_de",
+    "operadores_activos",
     "ciclo_lectivo_actual",
+    "conteo_del_dia",
+    "designaciones_del_dia",
     "dias_con_clase",
     "horario_del_dia",
     "horas_del_dia",

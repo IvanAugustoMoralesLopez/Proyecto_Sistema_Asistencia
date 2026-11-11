@@ -1,60 +1,51 @@
-{% extends "base.html" %}
+{% extends "asistencias/_base_asistencias.html" %}
 
 {% block title %}Calendario escolar{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h1 class="h3">Calendario escolar</h1>
-        <p class="text-secondary mb-0">
-            Feriados, asuetos y días inhábiles. Los sábados y domingos ya
-            son no laborables: no hace falta cargarlos.
-        </p>
+<div class="asis-cabecera">
+    <div class="encabezado-planilla">
+        <div>
+            <p class="ruta">Asistencia › Calendario</p>
+            <h1 class="encabezado-planilla__titulo">Calendario escolar {{ anio }}</h1>
+            <p class="encabezado-planilla__subtitulo">
+                Feriados, asuetos y días inhábiles. Sábados y domingos ya son
+                no laborables: no hace falta cargarlos.
+            </p>
+        </div>
+
+        <div class="encabezado-planilla__acciones">
+            {% if perms.asistencias.add_dianolaborable %}
+                <a class="btn btn-primario" href="{% url 'asistencia:crear_dia_no_laborable' %}">
+                    Nuevo día
+                </a>
+                <a class="btn btn-filtro" href="{% url 'asistencia:cargar_masivo' %}">Carga masiva</a>
+                <a class="btn btn-filtro" href="{% url 'asistencia:copiar_calendario' %}">Copiar año</a>
+            {% endif %}
+            <a class="btn btn-filtro" href="{% url 'asistencia:registro_diario' %}">
+                Asistencia del día
+            </a>
+        </div>
     </div>
 
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary"
-           href="{% url 'asistencia:registro_diario' %}">
-            Registro diario
-        </a>
-        {% if perms.asistencias.add_dianolaborable %}
-            <a class="btn btn-primary"
-               href="{% url 'asistencia:crear_dia_no_laborable' %}">
-                Nuevo día
+    <div class="asis-sesion-linea">
+        {% if anio_anterior %}
+            <a class="btn btn-filtro p-0" href="{% url 'asistencia:lista_calendario' %}?anio={{ anio_anterior }}">
+                « {{ anio_anterior }}
             </a>
-            <a class="btn btn-outline-primary"
-               href="{% url 'asistencia:cargar_masivo' %}">
-                Carga masiva
-            </a>
-            <a class="btn btn-outline-secondary"
-               href="{% url 'asistencia:copiar_calendario' %}">
-                Copiar año
+        {% endif %}
+        <span><strong>{{ anio }}</strong> · {{ dias|length }} día{{ dias|length|pluralize:"s" }} cargado{{ dias|length|pluralize:"s" }}</span>
+        {% if anio_siguiente %}
+            <a class="btn btn-filtro p-0" href="{% url 'asistencia:lista_calendario' %}?anio={{ anio_siguiente }}">
+                {{ anio_siguiente }} »
             </a>
         {% endif %}
     </div>
 </div>
 
-<div class="d-flex align-items-center gap-3 mb-3">
-    {% if anio_anterior %}
-        <a class="btn btn-sm btn-outline-secondary"
-           href="{% url 'asistencia:lista_calendario' %}?anio={{ anio_anterior }}">
-            &laquo; {{ anio_anterior }}
-        </a>
-    {% endif %}
-
-    <strong>{{ anio }}</strong>
-
-    {% if anio_siguiente %}
-        <a class="btn btn-sm btn-outline-secondary"
-           href="{% url 'asistencia:lista_calendario' %}?anio={{ anio_siguiente }}">
-            {{ anio_siguiente }} &raquo;
-        </a>
-    {% endif %}
-</div>
-
-<div class="table-responsive">
-    <table class="table table-striped">
-        <thead class="table-dark">
+<div class="planilla">
+    <table class="table table-hover align-middle asis-planilla asis-tarjetas">
+        <thead>
             <tr>
                 <th>Fecha</th>
                 <th>Día</th>
@@ -117,5 +108,6 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ block.super }}
 {% include "asistencias/includes/ux_mejoras.html" %}
 {% endblock %}

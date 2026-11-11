@@ -1,61 +1,61 @@
-{% extends "base.html" %}
+{% extends "asistencias/_base_asistencias.html" %}
 
 {% block title %}{{ titulo }}{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-lg-{{ ancho|default:'8' }}">
-        <div class="card shadow-sm">
-            <div class="card-body p-4">
-                <h1 class="h3 mb-4">{{ titulo }}</h1>
+    <div class="col-lg-{{ ancho|default:'7' }}">
+        <div class="asis-cabecera">
+            <div class="encabezado-planilla">
+                <div>
+                    <p class="ruta">{{ ruta|default:"Asistencia" }}</p>
+                    <h1 class="encabezado-planilla__titulo">{{ titulo }}</h1>
+                    {% if subtitulo %}
+                        <p class="encabezado-planilla__subtitulo">{{ subtitulo }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
 
-                {% block antes_form %}{% endblock %}
+        {% block antes_form %}{% endblock %}
 
+        <div class="card">
+            <div class="card-body">
                 <form method="post"{% if confirmar_submit %} onsubmit="return confirm('{{ confirmar_submit }}');"{% endif %}>
                     {% csrf_token %}
                     {% block campos_ocultos %}{% endblock %}
 
                     {% if form.non_field_errors %}
-                        <div class="alert alert-danger">
-                            {{ form.non_field_errors }}
-                        </div>
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
                     {% endif %}
 
                     {% for field in form %}
                         <div class="mb-3">
-                            <label class="form-label"
-                                   for="{{ field.id_for_label }}">
+                            <label class="form-label fw-semibold" for="{{ field.id_for_label }}">
                                 {{ field.label }}
                             </label>
 
                             {{ field }}
 
                             {% if field.help_text %}
-                                <div class="form-text">
-                                    {{ field.help_text }}
-                                </div>
+                                <div class="form-text">{{ field.help_text }}</div>
                             {% endif %}
 
                             {% for error in field.errors %}
-                                <div class="text-danger small">
-                                    {{ error }}
-                                </div>
+                                <div class="text-danger small">{{ error }}</div>
                             {% endfor %}
                         </div>
                     {% endfor %}
 
                     {% block despues_campos %}{% endblock %}
 
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-{{ btn_clase|default:'primary' }}"
+                    <div class="d-flex flex-wrap gap-2 pt-2">
+                        <button class="btn btn-{{ btn_clase|default:'primario' }} asis-accion-principal"
                                 type="submit">
                             {{ btn_texto|default:"Guardar" }}
                         </button>
 
-                        <a class="btn btn-outline-secondary"
-                           href="{{ url_cancelar }}">
-                            Cancelar
-                        </a>
+                        <a class="btn btn-filtro" href="{{ url_cancelar }}">Cancelar</a>
                     </div>
                 </form>
             </div>
@@ -65,9 +65,11 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ block.super }}
 {% include "asistencias/includes/ux_mejoras.html" %}
 <script>
 (function () {
+    /* Pone el foco en el primer campo util, salvo que haya errores que leer. */
     var form = document.querySelector('form[method="post"]');
     if (form && !form.querySelector('.text-danger, .alert-danger')) {
         var campo = form.querySelector(
@@ -75,7 +77,7 @@
             'select:not([disabled]),' +
             'textarea:not([disabled])'
         );
-        if (campo) campo.focus();
+        if (campo) { campo.focus(); }
     }
 })();
 </script>

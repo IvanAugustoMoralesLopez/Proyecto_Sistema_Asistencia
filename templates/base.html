@@ -72,11 +72,11 @@
                 {% if perms.asistencias.view_registroasistencia %}
                 <p class="sidebar__titulo">Asistencia</p>
                 <a class="sidebar__link" href="{% url 'asistencia:registro_diario' %}">
-                    <i class="bi bi-calendar-check"></i><span>Registro diario</span>
+                    <i class="bi bi-calendar-check"></i><span>Asistencia del Dia</span>
                 </a>
                 {% if perms.asistencias.add_registroasistencia %}
                 <a class="sidebar__link" href="{% url 'asistencia:planilla_rapida' %}">
-                    <i class="bi bi-ui-checks-grid"></i><span>Planilla rápida</span>
+                    <i class="bi bi-ui-checks-grid"></i><span>Cargar Asistencia</span>
                 </a>
                 {% endif %}
                 <a class="sidebar__link" href="{% url 'asistencia:historial' %}">

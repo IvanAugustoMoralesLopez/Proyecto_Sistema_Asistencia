@@ -1,188 +1,183 @@
-{% extends "base.html" %}
+{% extends "asistencias/_base_asistencias.html" %}
 
-{% block title %}Registro diario{% endblock %}
+{% block title %}Asistencia del día{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h1 class="h3">Registro diario de asistencia</h1>
-        <p class="text-secondary mb-0">
-            Consulta por fecha y seguimiento de registros.
-        </p>
+<div class="asis-cabecera">
+    <div class="encabezado-planilla">
+        <div>
+            <p class="ruta">Asistencia</p>
+            <h1 class="encabezado-planilla__titulo">
+                {{ fecha_seleccionada|slice:"8:10" }}/{{ fecha_seleccionada|slice:"5:7" }}/{{ fecha_seleccionada|slice:":4" }}
+                {% if es_hoy %}<span class="badge text-bg-primary">hoy</span>{% endif %}
+            </h1>
+            <p class="encabezado-planilla__subtitulo">
+                Mirá lo que está cargado y cargá lo que falte.
+            </p>
+        </div>
+
     </div>
 
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary"
-           href="{% url 'asistencia:lista_calendario' %}">
-            Calendario
-        </a>
-        <a class="btn btn-outline-secondary"
-           href="{% url 'asistencia:recepcion_formularios' %}">
-            Recepción de formularios
-        </a>
-        {% if perms.asistencias.add_registroasistencia %}
-            <a class="btn btn-primary"
-               href="{% url 'asistencia:planilla_rapida' %}?fecha={{ fecha_seleccionada }}">
-                Planilla rápida
-            </a>
-            <a class="btn btn-outline-primary"
-               href="{% url 'asistencia:crear_asistencia' %}?fecha={{ fecha_seleccionada }}">
-                Nueva asistencia
-            </a>
-        {% endif %}
-    </div>
+    {% if registros %}
+        <div class="asis-resumen mb-1">
+            <span class="asis-resumen__dato"><b>{{ total }}</b> cargado{{ total|pluralize:"s" }}</span>
+            <span class="asis-resumen__dato asis-resumen__dato--ok"><b>{{ presentes }}</b> {% if presentes == 1 %}asistió{% else %}asistieron{% endif %}</span>
+            <span class="asis-resumen__dato asis-resumen__dato--falta"><b>{{ inasistencias }}</b> {% if inasistencias == 1 %}faltó o se retiró{% else %}faltaron o se retiraron{% endif %}</span>
+            {% if pendientes_formulario %}
+                <span class="asis-resumen__dato asis-resumen__dato--esper"><b>{{ pendientes_formulario }}</b> esperan certificado</span>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    {% include "asistencias/includes/barra_sesion.html" %}
 </div>
 
-<form method="get" class="card card-body mb-3">
-    <div class="row align-items-end g-3">
-        <div class="col-auto">
-            <a class="btn btn-outline-secondary"
-               href="?fecha={{ fecha_anterior }}"
-               title="Día anterior">
-                &laquo;
-            </a>
-        </div>
+<form method="get" class="asis-barra">
+    <span class="asis-barra__dia">
+        <a class="btn btn-outline-secondary" href="?fecha={{ fecha_anterior }}"
+           title="Día anterior" aria-label="Día anterior">«</a>
+        <input class="form-control asis-barra__fecha" type="date" id="fecha" name="fecha"
+               value="{{ fecha_seleccionada }}" required
+               aria-label="Ver otro día">
+        <a class="btn btn-outline-secondary" href="?fecha={{ fecha_siguiente }}"
+           title="Día siguiente" aria-label="Día siguiente">»</a>
+    </span>
 
-        <div class="col-md-4">
-            <label class="form-label" for="fecha">
-                Fecha
-            </label>
-            <input
-                class="form-control"
-                type="date"
-                id="fecha"
-                name="fecha"
-                value="{{ fecha_seleccionada }}"
-                required
-            >
-        </div>
+    <button class="btn btn-primario-suave" type="submit" data-sin-espera="1">Ver</button>
 
-        <div class="col-auto">
-            <a class="btn btn-outline-secondary"
-               href="?fecha={{ fecha_siguiente }}"
-               title="Día siguiente">
-                &raquo;
-            </a>
-        </div>
+    <span class="asis-barra__sep"></span>
 
-        <div class="col-md-3">
-            <button class="btn btn-secondary" type="submit">
-                Consultar
-            </button>
-        </div>
-    </div>
+    {% if perms.asistencias.add_registroasistencia %}
+        <a class="btn btn-filtro" id="btn-nueva-asistencia"
+           href="{% url 'asistencia:crear_asistencia' %}?fecha={{ fecha_seleccionada }}">
+            Cargar un docente suelto
+        </a>
+    {% endif %}
+    <a class="btn btn-filtro" href="{% url 'asistencia:historial' %}">Buscar en el historial</a>
 </form>
 
-{% if registros %}
-    <div class="row g-3 mb-3">
-        <div class="col-auto">
-            <div class="card text-center p-2 px-3">
-                <div class="fw-bold fs-5">{{ total }}</div>
-                <small class="text-secondary">Total</small>
+<div class="asis-ayudas">
+    {% include "asistencias/includes/ayuda_carga.html" %}
+</div>
+
+{% include "asistencias/includes/avisos_dia.html" %}
+
+{% if perms.asistencias.add_registroasistencia and not motivo_no_laborable and not periodo_cerrado %}
+    {% if faltan_cargar %}
+        <div class="asis-accion-destacada">
+            <div>
+                <p class="asis-accion-destacada__titulo mb-1">
+                    Faltan cargar {{ faltan_cargar }}
+                    docente{{ faltan_cargar|pluralize:"s" }}
+                </p>
+                <p class="mb-0 text-secondary">
+                    {% if cargados_del_dia %}
+                        Ya cargaste {{ cargados_del_dia }} de {{ total_del_dia }}.
+                    {% else %}
+                        Son los {{ total_del_dia }} que dan clase este día.
+                    {% endif %}
+                </p>
             </div>
+
+            <a class="btn btn-primario asis-accion-principal" id="btn-cargar-dia"
+               href="{% url 'asistencia:planilla_rapida' %}?fecha={{ fecha_seleccionada }}">
+                Cargar la asistencia ahora
+            </a>
         </div>
-        <div class="col-auto">
-            <div class="card text-center p-2 px-3 border-success">
-                <div class="fw-bold fs-5 text-success">{{ presentes }}</div>
-                <small class="text-secondary">Presentes</small>
+    {% elif total_del_dia %}
+        <div class="asis-accion-destacada asis-accion-destacada--ok">
+            <div>
+                <p class="asis-accion-destacada__titulo mb-1">
+                    Listo: ya están cargados los {{ total_del_dia }}
+                    docente{{ total_del_dia|pluralize:"s" }} de este día
+                </p>
+                <p class="mb-0 text-secondary">
+                    Si tenés que corregir algo, usá el botón «Corregir» de la fila.
+                </p>
             </div>
+
+            <a class="btn btn-filtro" id="btn-cargar-dia"
+               href="{% url 'asistencia:planilla_rapida' %}?fecha={{ fecha_seleccionada }}">
+                Revisar la carga
+            </a>
         </div>
-        <div class="col-auto">
-            <div class="card text-center p-2 px-3 border-danger">
-                <div class="fw-bold fs-5 text-danger">{{ inasistencias }}</div>
-                <small class="text-secondary">Inasistencias</small>
+    {% else %}
+        {% comment %}
+        Sin personal ni designaciones cargadas no hay a quién marcar. En vez
+        de dejar la pantalla sin ninguna acción, se explica qué falta y se
+        ofrece igual la entrada a la planilla.
+        {% endcomment %}
+        <div class="asis-accion-destacada">
+            <div>
+                <p class="asis-accion-destacada__titulo mb-1">
+                    No hay docentes para este día
+                </p>
+                <p class="mb-0 text-secondary">
+                    Todavía no hay designaciones vigentes con horario en esta
+                    fecha. Secretaría tiene que cargarlas en
+                    <strong>Personal → Legajos</strong>.
+                </p>
             </div>
+
+            <a class="btn btn-primario asis-accion-principal" id="btn-cargar-dia"
+               href="{% url 'asistencia:planilla_rapida' %}?fecha={{ fecha_seleccionada }}">
+                Abrir la planilla igual
+            </a>
         </div>
-        {% if sin_validar %}
-            <div class="col-auto">
-                <div class="card text-center p-2 px-3 border-warning">
-                    <div class="fw-bold fs-5 text-warning">{{ sin_validar }}</div>
-                    <small class="text-secondary">Sin validar</small>
-                </div>
-            </div>
-        {% endif %}
-        {% if pendientes_formulario %}
-            <div class="col-auto">
-                <div class="card text-center p-2 px-3 border-info">
-                    <div class="fw-bold fs-5 text-info">{{ pendientes_formulario }}</div>
-                    <small class="text-secondary">Pendientes formulario</small>
-                </div>
-            </div>
-        {% endif %}
-    </div>
+    {% endif %}
 {% endif %}
 
-{% if jornada_cerrada %}
-    <div class="alert alert-secondary">
-        Jornada cerrada por {{ jornada_cerrada.cerrado_por }} el
-        {{ jornada_cerrada.cerrado_en|date:"d/m/Y H:i" }}. Modificar sus
-        registros requiere autorización de Secretaría o Subsecretaría y un
-        motivo.
-    </div>
-{% elif puede_cerrar_jornada %}
-    <form method="post"
-          action="{% url 'asistencia:cerrar_jornada' %}"
-          class="mb-3"
-          onsubmit="return confirm('¿Cerrar la jornada del {{ fecha_seleccionada }}? Esta acción no se puede deshacer.');">
-        {% csrf_token %}
-        <input type="hidden" name="fecha" value="{{ fecha_seleccionada }}">
-        <button class="btn btn-outline-dark" type="submit">
-            Cerrar jornada
-        </button>
-    </form>
-{% endif %}
-
-{% if cierre and cierre.estado == "CERRADO" %}
-    <div class="alert alert-warning">
-        El período correspondiente a esta fecha está cerrado.
-        No se deben modificar sus registros.
-    </div>
-{% endif %}
-
-{% if motivo_no_laborable %}
-    <div class="alert alert-info">
-        {{ motivo_no_laborable }}. No hay obligación de marcado ni se
-        computan inasistencias en esta fecha.
-    </div>
-{% endif %}
-
-<div class="table-responsive">
-    <table class="table table-striped table-hover align-middle">
-        <thead class="table-dark">
+{% if not registros %}
+    <p class="text-secondary py-3">Todavía no hay nada cargado en este día.</p>
+{% else %}
+<div class="planilla">
+    <table class="table table-hover align-middle asis-planilla asis-tarjetas">
+        <thead>
             <tr>
-                <th>Fecha</th>
-                <th>DNI</th>
                 <th>Docente</th>
-                <th>Cargo</th>
-                <th>Espacio curricular</th>
-                <th>Marca</th>
+                <th>Cargo y materia</th>
+                <th>¿Asistió?</th>
                 <th>Estado</th>
-                <th>Justificación</th>
-                <th>Acciones</th>
+                <th class="text-end">Acciones</th>
             </tr>
         </thead>
         <tbody>
             {% for registro in registros %}
                 <tr>
-                    <td>{{ registro.fecha|date:"d/m/Y" }}</td>
-                    <td>{{ registro.designacion.persona.dni }}</td>
-                    <td>
-                        {{ registro.designacion.persona.apellido_nombre }}
+                    <td data-rotulo="Docente">
+                        <div class="asis-principal">{{ registro.designacion.persona.apellido_nombre }}</div>
+                        <div class="asis-apoyo">DNI {{ registro.designacion.persona.dni }}</div>
                     </td>
-                    <td>{{ registro.designacion.cargo.descripcion }}</td>
-                    <td>
-                        {{ registro.designacion.espacio_curricular|default:"—" }}
+
+                    <td data-rotulo="Cargo y materia">
+                        {{ registro.designacion.cargo.descripcion }}
+                        {% if registro.designacion.espacio_curricular %}
+                            <div class="asis-apoyo">{{ registro.designacion.espacio_curricular.nombre }}</div>
+                        {% endif %}
                     </td>
-                    <td>{{ registro.marca.codigo }} — {{ registro.marca.descripcion }}</td>
-                    <td>
-                        <span class="badge text-bg-{% if registro.estado_registro == 'VALIDADO' %}success{% else %}secondary{% endif %}">
-                            {{ registro.get_estado_registro_display }}
-                        </span>
+
+                    <td data-rotulo="¿Asistió?">
+                        <div class="asis-principal">{{ registro.marca.etiqueta }}</div>
+                        <div class="asis-apoyo">
+                            {{ registro.marca.codigo }}{% if registro.horas_inasistidas %} · {{ registro.horas_inasistidas|floatformat:"-2" }} hs sin cubrir{% endif %}
+                        </div>
                     </td>
-                    <td>
-                        {% include "asistencias/includes/badge_justificacion.html" %}
+
+                    <td data-rotulo="Estado">
+                        {% if registro.estado_registro == "VALIDADO" %}
+                            <span class="badge text-bg-success">Revisado por Secretaría</span>
+                        {% else %}
+                            <span class="badge text-bg-secondary">Guardado</span>
+                            <div class="asis-apoyo">Falta la revisión de Secretaría</div>
+                        {% endif %}
+                        {% if registro.estado_justificacion != "NO_APLICA" %}
+                            <div class="mt-1">
+                                {% include "asistencias/includes/badge_justificacion.html" %}
+                            </div>
+                        {% endif %}
                     </td>
-                    <td class="text-nowrap">
+
+                    <td data-rotulo="Acciones" class="text-nowrap text-end">
                         <a class="btn btn-sm btn-outline-primary"
                            href="{% url 'asistencia:detalle_asistencia' registro.pk %}?desde={% url 'asistencia:registro_diario' %}%3Ffecha%3D{{ fecha_seleccionada }}">
                             Ver
@@ -191,30 +186,90 @@
                         {% if perms.asistencias.change_registroasistencia %}
                             <a class="btn btn-sm btn-outline-secondary"
                                href="{% url 'asistencia:editar_asistencia' registro.pk %}?volver={% url 'asistencia:registro_diario' %}%3Ffecha%3D{{ fecha_seleccionada }}">
-                                Editar
+                                Corregir
                             </a>
                         {% endif %}
 
                         {% if registro.marca.computa_inasistencia and registro.estado_justificacion != "JUSTIFICADA" and registro.estado_justificacion != "NO_APLICA" and perms.asistencias.recepcionar_formulario %}
                             <a class="btn btn-sm btn-outline-success"
                                href="{% url 'asistencia:recepcionar_formulario' registro.pk %}">
-                                Recepcionar
+                                Cargar certificado
                             </a>
                         {% endif %}
-                    </td>
-                </tr>
-            {% empty %}
-                <tr>
-                    <td colspan="9" class="text-center py-4">
-                        No hay registros para la fecha seleccionada.
                     </td>
                 </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
+{% endif %}
+
+{% if puede_cerrar_jornada %}
+    {# Accion que no se deshace: al pie, plegada y con la fecha escrita a mano. #}
+    <div class="asis-accion-riesgo">
+        <details>
+            <summary class="text-secondary" style="cursor: pointer;">
+                Cerrar el día (cuando ya está todo cargado)
+            </summary>
+
+            {% if not registros %}
+                <p class="alert alert-warning mt-2 mb-2">
+                    Ojo: todavía no hay <strong>ninguna</strong> asistencia cargada
+                    en este día. Si lo cerrás ahora, después vas a necesitar
+                    autorización para poder cargarla.
+                </p>
+            {% endif %}
+
+            <p class="text-secondary mt-2 mb-2">
+                <strong>Después no vas a poder cambiar nada vos sola</strong>:
+                va a hacer falta que lo autorice Secretaría. No hace falta
+                cerrarlo para que la carga quede guardada.
+            </p>
+
+            <form method="post" action="{% url 'asistencia:cerrar_jornada' %}"
+                  id="form-cerrar-jornada">
+                {% csrf_token %}
+                <input type="hidden" name="fecha" value="{{ fecha_seleccionada }}">
+
+                <label class="form-label" for="confirmacion_cierre">
+                    Para confirmar, escribí
+                    <strong>{{ fecha_seleccionada|slice:"8:10" }}/{{ fecha_seleccionada|slice:"5:7" }}/{{ fecha_seleccionada|slice:":4" }}</strong>
+                </label>
+                <div class="d-flex flex-wrap gap-2 align-items-start">
+                    <input class="form-control" style="max-width: 11rem;"
+                           type="text" id="confirmacion_cierre"
+                           inputmode="numeric" placeholder="dd/mm/aaaa"
+                           autocomplete="off">
+                    <button class="btn btn-outline-dark" type="submit"
+                            id="btn-cerrar-jornada" disabled
+                            data-texto-espera="Cerrando...">
+                        Cerrar jornada
+                    </button>
+                </div>
+            </form>
+        </details>
+    </div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
+{{ block.super }}
 {% include "asistencias/includes/ux_mejoras.html" %}
+{% if puede_cerrar_jornada %}
+<script>
+(function () {
+    /* El boton de cerrar el dia solo se habilita si se escribe la fecha. */
+    var campo = document.getElementById("confirmacion_cierre");
+    var boton = document.getElementById("btn-cerrar-jornada");
+    if (!campo || !boton) { return; }
+
+    var iso = "{{ fecha_seleccionada }}";
+    var esperado = iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4);
+
+    campo.addEventListener("input", function () {
+        boton.disabled = campo.value.trim() !== esperado;
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}
