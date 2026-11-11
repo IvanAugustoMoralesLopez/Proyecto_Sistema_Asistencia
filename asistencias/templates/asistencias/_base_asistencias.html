@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% comment %}
+  Plantilla base del módulo de Asistencias.
+
+  Todas las pantallas de asistencias extienden esta y no `base.html`
+  directamente, para que carguen la hoja de estilo propia del módulo
+  (letra más grande, filas más altas y vista de tarjetas en el celular).
+{% endcomment %}
+
+{% block seccion %}asistencias{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'asistencias/css/asistencias.css' %}">
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    /* Punto 17: si se toca la hamburguesa y el menu queda en modo iconos,
+       el estado se recuerda, asi la pantalla no "cambia sola" entre una
+       visita y otra. Solo se aplica dentro de Asistencias. */
+    var CLAVE = "asis-menu-colapsado";
+
+    try {
+        if (localStorage.getItem(CLAVE) === "1") {
+            document.body.classList.add("menu-colapsado");
+        }
+    } catch (e) { /* navegador sin almacenamiento: no pasa nada */ }
+
+    var boton = document.getElementById("btnMenu");
+    if (!boton) { return; }
+
+    boton.addEventListener("click", function () {
+        /* base.html ya alterno la clase en este mismo clic. */
+        setTimeout(function () {
+            try {
+                var colapsado = document.body.classList.contains("menu-colapsado");
+                localStorage.setItem(CLAVE, colapsado ? "1" : "0");
+            } catch (e) { /* idem */ }
+        }, 0);
+    });
+})();
+</script>
+{% endblock %}

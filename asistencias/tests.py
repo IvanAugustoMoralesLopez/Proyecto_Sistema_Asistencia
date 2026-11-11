@@ -404,7 +404,7 @@ class DiasNoLaborablesTests(BaseAsistenciaTests):
             {"fecha": SABADO.isoformat()},
         )
         self.assertContains(respuesta, "es fin de semana")
-        self.assertContains(respuesta, "No hay obligación de marcado")
+        self.assertContains(respuesta, "no hay que cargar asistencia")
 
 
 class FinDeSemanaDePruebaTests(BaseAsistenciaTests):
@@ -821,7 +821,7 @@ class RecepcionFormulariosVistasTests(BaseAsistenciaTests):
         respuesta = self.client.get(
             reverse("asistencia:recepcionar_formulario", args=[self.inasistencia.pk])
         )
-        self.assertContains(respuesta, "Recepcionar formulario")
+        self.assertContains(respuesta, "Cargar el certificado")
         opciones = [
             valor
             for valor, _ in respuesta.context["form"]
@@ -882,7 +882,7 @@ class RecepcionFormulariosVistasTests(BaseAsistenciaTests):
             reverse("asistencia:detalle_asistencia", args=[self.inasistencia.pk])
         )
         self.assertContains(respuesta, "Injustificada")
-        self.assertContains(respuesta, "Recepcionar formulario")
+        self.assertContains(respuesta, "Cargar el certificado")
 
 
 class PermisosServiciosTests(BaseAsistenciaTests):
@@ -1067,7 +1067,7 @@ class PermisosVistasTests(BaseAsistenciaTests):
         self.entrar_como(PERMISOS_CARGA)
         respuesta = self.client.get(reverse("asistencia:historial"))
         self.assertNotContains(respuesta, "Validar")
-        self.assertContains(respuesta, "Editar")
+        self.assertContains(respuesta, "Corregir")
 
         self.client.force_login(self.usuario)
         respuesta = self.client.get(reverse("asistencia:historial"))
@@ -1078,7 +1078,7 @@ class PermisosVistasTests(BaseAsistenciaTests):
         respuesta = self.client.get(
             reverse("asistencia:registro_diario"), {"fecha": LUNES.isoformat()}
         )
-        self.assertNotContains(respuesta, "Nueva asistencia")
+        self.assertNotContains(respuesta, "btn-nueva-asistencia")
 
     def test_el_admin_no_permite_editar_registros(self):
         from django.contrib import admin
@@ -1874,7 +1874,7 @@ class CierreDiarioVistasTests(BaseAsistenciaTests):
 
     def test_se_cierra_la_jornada_desde_la_pantalla(self):
         respuesta = self.client.get(self.url_diaria())
-        self.assertContains(respuesta, "Cerrar jornada")
+        self.assertContains(respuesta, "btn-cerrar-jornada")
 
         respuesta = self.client.post(
             reverse("asistencia:cerrar_jornada"), {"fecha": LUNES.isoformat()}
@@ -1883,13 +1883,13 @@ class CierreDiarioVistasTests(BaseAsistenciaTests):
         self.assertTrue(CierreDiario.objects.filter(fecha=LUNES).exists())
 
         respuesta = self.client.get(self.url_diaria())
-        self.assertContains(respuesta, "Jornada cerrada por")
-        self.assertNotContains(respuesta, "Cerrar jornada</button>")
+        self.assertContains(respuesta, "ya fue cerrado por")
+        self.assertNotContains(respuesta, "btn-cerrar-jornada")
 
     def test_el_boton_no_aparece_en_dias_no_laborables_ni_futuros(self):
         for fecha in (SABADO, timezone.localdate() + timedelta(days=3)):
             respuesta = self.client.get(self.url_diaria(fecha))
-            self.assertNotContains(respuesta, "Cerrar jornada</button>")
+            self.assertNotContains(respuesta, "btn-cerrar-jornada")
 
     def test_un_error_al_cerrar_se_informa_con_un_mensaje(self):
         respuesta = self.client.post(
@@ -2277,7 +2277,7 @@ class PlanillaVistasTests(BasePlanillaTests):
     def test_un_fin_de_semana_bloquea_la_planilla(self):
         respuesta = self.ver(SABADO)
         self.assertContains(respuesta, "es fin de semana")
-        self.assertNotContains(respuesta, "Guardar planilla")
+        self.assertNotContains(respuesta, "btn-guardar-asistencia")
 
         respuesta = self.enviar({f"marca-{self.gomez.pk}": self.marca_p.pk}, SABADO)
         self.assertFalse(RegistroAsistencia.objects.exists())
@@ -2312,7 +2312,7 @@ class PlanillaVistasTests(BasePlanillaTests):
     def test_en_una_jornada_cerrada_con_autorizacion_debe_indicar_el_motivo(self):
         cerrar_dia(usuario=self.usuario, token=self.token, fecha=LUNES)
         respuesta = self.ver()
-        self.assertContains(respuesta, "Motivo de la carga en una jornada cerrada")
+        self.assertContains(respuesta, 'name="motivo"')
 
         self.enviar({f"marca-{self.gomez.pk}": self.marca_p.pk})
         self.assertFalse(RegistroAsistencia.objects.exists())
@@ -2330,7 +2330,7 @@ class PlanillaVistasTests(BasePlanillaTests):
         self.client.force_login(crear_usuario("bedel", PERMISOS_CARGA))
         respuesta = self.ver()
         self.assertContains(respuesta, "requiere autorización de Secretaría")
-        self.assertNotContains(respuesta, "Guardar planilla")
+        self.assertNotContains(respuesta, "btn-guardar-asistencia")
 
     def test_el_registro_diario_enlaza_a_la_planilla(self):
         respuesta = self.client.get(
@@ -3251,3 +3251,276 @@ class MarcaSinCatalogoTests(BaseAsistenciaTests):
             marcar_licencia(licencia, usuario=self.usuario)
 
         self.assertIn("LIC", " ".join(contexto.exception.messages))
+
+
+class LenguajeDeLasMarcasTests(BaseAsistenciaTests):
+    """Punto 9: cada marca tiene un nombre llano y una explicación."""
+
+    def test_la_etiqueta_usa_el_nombre_llano(self):
+        self.assertEqual(self.marca_p.etiqueta, "Asistió")
+        self.assertEqual(self.marca_i.etiqueta, "Faltó")
+        self.assertEqual(self.marca_pr.etiqueta, "Asistió y se retiró")
+
+    def test_el_termino_administrativo_no_cambia(self):
+        self.assertEqual(self.marca_p.descripcion, "Presente")
+        self.assertEqual(self.marca_pr.descripcion, "Presente retirado")
+
+    def test_sin_nombre_llano_la_etiqueta_cae_en_la_descripcion(self):
+        otra = MarcaAsistencia.objects.create(codigo="XX", descripcion="Otra")
+        self.assertEqual(otra.etiqueta, "Otra")
+
+    def test_todas_las_marcas_del_catalogo_explican_para_que_sirven(self):
+        for marca in MarcaAsistencia.vigentes():
+            self.assertTrue(marca.ayuda, f"{marca.codigo} sin ayuda")
+
+    def test_la_explicacion_de_pr_avisa_que_cuenta_como_inasistencia(self):
+        self.assertIn("INASISTENCIA", self.marca_pr.ayuda)
+
+
+class AvisoDeLugaresOcupadosTests(BaseAsistenciaTests):
+    """Punto 1: decir quién está cargando y hasta cuándo."""
+
+    def test_el_aviso_nombra_a_quienes_estan_cargando(self):
+        otra = User.objects.create_user("ana", first_name="Ana", last_name="Gómez")
+        adquirir_sesion_edicion(otra, str(uuid.uuid4()))
+
+        tercera = crear_usuario("tercera", PERMISOS_CARGA)
+        with self.assertRaises(ValidationError) as contexto:
+            adquirir_sesion_edicion(tercera, str(uuid.uuid4()))
+
+        mensaje = " ".join(contexto.exception.messages)
+        self.assertIn("Ana Gómez", mensaje)
+        self.assertIn("Se libera un lugar a las", mensaje)
+        self.assertIn("Liberar mi lugar", mensaje)
+
+    def test_sin_nombre_y_apellido_se_usa_el_usuario(self):
+        from .services import nombre_de
+
+        self.assertEqual(nombre_de(self.usuario), "operador")
+
+    def test_operadores_activos_puede_excluir_el_token_propio(self):
+        from .services import operadores_activos
+
+        self.assertEqual(len(operadores_activos()), 1)
+        self.assertEqual(operadores_activos(excluir_token=self.token), [])
+
+    def test_la_pantalla_dice_quien_esta_cargando(self):
+        self.client.force_login(self.usuario)
+        respuesta = self.client.get(
+            reverse("asistencia:registro_diario"), {"fecha": LUNES.isoformat()}
+        )
+        self.assertContains(respuesta, "Cargando asistencia ahora")
+        self.assertEqual(respuesta.context["sesion_libres"], 1)
+
+    def test_el_boton_de_liberar_solo_aparece_si_tengo_lugar(self):
+        otro = crear_usuario("mirona", PERMISOS_LECTURA)
+        self.client.force_login(otro)
+        respuesta = self.client.get(reverse("asistencia:registro_diario"))
+        self.assertFalse(respuesta.context["sesion_tengo_lugar"])
+        self.assertNotContains(respuesta, "Liberar mi lugar")
+
+    def test_liberar_el_lugar_vuelve_a_donde_estaba(self):
+        self.client.force_login(self.usuario)
+        self.client.session["asistencia_token"] = self.token
+        destino = reverse("asistencia:historial")
+        respuesta = self.client.post(
+            reverse("asistencia:liberar_edicion"), {"next": destino}
+        )
+        self.assertRedirects(respuesta, destino)
+
+
+class SalidaDeLosDiasSinCargaTests(BasePlanillaTests):
+    """Punto 6: un día no laborable ofrece el día en el que sí se carga."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.usuario)
+
+    def test_el_dia_habil_anterior_a_un_sabado_es_el_viernes(self):
+        from .services import dia_habil_mas_cercano
+
+        self.assertEqual(
+            dia_habil_mas_cercano(SABADO), SABADO - timedelta(days=1)
+        )
+
+    def test_salta_los_feriados_ademas_del_fin_de_semana(self):
+        from .services import dia_habil_mas_cercano
+
+        DiaNoLaborable.objects.create(
+            fecha=SABADO - timedelta(days=1), descripcion="Feriado"
+        )
+        self.assertEqual(
+            dia_habil_mas_cercano(SABADO), SABADO - timedelta(days=2)
+        )
+
+    def test_la_pantalla_diaria_de_un_sabado_ofrece_el_viernes(self):
+        respuesta = self.client.get(
+            reverse("asistencia:registro_diario"), {"fecha": SABADO.isoformat()}
+        )
+        self.assertEqual(
+            respuesta.context["dia_habil_sugerido"], SABADO - timedelta(days=1)
+        )
+        self.assertContains(respuesta, "Ir al")
+
+    def test_la_planilla_de_un_sabado_ofrece_el_viernes(self):
+        respuesta = self.client.get(
+            reverse("asistencia:planilla_rapida"), {"fecha": SABADO.isoformat()}
+        )
+        self.assertEqual(
+            respuesta.context["dia_habil_sugerido"], SABADO - timedelta(days=1)
+        )
+
+    def test_un_dia_habil_no_propone_nada(self):
+        respuesta = self.client.get(
+            reverse("asistencia:registro_diario"), {"fecha": LUNES.isoformat()}
+        )
+        self.assertIsNone(respuesta.context["dia_habil_sugerido"])
+
+
+class AvisoDeErroresDeLaPlanillaTests(BasePlanillaTests):
+    """Punto 3: decir cuántas filas están bien y cuántas hay que mirar."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.usuario)
+        self.url = reverse("asistencia:planilla_rapida")
+
+    def enviar(self, datos):
+        return self.client.post(
+            self.url, {"fecha": LUNES.isoformat(), "alcance": "todos", **datos}
+        )
+
+    def mensajes(self, respuesta):
+        return [str(m) for m in get_messages(respuesta.wsgi_request)]
+
+    def test_cuenta_las_filas_buenas_y_las_que_fallan(self):
+        respuesta = self.enviar({
+            f"marca-{self.gomez.pk}": self.marca_p.pk,
+            f"marca-{self.designacion.pk}": self.marca_i.pk,
+            f"horas-{self.designacion.pk}": "0",
+        })
+        texto = " ".join(self.mensajes(respuesta))
+        self.assertIn("1 fila está bien", texto)
+        self.assertIn("1 fila tiene un problema", texto)
+        self.assertIn("Lo que cargaste no se perdió", texto)
+        self.assertEqual(respuesta.context["cantidad_errores"], 1)
+
+    def test_usa_el_plural_cuando_son_varias(self):
+        respuesta = self.enviar({
+            f"marca-{self.gomez.pk}": self.marca_i.pk,
+            f"horas-{self.gomez.pk}": "0",
+            f"marca-{self.designacion.pk}": self.marca_i.pk,
+            f"horas-{self.designacion.pk}": "0",
+            f"marca-{self.perez_2.pk}": self.marca_p.pk,
+        })
+        texto = " ".join(self.mensajes(respuesta))
+        self.assertIn("2 filas tienen un problema", texto)
+
+    def test_sin_errores_no_avisa_nada(self):
+        self.enviar({f"marca-{self.gomez.pk}": self.marca_p.pk})
+        self.assertEqual(RegistroAsistencia.objects.count(), 1)
+
+
+class PantallasEnLenguajeLlanoTests(BasePlanillaTests):
+    """Puntos 5, 7, 10 a 14, 19, 20 y 21: lo que ve quien carga todos los días."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.usuario)
+
+    def planilla(self, fecha=LUNES, **extra):
+        return self.client.get(
+            reverse("asistencia:planilla_rapida"),
+            {"fecha": fecha.isoformat(), **extra},
+        )
+
+    def diaria(self, fecha=LUNES):
+        return self.client.get(
+            reverse("asistencia:registro_diario"), {"fecha": fecha.isoformat()}
+        )
+
+    # ── Punto 20 y 21: ayuda en pantalla ──
+    def test_el_instructivo_esta_una_sola_vez_y_no_en_la_planilla(self):
+        # La pantalla diaria explica cómo se empieza; la de carga ya es el
+        # cómo, así que ahí solo va el glosario de las opciones.
+        self.assertContains(self.diaria(), "cargo la asistencia de hoy")
+        self.assertNotContains(self.planilla(), "cargo la asistencia de hoy")
+
+    def test_la_planilla_explica_que_significa_cada_opcion(self):
+        respuesta = self.planilla()
+        self.assertContains(respuesta, "significa cada opci")
+        self.assertContains(respuesta, self.marca_pr.ayuda)
+
+    def test_la_pantalla_diaria_tambien_trae_la_ayuda(self):
+        self.assertContains(self.diaria(), "cargo la asistencia de hoy")
+
+    # ── Punto 8 y 9: el vocabulario de la columna ──
+    def test_la_planilla_pregunta_si_asistio_y_no_habla_de_marcas(self):
+        respuesta = self.planilla()
+        self.assertContains(respuesta, "Asistió?")
+        self.assertNotContains(respuesta, "<th>Marca</th>")
+
+    # ── Punto 5: corregir una fila ya cargada sin salir ──
+    def test_una_fila_ya_cargada_ofrece_corregirla(self):
+        self.guardar()
+        respuesta = self.planilla(alcance="todos")
+        self.assertContains(respuesta, "Corregir")
+        self.assertContains(respuesta, "Ya cargado")
+
+    # ── Punto 11: el estado se explica, no se codifica ──
+    def test_el_estado_se_explica_en_castellano(self):
+        self.guardar()
+        respuesta = self.diaria()
+        self.assertContains(respuesta, "Falta la revisi")
+        self.assertNotContains(respuesta, ">Borrador<")
+
+    # ── Punto 7: cerrar el día pide escribir la fecha ──
+    def test_cerrar_el_dia_pide_confirmar_escribiendo_la_fecha(self):
+        respuesta = self.diaria()
+        self.assertContains(respuesta, "confirmacion_cierre")
+        self.assertContains(respuesta, "no vas a poder cambiar nada")
+
+    # ── Punto 14: medias horas ──
+    def test_las_horas_se_piden_de_media_en_media(self):
+        respuesta = self.planilla()
+        self.assertContains(respuesta, 'step="0.5"')
+
+    # ── Punto 16 y 18: filas grandes y tarjetas en el celular ──
+    def test_las_tablas_se_convierten_en_tarjetas_en_pantalla_chica(self):
+        respuesta = self.planilla()
+        self.assertContains(respuesta, "asis-tarjetas")
+        self.assertContains(respuesta, 'data-rotulo="Docente"')
+
+    def test_las_pantallas_cargan_la_hoja_de_estilo_del_modulo(self):
+        self.assertContains(self.diaria(), "asistencias/css/asistencias.css")
+
+    # ── Punto 19: Excel en español ──
+    def test_la_exportacion_usa_punto_y_coma(self):
+        self.guardar()
+        respuesta = self.client.get(reverse("asistencia:exportar_csv"))
+        contenido = respuesta.content.decode("utf-8")
+        self.assertIn("Fecha;DNI;Docente", contenido)
+
+    # ── Punto 13: qué mes está cerrado y a quién pedirle ──
+    def test_el_mes_cerrado_se_nombra_y_dice_a_quien_pedirle(self):
+        from .services import nombre_del_mes
+
+        self.assertEqual(nombre_del_mes(LUNES), "septiembre de 2026")
+
+        cerrar_mes(usuario=self.usuario, token=self.token, anio=2026, mes=9)
+        with self.assertRaises(ValidationError) as contexto:
+            self.guardar()
+
+        mensaje = " ".join(contexto.exception.messages)
+        self.assertIn("septiembre de 2026", mensaje)
+        self.assertIn("Secretaría o Subsecretaría", mensaje)
+
+    # ── Punto 2 y 4: avisos en español y botón que habla ──
+    def test_el_aviso_de_cambios_sin_guardar_esta_en_castellano(self):
+        respuesta = self.planilla()
+        self.assertContains(respuesta, "Tenés cambios sin guardar")
+        self.assertContains(respuesta, "Salir sin guardar")
+
+    def test_el_boton_avisa_que_esta_guardando(self):
+        respuesta = self.planilla()
+        self.assertContains(respuesta, "Guardando la asistencia")

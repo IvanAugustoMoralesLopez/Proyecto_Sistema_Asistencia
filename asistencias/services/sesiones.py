@@ -20,6 +20,59 @@ MAX_OPERADORES = 2
 MINUTOS_EXPIRACION_SESION = 15
 
 
+def nombre_de(usuario):
+    """Nombre y apellido del operador, o su usuario si no los cargó."""
+    completo = usuario.get_full_name().strip()
+    return completo or usuario.get_username()
+
+
+def operadores_activos(excluir_token=None):
+    """
+    Sesiones de edición vigentes, de la que se libera primero a la última.
+
+    La usa la pantalla para decir quién está trabajando y hasta cuándo, en
+    lugar del antiguo «ya hay dos operadores activos» sin más datos.
+    """
+    sesiones = (
+        SesionEdicion.objects.filter(
+            activa=True,
+            expira_en__gt=timezone.now(),
+        )
+        .select_related("usuario")
+        .order_by("expira_en")
+    )
+
+    if excluir_token:
+        sesiones = sesiones.exclude(token=excluir_token)
+
+    return list(sesiones)
+
+
+def _mensaje_sin_lugar(sesiones):
+    """Texto del aviso cuando los dos lugares están ocupados (punto 1)."""
+    if not sesiones:
+        return (
+            "En este momento no hay lugares libres para cargar asistencia. "
+            "Probá de nuevo en unos minutos."
+        )
+
+    nombres = [nombre_de(sesion.usuario) for sesion in sesiones]
+
+    if len(nombres) == 1:
+        quienes = nombres[0]
+    else:
+        quienes = ", ".join(nombres[:-1]) + " y " + nombres[-1]
+
+    libera = timezone.localtime(sesiones[0].expira_en)
+
+    return (
+        f"En este momento están cargando asistencia: {quienes}. "
+        f"El sistema admite {MAX_OPERADORES} personas a la vez. "
+        f"Se libera un lugar a las {libera:%H:%M} "
+        f"(antes, si {nombres[0]} cierra sesión o toca «Liberar mi lugar»)."
+    )
+
+
 def _obtener_control_bloqueado():
     """
     Obtiene el registro coordinador dentro de una transacción.
@@ -71,8 +124,7 @@ def adquirir_sesion_edicion(usuario, token):
 
         if cantidad >= MAX_OPERADORES:
             raise ValidationError(
-                "Ya hay dos operadores activos en asistencia. "
-                "Intentá nuevamente más tarde."
+                _mensaje_sin_lugar(operadores_activos(excluir_token=token))
             )
 
     if sesion_existente:
@@ -117,7 +169,10 @@ def renovar_sesion_edicion(usuario, token):
         )
     except SesionEdicion.DoesNotExist as exc:
         raise ValidationError(
-            "La sesión de edición expiró. Volvé a ingresar."
+            "Pasaron más de "
+            f"{MINUTOS_EXPIRACION_SESION} minutos sin actividad y tu lugar se "
+            "liberó. Volvé a entrar a la pantalla y seguí trabajando: no se "
+            "perdió nada de lo que ya habías guardado."
         ) from exc
 
     sesion.heartbeat_en = ahora
@@ -157,5 +212,8 @@ def _validar_sesion_edicion(usuario, token):
         )
     except SesionEdicion.DoesNotExist as exc:
         raise PermissionDenied(
-            "La sesión de edición expiró. Volvé a ingresar."
+            "Pasaron más de "
+            f"{MINUTOS_EXPIRACION_SESION} minutos sin actividad y tu lugar se "
+            "liberó. Volvé a entrar a la pantalla y seguí trabajando: no se "
+            "perdió nada de lo que ya habías guardado."
         ) from exc

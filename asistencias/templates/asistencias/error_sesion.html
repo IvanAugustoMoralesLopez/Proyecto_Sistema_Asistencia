@@ -1,14 +1,18 @@
-{% extends "base.html" %}
+{% extends "asistencias/_base_asistencias.html" %}
 
-{% block title %}Sesión de edición no disponible{% endblock %}
+{% block title %}Tu lugar se liberó{% endblock %}
 
 {% block content %}
 <div class="alert alert-warning">
-    <h1 class="h4">Sesión de edición no disponible</h1>
+    <h1 class="h4">Tu lugar para cargar asistencia se liberó</h1>
     <p>{{ mensaje }}</p>
-    <a class="btn btn-primary"
+    <p class="mb-3">
+        <strong>No se perdió nada de lo que ya habías guardado.</strong>
+        Volvé a entrar y seguí donde estabas.
+    </p>
+    <a class="btn btn-primary asis-accion-principal"
        href="{% url 'asistencia:registro_diario' %}">
-        Volver al registro diario
+        Volver a la asistencia del día
     </a>
 </div>
 {% endblock %}

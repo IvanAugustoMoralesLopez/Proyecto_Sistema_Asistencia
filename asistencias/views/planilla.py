@@ -28,7 +28,6 @@ from django.urls import reverse
 from django.utils import timezone
 
 from licencias.models import LicenciaOtorgada
-from personal.models import Designacion
 
 from ..models import (
     CierreDiario,
@@ -40,7 +39,8 @@ from ..models import (
 from ..services import (
     PlanillaConErrores,
     ciclo_lectivo_actual,
-    clave_dia,
+    designaciones_del_dia as _designaciones_del_dia,
+    dia_habil_mas_cercano,
     dias_con_clase,
     guardar_planilla,
     horario_del_dia,
@@ -54,6 +54,7 @@ from ._comun import (
     _fecha_pedida,
     _id_pedido,
     _mensaje_error,
+    contexto_sesion,
     vista_protegida,
 )
 
@@ -66,35 +67,6 @@ CODIGO_PRESENTE = "P"
 CODIGO_LICENCIA = "LIC"
 CODIGO_LARGO_TRATAMIENTO = "LT"
 TEXTO_LARGO_TRATAMIENTO = "largo tratamiento"
-
-
-def _designaciones_del_dia(fecha, texto="", solo_con_clase=False):
-    """Designaciones vigentes en la fecha, ordenadas por docente."""
-    designaciones = (
-        Designacion.objects.filter(
-            activo=True,
-            persona__activa=True,
-            desde__lte=fecha,
-        )
-        .filter(Q(hasta__isnull=True) | Q(hasta__gte=fecha))
-        .select_related("persona", "cargo", "espacio_curricular")
-        .prefetch_related("horarios")
-        .order_by("persona__apellido_nombre", "persona_id", "id")
-    )
-
-    if texto:
-        designaciones = designaciones.filter(
-            Q(persona__apellido_nombre__icontains=texto)
-            | Q(persona__dni__icontains=texto)
-        )
-
-    dia = clave_dia(fecha)
-
-    if solo_con_clase and dia:
-        # distinct(): una designación con varios horarios ese día se repetiría.
-        designaciones = designaciones.filter(horarios__dia=dia).distinct()
-
-    return designaciones
 
 
 def _licencias_vigentes(ids, fecha):
@@ -164,7 +136,7 @@ def _armar_filas(fecha, texto, valores, errores, *, solo_con_clase, marcas):
     existentes = {
         registro.designacion_id: registro
         for registro in RegistroAsistencia.objects.select_related(
-            "marca", "licencia"
+            "marca", "licencia__articulo"
         ).filter(fecha=fecha, designacion_id__in=ids)
     }
     licencias = _licencias_vigentes(ids, fecha)
@@ -358,6 +330,34 @@ def _leer_planilla(post, fecha, marcas_por_pk):
     return filas, valores, errores
 
 
+def _aviso_de_errores(filas, errores):
+    """
+    Mensaje de la planilla cuando algo no cierra (punto 3).
+
+    El guardado es todo o nada, pero el operador necesita saber cuántas filas
+    están bien y cuántas tiene que mirar: «no se guardó ninguna» a secas, con
+    cuarenta docentes cargados, no le dice dónde buscar.
+    """
+    con_problema = len(errores)
+    bien = max(len(filas) - con_problema, 0)
+
+    if con_problema == 1:
+        detalle = "1 fila tiene un problema"
+    else:
+        detalle = f"{con_problema} filas tienen un problema"
+
+    if bien == 1:
+        correctas = "1 fila está bien"
+    else:
+        correctas = f"{bien} filas están bien"
+
+    return (
+        f"{correctas} y {detalle}. No se guardó ninguna fila todavía: "
+        "corregí lo que está marcado en rojo y volvé a tocar "
+        "«Guardar planilla». Lo que cargaste no se perdió."
+    )
+
+
 def _motivo_de_bloqueo(request, fecha, cierre, jornada_cerrada, no_laborable):
     """Por qué no se puede cargar esta fecha, o None si se puede."""
     if fecha > timezone.localdate():
@@ -448,10 +448,7 @@ def planilla_rapida(request):
             )
 
             if errores:
-                messages.error(
-                    request,
-                    "Corregí las filas marcadas. No se guardó ninguna.",
-                )
+                messages.error(request, _aviso_de_errores(filas, errores))
             else:
                 try:
                     token = _asegurar_sesion_edicion(request)
@@ -465,8 +462,7 @@ def planilla_rapida(request):
                 except PlanillaConErrores as exc:
                     errores = exc.errores
                     messages.error(
-                        request,
-                        "Corregí las filas marcadas. No se guardó ninguna.",
+                        request, _aviso_de_errores(filas, errores)
                     )
                 except (ValidationError, PermissionDenied) as exc:
                     messages.error(request, _mensaje_error(exc))
@@ -512,6 +508,14 @@ def planilla_rapida(request):
     ciclo = ciclo_lectivo_actual()
     marcadas = sum(1 for fila in filas if fila["registro"])
 
+    # Punto 6: si el día no es hábil o es futuro, ofrecer el día en el que sí
+    # corresponde cargar, para que el aviso tenga una salida.
+    dia_habil_sugerido = (
+        dia_habil_mas_cercano(fecha, sentido=-1)
+        if (motivo_no_laborable or fecha > hoy)
+        else None
+    )
+
     return render(
         request,
         "asistencias/planilla_rapida.html",
@@ -534,5 +538,9 @@ def planilla_rapida(request):
             "total": len(filas),
             "marcadas": marcadas,
             "pendientes": len(filas) - marcadas,
+            "cantidad_errores": len(errores),
+            "dia_habil_sugerido": dia_habil_sugerido,
+            "es_hoy": fecha == hoy,
+            **contexto_sesion(request),
         },
     )

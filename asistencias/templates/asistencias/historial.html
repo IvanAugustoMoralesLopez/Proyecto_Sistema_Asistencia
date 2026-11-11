@@ -1,53 +1,60 @@
-{% extends "base.html" %}
+{% extends "asistencias/_base_asistencias.html" %}
 {% load asistencias_extras %}
 
-{% block title %}Historial de asistencia{% endblock %}
+{% block title %}Buscar asistencias{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h3">Historial de asistencia</h1>
+<div class="asis-cabecera">
+    <div class="encabezado-planilla">
+        <div>
+            <p class="ruta">Asistencia › Historial</p>
+            <h1 class="encabezado-planilla__titulo">Buscar asistencias cargadas</h1>
+            <p class="encabezado-planilla__subtitulo">
+                {{ pagina.paginator.count }} resultado{{ pagina.paginator.count|pluralize:"s" }}
+                {% if querystring %}con los filtros elegidos{% else %}en total{% endif %}.
+            </p>
+        </div>
 
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary"
-           href="{% url 'asistencia:registro_diario' %}">
-            Registro diario
-        </a>
-        {% if perms.asistencias.view_registroasistencia %}
-            <a class="btn btn-outline-success"
-               href="{% url 'asistencia:exportar_csv' %}{% if querystring %}?{{ querystring }}{% endif %}">
-                Exportar CSV
+        <div class="encabezado-planilla__acciones">
+            <a class="btn btn-filtro" href="{% url 'asistencia:registro_diario' %}">
+                Asistencia del día
             </a>
-        {% endif %}
+            {% if perms.asistencias.view_registroasistencia %}
+                <a class="btn btn-primario-suave"
+                   href="{% url 'asistencia:exportar_csv' %}{% if querystring %}?{{ querystring }}{% endif %}">
+                    Bajar a Excel
+                </a>
+            {% endif %}
+        </div>
     </div>
 </div>
 
-<form method="get" class="card card-body mb-4">
-    <div class="row g-3">
-        {% for field in form %}
-            <div class="col-md-4">
-                <label class="form-label" for="{{ field.id_for_label }}">
-                    {{ field.label }}
-                </label>
+<details class="asis-filtros mb-3"{% if querystring %} open{% endif %}>
+    <summary class="btn btn-filtro px-0">
+        Filtros de búsqueda{% if querystring %} (activos){% endif %}
+    </summary>
 
-                {{ field }}
+    <form method="get" class="card card-body mt-2">
+        <div class="row g-3">
+            {% for field in form %}
+                <div class="col-md-4">
+                    <label class="form-label" for="{{ field.id_for_label }}">
+                        {{ field.label }}
+                    </label>
+                    {{ field }}
+                    {% for error in field.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
 
-                {% for error in field.errors %}
-                    <div class="text-danger small">{{ error }}</div>
-                {% endfor %}
-            </div>
-        {% endfor %}
-    </div>
-
-    <div class="mt-3 d-flex gap-2">
-        <button class="btn btn-primary" type="submit">
-            Buscar
-        </button>
-        <a class="btn btn-outline-secondary"
-           href="{% url 'asistencia:historial' %}">
-            Limpiar filtros
-        </a>
-    </div>
-</form>
+        <div class="mt-3 d-flex gap-2">
+            <button class="btn btn-primario" type="submit" data-sin-espera="1">Buscar</button>
+            <a class="btn btn-filtro" href="{% url 'asistencia:historial' %}">Limpiar</a>
+        </div>
+    </form>
+</details>
 
 {% if perms.asistencias.validar_registro %}
 <form method="post" action="{% url 'asistencia:validar_multiples' %}" id="form-validar-masivo">
@@ -56,56 +63,65 @@
            value="{% url 'asistencia:historial' %}{% if querystring %}?{{ querystring }}{% endif %}">
 {% endif %}
 
-<div class="table-responsive">
-    <table class="table table-striped align-middle">
-        <thead class="table-dark">
+<div class="planilla">
+    <table class="table table-hover align-middle asis-planilla asis-tarjetas">
+        <thead>
             <tr>
                 {% if perms.asistencias.validar_registro %}
                     <th style="width: 2.5rem;">
-                        <input type="checkbox" id="seleccionar-todos"
-                               class="form-check-input"
-                               title="Seleccionar todos los borradores">
+                        <input type="checkbox" id="seleccionar-todos" class="form-check-input"
+                               title="Seleccionar todos los que faltan revisar">
                     </th>
                 {% endif %}
                 <th>Fecha</th>
-                <th>DNI</th>
                 <th>Docente</th>
-                <th>Marca</th>
+                <th>¿Asistió?</th>
                 <th>Estado</th>
-                <th>Justificación</th>
-                <th>Actualizado por</th>
-                <th>Acciones</th>
+                <th class="text-end">Acciones</th>
             </tr>
         </thead>
         <tbody>
             {% for registro in pagina %}
                 <tr>
                     {% if perms.asistencias.validar_registro %}
-                        <td>
+                        <td data-rotulo="Elegir">
                             {% if registro.estado_registro == "BORRADOR" %}
-                                <input type="checkbox"
-                                       class="form-check-input check-validar"
-                                       name="registro_ids"
-                                       value="{{ registro.pk }}">
+                                <input type="checkbox" class="form-check-input check-validar"
+                                       name="registro_ids" value="{{ registro.pk }}">
                             {% endif %}
                         </td>
                     {% endif %}
-                    <td>{{ registro.fecha|date:"d/m/Y" }}</td>
-                    <td>{{ registro.designacion.persona.dni }}</td>
-                    <td>{{ registro.designacion.persona.apellido_nombre }}</td>
-                    <td>{{ registro.marca.codigo }}</td>
-                    <td>
-                        <span class="badge text-bg-{% if registro.estado_registro == 'VALIDADO' %}success{% else %}secondary{% endif %}">
-                            {{ registro.get_estado_registro_display }}
-                        </span>
+
+                    <td data-rotulo="Fecha" class="text-nowrap">{{ registro.fecha|date:"d/m/Y" }}</td>
+
+                    <td data-rotulo="Docente">
+                        <div class="asis-principal">{{ registro.designacion.persona.apellido_nombre }}</div>
+                        <div class="asis-apoyo">
+                            DNI {{ registro.designacion.persona.dni }}
+                            {% if registro.designacion.cargo %} · {{ registro.designacion.cargo.descripcion }}{% endif %}
+                        </div>
                     </td>
-                    <td>
-                        {% include "asistencias/includes/badge_justificacion.html" %}
+
+                    <td data-rotulo="¿Asistió?">
+                        <div class="asis-principal">{{ registro.marca.etiqueta }}</div>
+                        <div class="asis-apoyo">{{ registro.marca.codigo }}</div>
                     </td>
-                    <td>
-                        {{ registro.actualizado_por|default:"—" }}
+
+                    <td data-rotulo="Estado">
+                        {% if registro.estado_registro == "VALIDADO" %}
+                            <span class="badge text-bg-success">Revisado por Secretaría</span>
+                        {% else %}
+                            <span class="badge text-bg-secondary">Guardado</span>
+                        {% endif %}
+                        {% if registro.estado_justificacion != "NO_APLICA" %}
+                            <div class="mt-1">
+                                {% include "asistencias/includes/badge_justificacion.html" %}
+                            </div>
+                        {% endif %}
+                        <div class="asis-apoyo">{{ registro.actualizado_por|default:"" }}</div>
                     </td>
-                    <td class="text-nowrap">
+
+                    <td data-rotulo="Acciones" class="text-nowrap text-end">
                         <a class="btn btn-sm btn-outline-primary"
                            href="{% url 'asistencia:detalle_asistencia' registro.pk %}?desde={% url 'asistencia:historial' %}{% if querystring %}%3F{{ querystring }}{% endif %}">
                             Ver
@@ -113,34 +129,25 @@
                         {% if perms.asistencias.change_registroasistencia %}
                             <a class="btn btn-sm btn-outline-secondary"
                                href="{% url 'asistencia:editar_asistencia' registro.pk %}?volver={% url 'asistencia:historial' %}{% if querystring %}%3F{{ querystring }}{% endif %}">
-                                Editar
+                                Corregir
                             </a>
                         {% endif %}
-
                         {% if registro.estado_registro == "BORRADOR" and perms.asistencias.validar_registro %}
-                            <form
-                                method="post"
-                                action="{% url 'asistencia:validar_registro' registro.pk %}"
-                                class="d-inline"
-                                onsubmit="return confirm('¿Validar este registro?');"
-                            >
-                                {% csrf_token %}
-                                <input type="hidden" name="next"
-                                       value="{% url 'asistencia:historial' %}{% if querystring %}?{{ querystring }}{% endif %}">
-                                <button
-                                    class="btn btn-sm btn-success"
-                                    type="submit"
-                                >
-                                    Validar
-                                </button>
-                            </form>
+                            <button class="btn btn-sm btn-success" type="submit"
+                                    data-individual="1"
+                                    formaction="{% url 'asistencia:validar_registro' registro.pk %}"
+                                    formmethod="post"
+                                    onclick="return confirm('¿Marcar este registro como revisado?');">
+                                Validar
+                            </button>
                         {% endif %}
                     </td>
                 </tr>
             {% empty %}
                 <tr>
-                    <td colspan="{% if perms.asistencias.validar_registro %}9{% else %}8{% endif %}" class="text-center py-4">
-                        No se encontraron registros.
+                    <td colspan="{% if perms.asistencias.validar_registro %}6{% else %}5{% endif %}"
+                        class="text-center py-5 text-secondary">
+                        No se encontraron asistencias con esos filtros.
                     </td>
                 </tr>
             {% endfor %}
@@ -149,70 +156,74 @@
 </div>
 
 {% if perms.asistencias.validar_registro %}
-    <div class="mb-3" id="barra-validacion-masiva" style="display: none;">
-        <button class="btn btn-success" type="submit">
+    <div class="asis-guardar" id="barra-validacion-masiva" style="display: none;">
+        <span class="text-secondary" id="cantidad-seleccionados"></span>
+        <button class="btn btn-success asis-accion-principal" type="submit">
             Validar seleccionados
         </button>
-        <span class="text-secondary ms-2" id="cantidad-seleccionados"></span>
     </div>
 </form>
 {% endif %}
 
-{% include "asistencias/includes/paginacion.html" %}
+<div class="mt-3">
+    {% include "asistencias/includes/paginacion.html" %}
+</div>
 {% endblock %}
 
 {% block extra_js %}
+{{ block.super }}
 {% include "asistencias/includes/ux_mejoras.html" %}
 <script>
 (function () {
-    var masterCheckbox = document.getElementById("seleccionar-todos");
+    var maestro = document.getElementById("seleccionar-todos");
     var barra = document.getElementById("barra-validacion-masiva");
-    var contadorSpan = document.getElementById("cantidad-seleccionados");
+    var contador = document.getElementById("cantidad-seleccionados");
+    var formMasivo = document.getElementById("form-validar-masivo");
 
-    if (!masterCheckbox) return;
-
-    function checkboxes() {
-        return document.querySelectorAll(".check-validar");
+    function seleccionados() {
+        return document.querySelectorAll(".check-validar:checked").length;
     }
 
-    function actualizarBarra() {
-        var seleccionados = document.querySelectorAll(".check-validar:checked").length;
-
-        if (barra) {
-            barra.style.display = seleccionados > 0 ? "block" : "none";
-        }
-
-        if (contadorSpan) {
-            contadorSpan.textContent = seleccionados + " registro(s) seleccionado(s)";
+    function actualizar() {
+        var n = seleccionados();
+        if (barra) { barra.style.display = n > 0 ? "flex" : "none"; }
+        if (contador) {
+            contador.textContent = n === 1
+                ? "1 registro elegido"
+                : n + " registros elegidos";
         }
     }
 
-    masterCheckbox.addEventListener("change", function () {
-        checkboxes().forEach(function (cb) {
-            cb.checked = masterCheckbox.checked;
+    if (maestro) {
+        maestro.addEventListener("change", function () {
+            document.querySelectorAll(".check-validar").forEach(function (cb) {
+                cb.checked = maestro.checked;
+            });
+            actualizar();
         });
-        actualizarBarra();
-    });
+    }
 
     document.addEventListener("change", function (e) {
-        if (e.target.classList.contains("check-validar")) {
-            actualizarBarra();
+        if (e.target.classList && e.target.classList.contains("check-validar")) {
+            actualizar();
         }
     });
 
-    var formMasivo = document.getElementById("form-validar-masivo");
     if (formMasivo) {
         formMasivo.addEventListener("submit", function (e) {
-            var cant = document.querySelectorAll(".check-validar:checked").length;
-            if (cant === 0) {
-                e.preventDefault();
-                return;
-            }
-            if (!confirm("¿Confirmar? Se marcarán " + cant + " registro(s) como validado(s).")) {
+            /* El boton de una sola fila usa formaction y va solo: no tiene
+               que pasar por el control de la seleccion de arriba. */
+            if (e.submitter && e.submitter.dataset.individual === "1") { return; }
+
+            var n = seleccionados();
+            if (n === 0) { e.preventDefault(); return; }
+            if (!confirm("¿Confirmar? Se van a marcar " + n + " registro(s) como revisado(s).")) {
                 e.preventDefault();
             }
         });
     }
+
+    actualizar();
 })();
 </script>
 {% endblock %}

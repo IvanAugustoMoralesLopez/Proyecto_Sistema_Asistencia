@@ -18,10 +18,14 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods, require_POST
 
 from ..services import (
+    MAX_OPERADORES,
+    MINUTOS_EXPIRACION_SESION,
     adquirir_sesion_edicion,
     fecha_admitida,
     id_admitido,
     liberar_sesion_edicion,
+    nombre_de,
+    operadores_activos,
     renovar_sesion_edicion,
 )
 
@@ -100,6 +104,34 @@ def _asegurar_sesion_edicion(request):
     return token
 
 
+def contexto_sesion(request):
+    """
+    Quién está cargando asistencia ahora mismo, para la barra de la pantalla.
+
+    El sistema admite dos personas a la vez; si no se muestra quiénes son, el
+    tercero que entra no entiende por qué no puede trabajar (punto 1).
+    """
+    token = request.session.get("asistencia_token")
+    activos = operadores_activos()
+    mio = next((s for s in activos if str(s.token) == str(token)), None)
+
+    return {
+        "sesion_operadores": [
+            {
+                "nombre": nombre_de(s.usuario),
+                "soy_yo": str(s.token) == str(token),
+                "expira_en": s.expira_en,
+            }
+            for s in activos
+        ],
+        "sesion_tengo_lugar": mio is not None,
+        "sesion_expira_en": mio.expira_en if mio else None,
+        "sesion_maximo": MAX_OPERADORES,
+        "sesion_minutos": MINUTOS_EXPIRACION_SESION,
+        "sesion_libres": max(MAX_OPERADORES - len(activos), 0),
+    }
+
+
 def _mensaje_error(exc):
     """
     Texto legible de una excepción esperada. str() de una ValidationError
@@ -176,8 +208,13 @@ def liberar_edicion(request):
         liberar_sesion_edicion(request.user, token)
         request.session.pop("asistencia_token", None)
 
-    messages.info(request, "Se liberó la sesión de edición.")
-    return redirect("asistencia:registro_diario")
+    messages.info(
+        request,
+        "Liberaste tu lugar. Otra persona ya puede cargar asistencia. "
+        "Vos podés volver a entrar cuando quieras.",
+    )
+    destino = _url_segura(request.POST.get("next", ""))
+    return redirect(destino or "asistencia:registro_diario")
 
 
 @login_required

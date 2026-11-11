@@ -1,0 +1,44 @@
+{% comment %}
+  Avisos del dia, en un solo lugar y en un solo orden de prioridad.
+  Sirve para la pantalla diaria y para la de carga: la primera manda las
+  variables sueltas y la segunda, `bloqueo` ya resuelto.
+{% endcomment %}
+{% if bloqueo %}
+    <div class="alert alert-warning d-flex flex-wrap align-items-center gap-3">
+        <span class="flex-grow-1">{{ bloqueo }}</span>
+        {% if dia_habil_sugerido %}
+            <a class="btn btn-primario"
+               href="?fecha={{ dia_habil_sugerido|date:'Y-m-d' }}{% if texto %}&amp;q={{ texto }}{% endif %}{% if alcance %}&amp;alcance={{ alcance }}{% endif %}">
+                Ir al {{ dia_habil_sugerido|date:"l j \d\e F" }}
+            </a>
+        {% endif %}
+    </div>
+{% elif motivo_no_laborable %}
+    <div class="alert alert-info d-flex flex-wrap align-items-center gap-3">
+        <span class="flex-grow-1">
+            {{ motivo_no_laborable }}. Ese día no hay que cargar asistencia.
+        </span>
+        {% if dia_habil_sugerido %}
+            <a class="btn btn-primario" href="?fecha={{ dia_habil_sugerido|date:'Y-m-d' }}">
+                Ir al {{ dia_habil_sugerido|date:"l j \d\e F" }}
+            </a>
+        {% endif %}
+    </div>
+{% elif cierre and cierre.estado == "CERRADO" %}
+    <div class="alert alert-warning">
+        El mes de este día ya está cerrado: no se puede cambiar nada.
+        Si hace falta corregir algo, pediselo a Secretaría.
+    </div>
+{% elif jornada_cerrada %}
+    <div class="alert alert-secondary">
+        Este día ya fue cerrado por {{ jornada_cerrada.cerrado_por }} el
+        {{ jornada_cerrada.cerrado_en|date:"d/m/Y H:i" }}.
+        {% if perms.asistencias.modificar_jornada_cerrada %}
+            Como tenés autorización podés cargar igual, pero tenés que
+            escribir por qué.
+        {% else %}
+            Para cambiar algo hace falta autorización de Secretaría o
+            Subsecretaría.
+        {% endif %}
+    </div>
+{% endif %}

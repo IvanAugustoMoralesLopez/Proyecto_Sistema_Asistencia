@@ -1,0 +1,324 @@
+/*
+ * Hoja propia del modulo de Asistencias.
+ *
+ * Reutiliza los componentes que ya existen en static/css/app.css
+ * (.encabezado-planilla, .planilla, .btn-primario, .buscador) y solo agrega
+ * lo que falta: una barra de herramientas alineada, chips de resumen, la
+ * linea de sesion y la barra de guardado fija al pie.
+ *
+ * Criterio: una sola accion principal por pantalla, los avisos agrupados y
+ * la tabla como protagonista.
+ */
+
+/* ───────── Legibilidad (se carga asistencia todos los dias) ───────── */
+.app-content {
+    font-size: 1rem;
+    line-height: 1.55;
+}
+
+.app-content .text-secondary {
+    color: #5d6b82 !important;
+}
+
+.sidebar__titulo { font-size: 0.9rem !important; letter-spacing: .02em; }
+.sidebar__link   { font-size: 0.95rem !important; padding-top: .55rem; padding-bottom: .55rem; }
+.sidebar__link i { font-size: 1.2rem !important; }
+
+.app-content a:focus-visible,
+.app-content button:focus-visible,
+.app-content input:focus-visible,
+.app-content select:focus-visible,
+.app-content textarea:focus-visible {
+    outline: 3px solid var(--azul, #2b67a4);
+    outline-offset: 2px;
+}
+
+/* ───────── Encabezado de pantalla ───────── */
+.asis-cabecera {
+    margin-bottom: .75rem;
+}
+
+.asis-cabecera .encabezado-planilla {
+    margin-bottom: .35rem;
+}
+
+.encabezado-planilla__titulo .badge {
+    vertical-align: .18em;
+    font-size: .7rem;
+}
+
+/* Resumen en linea: reemplaza a las tarjetas grandes. */
+.asis-resumen {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem .9rem;
+    font-size: .85rem;
+    color: #5d6b82;
+}
+
+.asis-resumen b {
+    color: #17253b;
+    font-size: 1rem;
+}
+
+.asis-resumen__dato--ok b    { color: #157347; }
+.asis-resumen__dato--falta b { color: #b02a37; }
+.asis-resumen__dato--esper b { color: #0a7b8c; }
+
+/* Linea de sesion: un renglon gris, no un cuadro. */
+.asis-sesion-linea {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    font-size: .8rem;
+    color: #5d6b82;
+}
+
+.asis-sesion__punto {
+    display: inline-block;
+    width: .55rem;
+    height: .55rem;
+    border-radius: 50%;
+    background: #198754;
+}
+
+.asis-sesion__punto--lleno { background: #dc3545; }
+
+/* ───────── Barra de herramientas ───────── */
+.asis-barra {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    padding: .6rem .75rem;
+    margin-bottom: .75rem;
+    background: #fff;
+    border: 1px solid var(--color-borde, #dee2e6);
+    border-radius: .75rem;
+}
+
+.asis-barra .form-control,
+.asis-barra .form-select {
+    min-height: 40px;
+    font-size: .9rem;
+    width: auto;
+}
+
+.asis-barra__fecha { max-width: 11rem; }
+.asis-barra__sep {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.asis-barra__dia {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+}
+
+/* Ayuda: un renglon cuando esta plegada, caja solo al abrirla. */
+.asis-ayuda {
+    font-size: .85rem;
+}
+
+.asis-ayuda > summary {
+    display: inline-block;
+    cursor: pointer;
+    color: var(--azul-oscuro, #1f4f84);
+    font-weight: 600;
+    list-style: none;
+    padding: .15rem 0;
+}
+
+.asis-ayuda > summary::marker,
+.asis-ayuda > summary::-webkit-details-marker { display: none; }
+
+.asis-ayuda > summary::before {
+    content: "?";
+    display: inline-grid;
+    place-items: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-right: .35rem;
+    border-radius: 50%;
+    background: var(--azul-suave, #e3ebf7);
+    color: var(--azul-oscuro, #1f4f84);
+    font-size: .75rem;
+    vertical-align: -.15em;
+}
+
+.asis-ayuda[open] {
+    display: block;
+    margin-top: .5rem;
+    padding: .9rem 1.1rem;
+    background: var(--azul-suave, #e3ebf7);
+    border-radius: .75rem;
+}
+
+.asis-ayuda ol, .asis-ayuda ul { margin-bottom: 0; }
+.asis-ayuda li + li { margin-top: .3rem; }
+
+.asis-ayudas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem 1.25rem;
+    margin-bottom: .75rem;
+}
+
+/* ───────── Tabla ───────── */
+.asis-planilla {
+    margin-bottom: 0;
+}
+
+.asis-planilla > thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--azul, #2b67a4);
+    color: #fff;
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    border-bottom: 0;
+    padding: .6rem;
+}
+
+.asis-planilla > tbody > tr > td {
+    padding: .6rem;
+    vertical-align: middle;
+    border-color: #eef1f6;
+}
+
+.asis-planilla .form-select,
+.asis-planilla .form-control {
+    min-height: 40px;
+    font-size: .9rem;
+}
+
+.asis-principal { font-weight: 600; color: #17253b; }
+.asis-apoyo     { font-size: .8rem; color: #5d6b82; }
+
+.app-content .badge { font-weight: 600; }
+
+/* Fila con una propuesta del sistema todavia sin confirmar. */
+.asis-propuesto > td { background: #f7fbff; }
+
+/* ───────── Barra de guardado fija al pie ───────── */
+.asis-guardar {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    margin-top: .75rem;
+    padding: .75rem 1rem;
+    background: #fff;
+    border: 1px solid var(--color-borde, #dee2e6);
+    border-radius: .75rem;
+    box-shadow: 0 -.35rem 1rem rgba(23, 37, 59, .08);
+}
+
+.asis-accion-principal {
+    font-size: 1rem;
+    font-weight: 600;
+    padding: .6rem 1.4rem;
+}
+
+/* Acciones que no se deshacen: al pie y sin color de invitacion. */
+.asis-accion-riesgo {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-borde, #dee2e6);
+    font-size: .85rem;
+}
+
+/* ───────── Celular: una tarjeta por fila ───────── */
+@media (max-width: 860px) {
+    .asis-tarjetas,
+    .asis-tarjetas tbody,
+    .asis-tarjetas tr,
+    .asis-tarjetas td { display: block; width: 100%; }
+
+    .asis-tarjetas thead { display: none; }
+
+    .asis-tarjetas tr {
+        background: #fff;
+        border: 1px solid var(--color-borde, #dee2e6);
+        border-radius: .75rem;
+        margin-bottom: .75rem;
+        padding: .75rem .9rem;
+    }
+
+    .asis-tarjetas tr.table-danger { border: 2px solid #dc3545; }
+
+    .asis-tarjetas td { border: 0 !important; padding: .3rem 0 !important; }
+
+    .asis-tarjetas td[data-rotulo]::before {
+        content: attr(data-rotulo);
+        display: block;
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: #8795aa;
+    }
+
+    .asis-barra { flex-direction: column; align-items: stretch; }
+    .asis-barra .form-control,
+    .asis-barra .form-select { width: 100%; max-width: none; }
+    .asis-barra__dia { justify-content: space-between; }
+    .asis-accion-principal { width: 100%; }
+    .asis-guardar { flex-direction: column; align-items: stretch; }
+}
+
+/* ───────── Filtros e historiales plegables ───────── */
+.asis-filtros > summary {
+    cursor: pointer;
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--azul-oscuro, #1f4f84);
+    padding: .2rem 0;
+}
+
+.asis-filtros > summary:hover { text-decoration: underline; }
+
+/* El boton de la barra inferior no se pega al borde en pantallas altas. */
+.app-content { padding-bottom: .5rem; }
+
+/* ───────── Panel de accion de la pantalla diaria ───────── */
+.asis-accion-destacada {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 1rem 1.25rem;
+    background: var(--azul-suave, #e3ebf7);
+    border: 1px solid #cfe0f5;
+    border-left: 5px solid var(--azul, #2b67a4);
+    border-radius: .75rem;
+}
+
+.asis-accion-destacada__titulo {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #17253b;
+}
+
+.asis-accion-destacada--ok {
+    background: #e8f6ee;
+    border-color: #c6e7d4;
+    border-left-color: #198754;
+}
+
+@media (max-width: 860px) {
+    .asis-accion-destacada { flex-direction: column; align-items: stretch; }
+    .asis-accion-destacada .btn { width: 100%; }
+}

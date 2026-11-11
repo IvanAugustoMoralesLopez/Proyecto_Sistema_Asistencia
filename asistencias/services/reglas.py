@@ -96,12 +96,25 @@ def _periodo_de_fecha(fecha):
     ).first()
 
 
+MESES = (
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+)
+
+
+def nombre_del_mes(fecha):
+    """«octubre de 2026», para hablarle al operador y no mostrarle «2026-10»."""
+    return f"{MESES[fecha.month - 1]} de {fecha.year}"
+
+
 def _validar_periodo_abierto(fecha):
     cierre = _periodo_de_fecha(fecha)
 
     if cierre and cierre.estado == CierreMensual.Estado.CERRADO:
         raise ValidationError(
-            "El período está cerrado. Solicitá una reapertura autorizada."
+            "El período está cerrado: "
+            f"{nombre_del_mes(fecha)} ya no admite cambios. "
+            "Pedile a Secretaría o Subsecretaría que lo reabra."
         )
 
     return cierre
@@ -170,6 +183,34 @@ def validar_dia_laborable(fecha):
         raise ValidationError(
             f"{motivo}: no corresponde registrar asistencia."
         )
+
+
+def dia_habil_mas_cercano(fecha, sentido=-1, limite=15):
+    """
+    Día hábil más cercano a `fecha` hacia atrás (sentido=-1) o adelante (1).
+
+    Devuelve None si no encuentra ninguno dentro de `limite` días o si se sale
+    del rango de fechas admitido. Sirve para ofrecerle al operador un botón
+    «Ir al viernes 13/11» cuando abre un sábado o un feriado, en vez de
+    dejarlo frente a un mensaje sin salida.
+    """
+    from datetime import timedelta
+
+    candidata = fecha
+
+    for _ in range(limite):
+        try:
+            candidata = candidata + timedelta(days=sentido)
+        except (OverflowError, ValueError):
+            return None
+
+        if not fecha_admitida(candidata):
+            return None
+
+        if motivo_dia_no_laborable(candidata) is None:
+            return candidata
+
+    return None
 
 
 def _validar_designacion_vigente(designacion, fecha):

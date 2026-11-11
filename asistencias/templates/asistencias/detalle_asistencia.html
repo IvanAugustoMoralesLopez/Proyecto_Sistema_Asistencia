@@ -1,144 +1,159 @@
-{% extends "base.html" %}
+{% extends "asistencias/_base_asistencias.html" %}
 {% load asistencias_extras %}
 
-{% block title %}Detalle de asistencia{% endblock %}
+{% block title %}Detalle del día de un docente{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-4">Detalle de asistencia</h1>
-
-<div class="card mb-4">
-    <div class="card-body">
-        <dl class="row mb-0">
-            <dt class="col-sm-3">Fecha</dt>
-            <dd class="col-sm-9">{{ registro.fecha|date:"d/m/Y" }}</dd>
-
-            <dt class="col-sm-3">Docente</dt>
-            <dd class="col-sm-9">
+<div class="asis-cabecera">
+    <div class="encabezado-planilla">
+        <div>
+            <p class="ruta">Asistencia › Detalle</p>
+            <h1 class="encabezado-planilla__titulo">
                 {{ registro.designacion.persona.apellido_nombre }}
-            </dd>
+            </h1>
+            <p class="encabezado-planilla__subtitulo">
+                {{ registro.fecha|date:"l j \d\e F \d\e Y" }} ·
+                DNI {{ registro.designacion.persona.dni }} ·
+                {{ registro.designacion.cargo.descripcion }}{% if registro.designacion.espacio_curricular %} · {{ registro.designacion.espacio_curricular.nombre }}{% endif %}
+            </p>
+        </div>
 
-            <dt class="col-sm-3">DNI</dt>
-            <dd class="col-sm-9">{{ registro.designacion.persona.dni }}</dd>
-
-            <dt class="col-sm-3">Cargo</dt>
-            <dd class="col-sm-9">{{ registro.designacion.cargo.descripcion }}</dd>
-
-            <dt class="col-sm-3">Marca</dt>
-            <dd class="col-sm-9">
-                {{ registro.marca.codigo }} — {{ registro.marca.descripcion }}
-            </dd>
-
-            <dt class="col-sm-3">Horas inasistidas</dt>
-            <dd class="col-sm-9">
-                {{ registro.horas_inasistidas }}
-            </dd>
-
-            <dt class="col-sm-3">Licencia</dt>
-            <dd class="col-sm-9">
-                {{ registro.licencia|default:"Sin licencia asociada" }}
-            </dd>
-
-            <dt class="col-sm-3">Observaciones</dt>
-            <dd class="col-sm-9">
-                {{ registro.observaciones|default:"Sin observaciones" }}
-            </dd>
-
-            <dt class="col-sm-3">Estado del registro</dt>
-            <dd class="col-sm-9">
-                <span class="badge text-bg-{% if registro.estado_registro == 'VALIDADO' %}success{% else %}secondary{% endif %}">
-                    {{ registro.get_estado_registro_display }}
-                </span>
-            </dd>
-
-            <dt class="col-sm-3">Justificación</dt>
-            <dd class="col-sm-9">
-                {% include "asistencias/includes/badge_justificacion.html" %}
-                {% if registro.estado_justificacion != "NO_APLICA" and registro.estado_justificacion != "JUSTIFICADA" and perms.asistencias.recepcionar_formulario %}
-                    <a class="btn btn-sm btn-outline-success ms-2"
-                       href="{% url 'asistencia:recepcionar_formulario' registro.pk %}">
-                        Recepcionar formulario
-                    </a>
-                {% endif %}
-            </dd>
-
-            {% if registro.nro_formulario %}
-                <dt class="col-sm-3">N° de formulario</dt>
-                <dd class="col-sm-9">{{ registro.nro_formulario }}</dd>
-
-                <dt class="col-sm-3">Recepción</dt>
-                <dd class="col-sm-9">
-                    {{ registro.fecha_recepcion|date:"d/m/Y" }}
-                    {% if registro.recepcionado_por %}
-                        · {{ registro.recepcionado_por }}
-                    {% endif %}
-                </dd>
+        <div class="encabezado-planilla__acciones">
+            {% if perms.asistencias.change_registroasistencia %}
+                <a class="btn btn-primario-suave"
+                   href="{% url 'asistencia:editar_asistencia' registro.pk %}{% if volver %}?volver={{ volver|urlencode }}{% endif %}">
+                    Corregir
+                </a>
             {% endif %}
-
-            <dt class="col-sm-3">Creado por</dt>
-            <dd class="col-sm-9">{{ registro.creado_por|default:"—" }}</dd>
-
-            <dt class="col-sm-3">Actualizado por</dt>
-            <dd class="col-sm-9">{{ registro.actualizado_por|default:"—" }}</dd>
-
-            <dt class="col-sm-3">Última modificación</dt>
-            <dd class="col-sm-9">
-                {{ registro.actualizado_en|date:"d/m/Y H:i:s" }}
-            </dd>
-        </dl>
+            <a class="btn btn-filtro" href="{% if volver %}{{ volver }}{% else %}{% url 'asistencia:historial' %}{% endif %}">
+                Volver
+            </a>
+        </div>
     </div>
 </div>
 
-<h2 class="h5 mb-3">Historial de cambios</h2>
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <div class="asis-apoyo">¿Asistió?</div>
+                <div class="asis-principal fs-5">{{ registro.marca.etiqueta }}</div>
+                <div class="asis-apoyo">
+                    {{ registro.marca.codigo }} — {{ registro.marca.descripcion }}
+                </div>
+            </div>
 
-<div class="table-responsive">
-    <table class="table table-bordered">
-        <thead>
-            <tr>
-                <th>Fecha y hora</th>
-                <th>Usuario</th>
-                <th>Acción</th>
-                <th>Motivo</th>
-                <th>Antes</th>
-                <th>Después</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for evento in eventos %}
-                <tr>
-                    <td>{{ evento.creado_en|date:"d/m/Y H:i:s" }}</td>
-                    <td>{{ evento.usuario|default:"—" }}</td>
-                    <td>{{ evento.get_accion_display }}</td>
-                    <td>{{ evento.motivo|default:"—" }}</td>
-                    <td>
-                        <div class="small">{{ evento.antes|json_legible }}</div>
-                    </td>
-                    <td>
-                        <div class="small">{{ evento.antes|diff_legible:evento.despues }}</div>
-                    </td>
-                </tr>
-            {% empty %}
-                <tr>
-                    <td colspan="6" class="text-center">
-                        No hay eventos registrados.
-                    </td>
-                </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            <div class="col-md-3">
+                <div class="asis-apoyo">Horas que no cubrió</div>
+                <div class="asis-principal fs-5">{{ registro.horas_inasistidas|floatformat:"-2" }} hs</div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="asis-apoyo">Estado</div>
+                <div class="mt-1">
+                    {% if registro.estado_registro == "VALIDADO" %}
+                        <span class="badge text-bg-success">Revisado por Secretaría</span>
+                    {% else %}
+                        <span class="badge text-bg-secondary">Guardado</span>
+                        <div class="asis-apoyo">Falta la revisión de Secretaría.</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="col-md-3">
+                <div class="asis-apoyo">Certificado</div>
+                <div class="mt-1">
+                    {% include "asistencias/includes/badge_justificacion.html" %}
+                    {% if registro.nro_formulario %}
+                        <div class="asis-apoyo">
+                            N° {{ registro.nro_formulario }}
+                            {% if registro.fecha_recepcion %} · {{ registro.fecha_recepcion|date:"d/m/Y" }}{% endif %}
+                            {% if registro.recepcionado_por %} · lo recibió {{ registro.recepcionado_por }}{% endif %}
+                        </div>
+                    {% endif %}
+                    {% if registro.estado_justificacion != "NO_APLICA" and registro.estado_justificacion != "JUSTIFICADA" and perms.asistencias.recepcionar_formulario %}
+                        <a class="btn btn-sm btn-outline-success mt-2"
+                           href="{% url 'asistencia:recepcionar_formulario' registro.pk %}">
+                            Cargar el certificado
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% if registro.licencia or registro.observaciones %}
+            <hr>
+            <div class="row g-3">
+                {% if registro.licencia %}
+                    <div class="col-md-6">
+                        <div class="asis-apoyo">Licencia</div>
+                        <div>{{ registro.licencia }}</div>
+                    </div>
+                {% endif %}
+                {% if registro.observaciones %}
+                    <div class="col-md-6">
+                        <div class="asis-apoyo">Nota</div>
+                        <div>{{ registro.observaciones }}</div>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
 </div>
 
-{% if volver %}
-    <a class="btn btn-outline-secondary" href="{{ volver }}">
-        Volver
-    </a>
-{% else %}
-    <a class="btn btn-outline-secondary"
-       href="{% url 'asistencia:historial' %}">
-        Volver al historial
-    </a>
-{% endif %}
+<details class="asis-filtros mb-2" open>
+    <summary class="btn btn-filtro px-0">
+        Historial de cambios ({{ eventos|length }})
+    </summary>
+
+    <div class="planilla mt-2">
+        <table class="table table-hover align-middle asis-planilla asis-tarjetas">
+            <thead>
+                <tr>
+                    <th>Cuándo</th>
+                    <th>Quién</th>
+                    <th>Qué hizo</th>
+                    <th>Qué cambió</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for evento in eventos %}
+                    <tr>
+                        <td data-rotulo="Cuándo" class="text-nowrap">
+                            {{ evento.creado_en|date:"d/m/Y" }}
+                            <div class="asis-apoyo">{{ evento.creado_en|date:"H:i" }}</div>
+                        </td>
+                        <td data-rotulo="Quién">{{ evento.usuario|default:"—" }}</td>
+                        <td data-rotulo="Qué hizo">
+                            {{ evento.get_accion_display }}
+                            {% if evento.motivo %}
+                                <div class="asis-apoyo">{{ evento.motivo }}</div>
+                            {% endif %}
+                        </td>
+                        <td data-rotulo="Qué cambió">
+                            <div class="asis-apoyo">
+                                {% if evento.antes %}
+                                    {{ evento.antes|diff_legible:evento.despues }}
+                                {% else %}
+                                    {{ evento.despues|json_legible }}
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-secondary">
+                            No hay cambios registrados.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</details>
 {% endblock %}
 
 {% block extra_js %}
+{{ block.super }}
 {% include "asistencias/includes/ux_mejoras.html" %}
 {% endblock %}

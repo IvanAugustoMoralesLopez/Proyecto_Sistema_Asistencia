@@ -76,3 +76,75 @@ def ciclo_lectivo_actual():
     from reportes.models import ParametroSistema
 
     return ParametroSistema.obtener().ciclo_lectivo
+
+
+def designaciones_del_dia(fecha, texto="", solo_con_clase=False):
+    """
+    Designaciones vigentes en la fecha, ordenadas por docente.
+
+    `solo_con_clase` deja solo a quienes tienen horario cargado ese día de la
+    semana. Import local de personal: evita acoplar la carga de modelos.
+    """
+    from django.db.models import Q
+
+    from personal.models import Designacion
+
+    designaciones = (
+        Designacion.objects.filter(
+            activo=True,
+            persona__activa=True,
+            desde__lte=fecha,
+        )
+        .filter(Q(hasta__isnull=True) | Q(hasta__gte=fecha))
+        .select_related("persona", "cargo", "espacio_curricular")
+        .prefetch_related("horarios")
+        .order_by("persona__apellido_nombre", "persona_id", "id")
+    )
+
+    if texto:
+        designaciones = designaciones.filter(
+            Q(persona__apellido_nombre__icontains=texto)
+            | Q(persona__dni__icontains=texto)
+        )
+
+    dia = clave_dia(fecha)
+
+    if solo_con_clase and dia:
+        # distinct(): una designación con varios horarios ese día se repetiría.
+        designaciones = designaciones.filter(horarios__dia=dia).distinct()
+
+    return designaciones
+
+
+def conteo_del_dia(fecha):
+    """
+    Cuántos docentes corresponden a la fecha y cuántos ya están cargados.
+
+    Es lo que la pantalla diaria necesita para poder decir «faltan cargar 12»
+    en vez de limitarse a mostrar una tabla vacía. Usa el mismo criterio que
+    la pantalla de carga: los que dan clase ese día y, si nadie tiene horario
+    cargado todavía, todos los vigentes.
+    """
+    from ..models import RegistroAsistencia
+
+    ids = list(
+        designaciones_del_dia(fecha, solo_con_clase=True)
+        .values_list("pk", flat=True)
+    )
+
+    if not ids:
+        ids = list(
+            designaciones_del_dia(fecha).values_list("pk", flat=True)
+        )
+
+    cargados = (
+        RegistroAsistencia.objects
+        .filter(fecha=fecha, designacion_id__in=ids)
+        .count()
+    )
+
+    return {
+        "total": len(ids),
+        "cargados": cargados,
+        "pendientes": max(len(ids) - cargados, 0),
+    }
