@@ -33,8 +33,6 @@ _BEDELIA = [
     ("licencias", "add_licenciaotorgada"),
     ("licencias", "view_licenciaotorgada"),
     ("licencias", "change_licenciaotorgada"),
-]
-_SECRETARIA = _BEDELIA + [
     ("asistencias", "validar_registro"),
     ("asistencias", "modificar_jornada_cerrada"),
     ("asistencias", "cerrar_periodo"),
@@ -50,8 +48,6 @@ _SECRETARIA = _BEDELIA + [
     ("personal", "change_persona"),
     ("personal", "add_designacion"),
     ("personal", "change_designacion"),
-]
-_SUBSECRETARIA = _SECRETARIA + [
     ("reportes", "gestionar_parametros"),
     ("reportes", "gestionar_usuarios"),
     # Catálogos: cargos, carreras, espacios curriculares y tipos de licencia.
@@ -63,6 +59,11 @@ _SUBSECRETARIA = _SECRETARIA + [
     ("personal", "change_espaciocurricular"),
     ("licencias", "add_licenciaarticulo"),
     ("licencias", "change_licenciaarticulo"),
+
+]
+_SECRETARIA = _BEDELIA + [
+]
+_SUBSECRETARIA = _SECRETARIA + [
 ]
 
 PERMISOS_POR_ROL = {
