@@ -100,6 +100,37 @@ class EmitirDisposicionesTests(TestCase):
             [(1, alvarez.pk), (2, benitez.pk), (3, zapata.pk)],
         )
 
+    def test_las_materias_del_mismo_docente_y_periodo_comparten_numero(self):
+        perez = self._licencia('99000001', 'Perez, Ana', date(2026, 10, 5), date(2026, 10, 7))
+        # Segunda materia (otra designación) de la misma persona, mismo período.
+        otro_cargo = Cargo.objects.create(codigo='HC2', descripcion='Otra hora cátedra')
+        segunda_designacion = Designacion.objects.create(
+            persona=perez.designacion.persona, cargo=otro_cargo, desde=date(2026, 1, 1),
+        )
+        perez_2 = LicenciaOtorgada.objects.create(
+            designacion=segunda_designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 10, 5), hasta=date(2026, 10, 7), nro_formulario='F-1',
+        )
+        ruiz = self._licencia('99000002', 'Ruiz, Eva', date(2026, 10, 5), date(2026, 10, 7))
+
+        resultado = self._emitir()
+
+        numeros = {lic.pk: numero for numero, lic in resultado['emitidas']}
+        self.assertEqual(numeros[perez.pk], 1)
+        self.assertEqual(numeros[perez_2.pk], 1)  # comparte el número (RN-11)
+        self.assertEqual(numeros[ruiz.pk], 2)
+
+    def test_el_mismo_docente_con_otro_periodo_recibe_otro_numero(self):
+        primera = self._licencia('99000001', 'Perez, Ana', date(2026, 10, 5), date(2026, 10, 7))
+        LicenciaOtorgada.objects.create(
+            designacion=primera.designacion, articulo=self.articulo, sit_rev='Titular',
+            desde=date(2026, 10, 20), hasta=date(2026, 10, 21), nro_formulario='F-2',
+        )
+
+        resultado = self._emitir()
+
+        self.assertEqual([numero for numero, _ in resultado['emitidas']], [1, 2])
+
     def test_guarda_los_datos_de_la_disposicion(self):
         lic = self._licencia('99000001', 'Perez, Ana', date(2026, 10, 5), date(2026, 10, 7))
         self._emitir()

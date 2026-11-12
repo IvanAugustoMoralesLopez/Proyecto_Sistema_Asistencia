@@ -121,6 +121,26 @@ def _oficina_o_por_defecto(oficina):
     return oficina
 
 
+def _numerar_por_docente(emitibles, ultimo_numero):
+    """
+    RN-11: todas las materias de un docente con el mismo período (mismo desde
+    y hasta) comparten un único número de disposición. Devuelve la lista de
+    (numero, licencia) en el mismo orden que `emitibles`, que ya viene
+    ordenado alfabéticamente: el número crece solo al cambiar de docente o
+    de período.
+    """
+    numeros = {}
+    resultado = []
+    numero = ultimo_numero
+    for licencia in emitibles:
+        clave = (licencia.designacion.persona_id, licencia.desde, licencia.hasta)
+        if clave not in numeros:
+            numero += 1
+            numeros[clave] = numero
+        resultado.append((numeros[clave], licencia))
+    return resultado
+
+
 def previsualizar_disposiciones_mes(anio: int, mes: int, oficina: str = None) -> dict:
     """
     Muestra qué haría emitir_disposiciones_mes sin guardar nada (RF-16).
@@ -130,11 +150,9 @@ def previsualizar_disposiciones_mes(anio: int, mes: int, oficina: str = None) ->
     emitibles, omitidas = _clasificar_pendientes(anio, mes)
     oficina = _oficina_o_por_defecto(oficina)
 
-    numero = _ultimo_numero_emitido(oficina, anio)
-    a_emitir = []
-    for licencia in emitibles:
-        numero += 1
-        a_emitir.append((numero, licencia))
+    a_emitir = _numerar_por_docente(
+        emitibles, _ultimo_numero_emitido(oficina, anio),
+    )
 
     return {'a_emitir': a_emitir, 'omitidas': omitidas, 'oficina': oficina}
 
@@ -148,6 +166,7 @@ def emitir_disposiciones_mes(anio: int, mes: int, oficina: str = None) -> dict:
       demás quedan en 'omitidas' y no se tocan.
     - RN-11: se ordenan alfabéticamente por apellido y se numeran en forma
       correlativa, continuando desde el último número de la oficina y el año.
+      Las materias del mismo docente y período comparten un único número.
     - Lo ya emitido (con disp_numero) no se vuelve a numerar.
     - `oficina` por defecto: la de ParametroSistema (RF-21).
     """
@@ -156,9 +175,10 @@ def emitir_disposiciones_mes(anio: int, mes: int, oficina: str = None) -> dict:
 
     emitidas = []
     with transaction.atomic():
-        numero = _ultimo_numero_emitido(oficina, anio)
-        for licencia in emitibles:
-            numero += 1
+        asignaciones = _numerar_por_docente(
+            emitibles, _ultimo_numero_emitido(oficina, anio),
+        )
+        for numero, licencia in asignaciones:
             licencia.disp_tipo = DISPOSICION_TIPO
             licencia.disp_oficina = oficina
             licencia.disp_numero = str(numero)
@@ -168,7 +188,7 @@ def emitir_disposiciones_mes(anio: int, mes: int, oficina: str = None) -> dict:
             ])
             emitidas.append((numero, licencia))
 
-    return {'emitidas': emitidas, 'omitidas': omitidas} 
+    return {'emitidas': emitidas, 'omitidas': omitidas}
 
 TITULOS_PLANILLA = {
     PLANILLA_IL01: 'IL-01 Salud',
