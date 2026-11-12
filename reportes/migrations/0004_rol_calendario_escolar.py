@@ -1,12 +1,12 @@
 from django.db import migrations
 
-ROLES = ("Secretaría", "Subsecretaría")
+ROLES = ("Bedelia","Secretaría", "Subsecretaría")
 PERMISOS = ("add_dianolaborable", "change_dianolaborable", "delete_dianolaborable")
 
 
 def dar_permisos_de_calendario(apps, schema_editor):
     """
-    RF-10: Secretaría y Subsecretaría pasan a administrar el calendario escolar.
+    RF-10:Bedelia Secretaría y Subsecretaría pasan a administrar el calendario escolar.
 
     `crear_grupos` no modifica los grupos que ya existen, así que las bases ya
     creadas no recibirían los permisos nuevos de reportes/roles.py. En una base
