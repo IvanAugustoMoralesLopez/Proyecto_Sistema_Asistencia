@@ -62,12 +62,6 @@
         </a>
     {% endif %}
 
-    {% if perms.asistencias.add_registroasistencia %}
-        <a class="btn btn-filtro" id="btn-nueva-asistencia"
-           href="{% url 'asistencia:crear_asistencia' %}?fecha={{ fecha_seleccionada }}">
-            Cargar un docente suelto
-        </a>
-    {% endif %}
     <a class="btn btn-filtro" href="{% url 'asistencia:historial' %}">Buscar en el historial</a>
 </form>
 

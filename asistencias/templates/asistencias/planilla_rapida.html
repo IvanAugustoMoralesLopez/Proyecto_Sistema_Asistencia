@@ -18,6 +18,13 @@
         </div>
 
         <div class="encabezado-planilla__acciones">
+            {% if not bloqueo %}
+                {# Para quien no figura en la lista (por ejemplo, sin horario este día). #}
+                <a class="btn btn-filtro" id="btn-nueva-asistencia"
+                   href="{% url 'asistencia:crear_asistencia' %}?fecha={{ fecha_texto }}&amp;volver={{ request.get_full_path|urlencode }}">
+                    Cargar un docente suelto
+                </a>
+            {% endif %}
             <a class="btn btn-filtro"
                href="{% url 'asistencia:registro_diario' %}?fecha={{ fecha_texto }}">
                 Ver lo cargado
