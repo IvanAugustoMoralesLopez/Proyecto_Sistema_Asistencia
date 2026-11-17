@@ -413,7 +413,11 @@ def imputar_renglones(anio, mes, datos, usuario=None):
             articulo = articulos.get(int(texto)) if texto.isdigit() else None
             if texto and articulo is None:
                 raise ValidationError("El artículo elegido no existe en el catálogo.")
-            if articulo is not None:
+            # Solo se controla el artículo que el operador CAMBIA en esta
+            # pantalla. Un renglón que no se tocó conserva lo que ya tenía
+            # (por ejemplo, el artículo heredado de una licencia otorgada).
+            cambia = (articulo.pk if articulo else None) != renglon.articulo_id
+            if articulo is not None and cambia:
                 situacion = renglon.designacion.situacion_revista and (
                     renglon.designacion.get_situacion_revista_display().lower()
                 )
@@ -424,8 +428,9 @@ def imputar_renglones(anio, mes, datos, usuario=None):
                         f"{del_articulo} y {renglon.designacion.persona.apellido_nombre} "
                         f"revista como {situacion} en esa materia."
                     )
+            if articulo is not None:
                 elegido_en_bloque.setdefault(renglon.clave_de_bloque, articulo)
-            if (articulo.pk if articulo else None) != renglon.articulo_id:
+            if cambia:
                 renglon.imputar(articulo)
                 modificados.add(pk)
 

@@ -459,3 +459,51 @@ class PantallaTests(BasePlanillaMensual):
         self.assertEqual(
             self.client.get(reverse("licencias:planilla_mensual", args=[2026, 13])).status_code, 404
         )
+
+
+class ArticuloHeredadoTests(BasePlanillaMensual):
+    """
+    Un renglón que trae el artículo de su licencia otorgada no debe frenar el
+    guardado de la planilla aunque no coincida la situación de revista: solo se
+    controla el artículo que el operador cambia en la pantalla.
+    """
+
+    def setUp(self):
+        self.interina = Designacion.objects.create(
+            persona=self.abel, cargo=self.cargo, situacion_revista="INT",
+            desde=date(2026, 3, 1),
+        )
+        Horario.objects.create(designacion=self.interina, dia="LUN", horas_catedra=4)
+        licencia = LicenciaOtorgada.objects.create(
+            designacion=self.interina, articulo=self.enfermedad, sit_rev="Interino",
+            desde=date(2026, 10, 5), hasta=date(2026, 10, 5),
+        )
+        self.marcar(self.interina, date(2026, 10, 5), "LIC", "4", licencia=licencia)
+        self.licencia_de_zarate()
+        procesar_mes(2026, 10, self.usuario)
+
+    def test_un_renglon_sin_tocar_no_frena_el_guardado(self):
+        heredado = RenglonMensual.objects.get(designacion=self.interina)
+        de_zarate = RenglonMensual.objects.filter(designacion=self.m1).get()
+
+        imputar_renglones(
+            2026, 10,
+            {
+                heredado.pk: {"articulo": self.enfermedad.pk},   # sin cambios
+                de_zarate.pk: {"articulo": self.enfermedad.pk},  # elegido ahora
+            },
+            self.usuario,
+        )
+
+        de_zarate.refresh_from_db()
+        heredado.refresh_from_db()
+        self.assertEqual(de_zarate.cod_licencia, "T-14")
+        self.assertEqual(heredado.articulo, self.enfermedad)
+
+    def test_elegir_a_mano_un_articulo_de_otra_situacion_sigue_rechazado(self):
+        heredado = RenglonMensual.objects.get(designacion=self.interina)
+
+        with self.assertRaises(ValidationError):
+            imputar_renglones(
+                2026, 10, {heredado.pk: {"articulo": self.particulares.pk}},
+            )
