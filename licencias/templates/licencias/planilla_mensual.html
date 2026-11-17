@@ -188,6 +188,49 @@
         {% endif %}
     </div>
 </div>
+{# RN-11: disposiciones ya emitidas, agrupadas por número. #}
+<div class="card shadow-sm border-0 mb-4" id="disposiciones-emitidas">
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Disposiciones del mes</h2>
+    </div>
+    <div class="card-body">
+        {% if emitidas %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>N°</th>
+                            <th>Docente</th>
+                            <th>Desde</th>
+                            <th>Hasta</th>
+                            <th>Materias / cargos</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for disp in emitidas %}
+                            <tr>
+                                <td class="text-nowrap fw-semibold">{{ disp.numero }}{% if disp.anio %}/{{ disp.anio }}{% endif %}</td>
+                                <td>{{ disp.renglones.0.designacion.persona.apellido_nombre }}</td>
+                                <td class="text-nowrap">{{ disp.renglones.0.desde|date:"d/m/Y" }}</td>
+                                <td class="text-nowrap">{{ disp.renglones.0.hasta|date:"d/m/Y" }}</td>
+                                <td>
+                                    {% for r in disp.renglones %}
+                                        <div>
+                                            {% if r.designacion.espacio_curricular %}{{ r.designacion.espacio_curricular.nombre }}{% else %}{{ r.designacion.cargo.descripcion }}{% endif %}
+                                            <span class="text-secondary small">· {{ r.planilla|default:"pendiente" }} · {{ r.horas|floatformat:"-2" }} hs{% if r.cod_licencia %} · {{ r.cod_licencia }}{% endif %}</span>
+                                        </div>
+                                    {% endfor %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">Todavía no hay disposiciones emitidas en este mes.</p>
+        {% endif %}
+    </div>
+</div>
 {% endif %}
 {% endblock %}
 

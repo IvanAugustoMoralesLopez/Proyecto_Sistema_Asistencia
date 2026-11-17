@@ -431,6 +431,30 @@ class PantallaTests(BasePlanillaMensual):
             self.assertEqual(renglon.creado_por, self.usuario)
             self.assertIsNotNone(renglon.creado_en)
 
+    def test_las_disposiciones_emitidas_se_ven_agrupadas(self):
+        """RN-11: después de emitir se ve cada disposición con sus materias."""
+        self.licencia_de_zarate()
+        self.client.post(self.url, {"accion": "procesar"})
+        self.client.post(self.url, {"accion": "emitir"})
+
+        respuesta = self.client.get(self.url)
+        (disposicion,) = respuesta.context["emitidas"]
+        self.assertEqual((disposicion["numero"], disposicion["anio"]), ("1", 2026))
+        self.assertEqual(
+            [r.designacion_id for r in disposicion["renglones"]],
+            [self.m1.pk, self.m2.pk],
+        )
+        self.assertContains(respuesta, "Disposiciones del mes")
+        self.assertContains(respuesta, "Materia 1")
+        self.assertContains(respuesta, "Materia 2")
+
+    def test_sin_emitir_no_hay_disposiciones_del_mes(self):
+        self.licencia_de_zarate()
+        self.client.post(self.url, {"accion": "procesar"})
+        respuesta = self.client.get(self.url)
+        self.assertEqual(respuesta.context["emitidas"], [])
+        self.assertContains(respuesta, "Todavía no hay disposiciones emitidas")
+
     def test_quien_solo_consulta_no_puede_procesar(self):
         lector = get_user_model().objects.create_user("lector", password="x")
         lector.user_permissions.add(Permission.objects.get(codename="view_licenciaotorgada"))

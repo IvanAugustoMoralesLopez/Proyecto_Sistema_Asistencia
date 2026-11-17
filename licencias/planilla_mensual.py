@@ -517,6 +517,31 @@ def _bloques_a_numerar(anio, mes):
 
     return sorted(bloques.items(), key=orden)
 
+def disposiciones_emitidas_del_mes(anio, mes):
+    """
+    Disposiciones ya emitidas en los renglones del mes, agrupadas por número
+    (RN-11): cada una con su docente, período y las materias que abarca.
+    Devuelve una lista ordenada por año y número.
+    """
+    grupos = {}
+    for renglon in renglones_del_mes(anio, mes):
+        if not renglon.disp_numero:
+            continue
+        clave = (renglon.disp_anio or 0, renglon.disp_numero)
+        grupos.setdefault(clave, []).append(renglon)
+
+    def orden(clave):
+        anio_disp, numero = clave
+        return (anio_disp, int(numero) if numero.isdigit() else 0, numero)
+
+    return [
+        {
+            'numero': numero,
+            'anio': anio_disp or None,
+            'renglones': grupos[(anio_disp, numero)],
+        }
+        for anio_disp, numero in sorted(grupos, key=orden)
+    ]
 
 def previsualizar_disposiciones_planilla(anio, mes):
     """[(numero, [renglones])] con los números que se asignarían."""
