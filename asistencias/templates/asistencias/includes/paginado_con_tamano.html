@@ -1,0 +1,29 @@
+{% comment %}
+Pie de una lista paginada: cuántos se ven, cuántos mostrar por página y
+la paginación. Cambiar el tamaño vuelve a la página 1 y conserva los
+filtros de la URL. Necesita `pagina`, `querystring` y `tamanos_pagina`.
+{% endcomment %}
+{% if pagina.paginator.count %}
+<div class="asis-paginado">
+    <div class="asis-paginado__tamano">
+        <span class="asis-paginado__info">
+            Mostrando <b>{{ pagina.start_index }}–{{ pagina.end_index }}</b>
+            de <b>{{ pagina.paginator.count }}</b>
+        </span>
+
+        <span class="asis-paginado__rotulo" id="rotulo-por-pagina">Mostrar de a</span>
+        <div class="btn-group btn-group-sm" role="group" aria-labelledby="rotulo-por-pagina">
+            {% for tamano in tamanos_pagina %}
+                {% if tamano == pagina.paginator.per_page %}
+                    <span class="btn btn-primary" aria-current="true">{{ tamano }}</span>
+                {% else %}
+                    <a class="btn btn-outline-secondary"
+                       href="{% querystring por_pagina=tamano page=None %}">{{ tamano }}</a>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    {% include "asistencias/includes/paginacion.html" %}
+</div>
+{% endif %}

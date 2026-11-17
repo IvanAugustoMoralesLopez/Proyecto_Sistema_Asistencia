@@ -26,6 +26,11 @@
             {% if pendientes_formulario %}
                 <span class="asis-resumen__dato asis-resumen__dato--esper"><b>{{ pendientes_formulario }}</b> esperan certificado</span>
             {% endif %}
+            {% if sin_validar %}
+                <span class="asis-resumen__dato"><b>{{ sin_validar }}</b> sin revisar por Secretaría</span>
+            {% else %}
+                <span class="asis-resumen__dato asis-resumen__dato--ok"><b>✓</b> todo revisado por Secretaría</span>
+            {% endif %}
         </div>
     {% endif %}
 
@@ -46,6 +51,16 @@
     <button class="btn btn-primario-suave" type="submit" data-sin-espera="1">Ver</button>
 
     <span class="asis-barra__sep"></span>
+
+    {% if sin_validar and perms.asistencias.validar_registro %}
+        {# Lleva al historial con solo lo que falta validar de este día, todo en una página. #}
+        <a class="btn btn-primario-suave" id="btn-revisar-dia"
+           href="{% url 'asistencia:historial' %}?desde={{ fecha_seleccionada }}&amp;hasta={{ fecha_seleccionada }}&amp;estado_registro=BORRADOR&amp;por_pagina=100"
+           title="Abre el historial con lo que falta revisar de este día">
+            Revisar este día
+            <span class="badge text-bg-secondary">{{ sin_validar }}</span>
+        </a>
+    {% endif %}
 
     {% if perms.asistencias.add_registroasistencia %}
         <a class="btn btn-filtro" id="btn-nueva-asistencia"
