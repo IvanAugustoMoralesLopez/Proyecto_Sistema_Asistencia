@@ -6,6 +6,8 @@ from datetime import date, timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import ValidationError
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.dateparse import parse_date
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import FileResponse, Http404, HttpResponse
@@ -31,6 +33,7 @@ from .planilla_mensual import (
     cuadros_del_mes,
     emitir_disposiciones_planilla,
     disposiciones_emitidas_del_mes,
+    faltas_sin_formulario,
     imputar_renglones,
     previsualizar_disposiciones_planilla,
     procesar_mes,
@@ -246,10 +249,26 @@ def _marcar_y_avisar(request, licencia):
             "de asistencias.",
         )
 
+def _volver_seguro(request):
+    """
+    Dirección a la que volver después de guardar (por ejemplo, la planilla
+    mensual). Solo se aceptan direcciones de este mismo sitio.
+    """
+    destino = request.POST.get("volver") or request.GET.get("volver") or ""
+    if destino and url_has_allowed_host_and_scheme(
+        destino, allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return destino
+    return ""
+
+
 @login_required 
 @permission_required("licencias.add_licenciaotorgada", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def nueva_licencia_otorgada(request):
+    volver = _volver_seguro(request)
+
     if request.method == "POST":
         form = LicenciaOtorgadaForm(request.POST)
 
@@ -260,15 +279,26 @@ def nueva_licencia_otorgada(request):
                 "La licencia se registró correctamente."
             )
             _marcar_y_avisar(request, licencia)
-            return redirect(reverse("licencias:nueva_licencia_otorgada"))
+            return redirect(volver or reverse("licencias:nueva_licencia_otorgada"))
 
     else:
-        form = LicenciaOtorgadaForm()
+        # Desde el cuadro de faltas sin formulario de la planilla mensual se
+        # llega con la designación y la fecha ya elegidas. Solo precarga los
+        # campos: el guardado es el mismo de siempre.
+        inicial = {}
+        designacion = request.GET.get("designacion", "")
+        if designacion.isdigit():
+            inicial["designacion"] = int(designacion)
+        desde = parse_date(request.GET.get("desde", "") or "")
+        if desde:
+            inicial["desde"] = desde
+            inicial["hasta"] = desde
+        form = LicenciaOtorgadaForm(initial=inicial)
 
     return render(
         request,
         "licencias/nueva_licencia_otorgada.html",
-        {"form": form}
+        {"form": form, "volver": volver}
     )
 
 LICENCIAS_POR_PAGINA = 20
@@ -570,6 +600,7 @@ def planilla_mensual(request, anio: int, mes: int):
         "hay_renglones": hay_renglones,
         "por_emitir": previsualizar_disposiciones_planilla(anio, mes),
         "emitidas": disposiciones_emitidas_del_mes(anio, mes),
+        "sin_formulario": faltas_sin_formulario(anio, mes),
         "puede_modificar": request.user.has_perm("licencias.change_licenciaotorgada"),
         "mes_anterior": {"anio": anio_anterior, "mes": mes_anterior},
         "mes_siguiente": {"anio": anio_siguiente, "mes": mes_siguiente},

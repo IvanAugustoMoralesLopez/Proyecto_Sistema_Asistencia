@@ -254,6 +254,53 @@ class CuadrosYArticulosTests(BasePlanillaMensual):
                 2026, 10, {self.renglones()[0].pk: {"articulo": self.enfermedad_sup.pk}},
             )
 
+    def test_una_inasistencia_sin_formulario_no_admite_articulo(self):
+        """RF-09: primero se recibe el formulario, después se imputa."""
+        self.marcar(self.m3, date(2026, 10, 22), "I", "2", estado_justificacion="INJUSTIFICADA")
+        procesar_mes(2026, 10, self.usuario)
+        renglon = self.renglones()[0]
+
+        with self.assertRaises(ValidationError):
+            imputar_renglones(2026, 10, {renglon.pk: {"articulo": self.enfermedad.pk}})
+        renglon.refresh_from_db()
+        self.assertIsNone(renglon.articulo)
+
+    def test_una_inasistencia_con_formulario_si_admite_articulo(self):
+        self.marcar(
+            self.m3, date(2026, 10, 22), "I", "2",
+            estado_justificacion="JUSTIFICADA", nro_formulario="F-5",
+            fecha_recepcion=date(2026, 10, 23),
+        )
+        procesar_mes(2026, 10, self.usuario)
+        renglon = self.renglones()[0]
+
+        imputar_renglones(2026, 10, {renglon.pk: {"articulo": self.enfermedad.pk}})
+        renglon.refresh_from_db()
+        self.assertEqual(renglon.cod_licencia, "T-14")
+
+    def test_el_articulo_no_se_propaga_a_una_inasistencia_sin_formulario(self):
+        # El mismo día: Materia 1 con licencia y Materia 2 con falta sin formulario.
+        self.marcar(self.m1, date(2026, 10, 22), "LIC", "3")
+        self.marcar(self.m2, date(2026, 10, 22), "I", "4", estado_justificacion="INJUSTIFICADA")
+        procesar_mes(2026, 10, self.usuario)
+        licencia = RenglonMensual.objects.get(designacion=self.m1)
+
+        imputar_renglones(2026, 10, {licencia.pk: {"articulo": self.enfermedad.pk}})
+
+        self.assertIsNone(RenglonMensual.objects.get(designacion=self.m2).articulo)
+
+    def test_quitar_el_articulo_de_una_inasistencia_sin_formulario_se_permite(self):
+        """Para poder corregir un renglón que quedó con artículo por error."""
+        self.marcar(self.m3, date(2026, 10, 22), "I", "2", estado_justificacion="INJUSTIFICADA")
+        procesar_mes(2026, 10, self.usuario)
+        renglon = self.renglones()[0]
+        RenglonMensual.objects.filter(pk=renglon.pk).update(articulo=self.enfermedad)
+
+        imputar_renglones(2026, 10, {renglon.pk: {"articulo": ""}})
+        renglon.refresh_from_db()
+        self.assertIsNone(renglon.articulo)
+        self.assertEqual(renglon.planilla, "IL-02")
+
     def test_oficina_y_anio_nacen_precargados(self):
         """RN-07 y RN-08."""
         self.licencia_de_zarate()
@@ -454,6 +501,69 @@ class PantallaTests(BasePlanillaMensual):
         respuesta = self.client.get(self.url)
         self.assertEqual(respuesta.context["emitidas"], [])
         self.assertContains(respuesta, "Todavía no hay disposiciones emitidas")
+
+    def test_las_faltas_sin_formulario_aparecen_en_el_cuadro_rojo(self):
+        # ZARATE falta el jueves 22 en sus dos materias, sin papel.
+        self.marcar(self.m1, date(2026, 10, 22), "I", "3", estado_justificacion="INJUSTIFICADA")
+        self.marcar(self.m2, date(2026, 10, 22), "I", "4", estado_justificacion="INJUSTIFICADA")
+        self.client.post(self.url, {"accion": "procesar"})
+
+        respuesta = self.client.get(self.url)
+        (falta,) = respuesta.context["sin_formulario"]   # una fila por docente y día
+        self.assertEqual(falta["fecha"], date(2026, 10, 22))
+        self.assertEqual(len(falta["renglones"]), 2)
+        self.assertContains(respuesta, "Faltas sin formulario (1)")
+        self.assertContains(
+            respuesta,
+            reverse("asistencia:recepcionar_formulario", args=[falta["registro"].pk]),
+        )
+        self.assertContains(respuesta, f"?designacion={self.m1.pk}&amp;desde=2026-10-22")
+        self.assertContains(respuesta, f"?designacion={self.m2.pk}&amp;desde=2026-10-22")
+
+    def test_recibir_el_formulario_desde_el_cuadro_rojo_vuelve_a_la_planilla(self):
+        from asistencias.services import adquirir_sesion_edicion  # noqa: F401
+        registro = self.marcar(self.m3, date(2026, 10, 22), "I", "2", estado_justificacion="INJUSTIFICADA")
+        self.client.post(self.url, {"accion": "procesar"})
+        self.usuario.user_permissions.add(
+            Permission.objects.get(codename="recepcionar_formulario"),
+            Permission.objects.get(codename="view_registroasistencia"),
+        )
+
+        respuesta = self.client.post(
+            reverse("asistencia:recepcionar_formulario", args=[registro.pk]),
+            {
+                "estado_justificacion": "JUSTIFICADA",
+                "nro_formulario": "F-9",
+                "fecha_recepcion": "2026-10-23",
+                "nueva_marca": "P",
+                "motivo": "",
+                "volver": self.url,
+            },
+        )
+        self.assertRedirects(respuesta, self.url, fetch_redirect_response=False)
+
+        self.client.post(self.url, {"accion": "procesar"})
+        self.assertEqual(self.client.get(self.url).context["sin_formulario"], [])
+        self.assertEqual(self.renglones()[0].marca, "P")
+
+    def test_nueva_licencia_se_abre_precargada_y_vuelve_a_la_planilla(self):
+        self.usuario.user_permissions.add(Permission.objects.get(codename="add_licenciaotorgada"))
+        url = reverse("licencias:nueva_licencia_otorgada")
+
+        respuesta = self.client.get(
+            url, {"designacion": self.m3.pk, "desde": "2026-10-22", "volver": self.url}
+        )
+        form = respuesta.context["form"]
+        self.assertEqual(form.initial["designacion"], self.m3.pk)
+        self.assertEqual(form.initial["desde"], date(2026, 10, 22))
+        self.assertContains(respuesta, f'name="volver" value="{self.url}"')
+
+    def test_volver_no_acepta_direcciones_de_otro_sitio(self):
+        from licencias.views import _volver_seguro
+        from django.test import RequestFactory
+
+        pedido = RequestFactory().get("/", {"volver": "https://otro-sitio.com/robar"})
+        self.assertEqual(_volver_seguro(pedido), "")
 
     def test_quien_solo_consulta_no_puede_procesar(self):
         lector = get_user_model().objects.create_user("lector", password="x")

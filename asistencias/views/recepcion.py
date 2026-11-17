@@ -5,6 +5,7 @@ Recepción del formulario en papel de las inasistencias (RF-09).
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from ..forms import FiltroRecepcionForm, RecepcionFormularioForm
 from ..models import RegistroAsistencia
@@ -111,6 +112,13 @@ def recepcionar_formulario_view(request, pk):
                     request,
                     "El estado de la inasistencia se actualizó.",
                 )
+                # Si se llegó desde la planilla mensual, se vuelve ahí.
+                volver = request.POST.get("volver", "")
+                if volver and url_has_allowed_host_and_scheme(
+                    volver, allowed_hosts={request.get_host()},
+                    require_https=request.is_secure(),
+                ):
+                    return redirect(volver)
                 return redirect("asistencia:recepcion_formularios")
     else:
         form = RecepcionFormularioForm(registro=registro)
@@ -122,5 +130,6 @@ def recepcionar_formulario_view(request, pk):
             "form": form,
             "registro": registro,
             "puede_recepcionar": bool(form.fields["estado_justificacion"].choices),
+            "volver": request.POST.get("volver") or request.GET.get("volver", ""),
         },
     )

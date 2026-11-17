@@ -375,6 +375,53 @@ def renglones_del_mes(anio, mes):
     )
 
 
+def falta_formulario(renglon):
+    """
+    RF-09: una inasistencia (I) sin número de formulario todavía no tiene el
+    papel que la justifica, así que no admite artículo de licencia. Primero
+    se recibe el formulario en Recepción (que pasa la I a LIC, LT o P).
+    """
+    return renglon.marca == 'I' and not renglon.nro_formulario
+
+
+def faltas_sin_formulario(anio, mes):
+    """
+    Bandeja de pendientes de la planilla mensual: inasistencias del mes que
+    todavía esperan el papel, agrupadas por docente y día (un papel cubre
+    todas las materias de ese día). Cada grupo trae el registro diario de la
+    primera materia, que es el que abre Recepción de formularios.
+    """
+    from asistencias.models import RegistroAsistencia
+
+    grupos = {}
+    for renglon in renglones_del_mes(anio, mes):
+        if not falta_formulario(renglon):
+            continue
+        clave = (renglon.designacion.persona_id, renglon.desde)
+        grupos.setdefault(clave, []).append(renglon)
+
+    pendientes = []
+    for (persona_id, fecha), renglones in grupos.items():
+        registro = (
+            RegistroAsistencia.objects.filter(
+                designacion__in=[r.designacion_id for r in renglones],
+                fecha=fecha,
+                marca__codigo='I',
+            )
+            .order_by('designacion_id')
+            .first()
+        )
+        pendientes.append({
+            'docente': renglones[0].designacion.persona,
+            'fecha': fecha,
+            'renglones': renglones,
+            'registro': registro,
+        })
+
+    pendientes.sort(key=lambda p: (_clave_alfabetica(p['docente'].apellido_nombre), p['fecha']))
+    return pendientes
+
+
 def articulos_para_renglon(renglon, todos):
     """Artículos del catálogo que corresponden a la situación de revista."""
     situacion = (
@@ -418,6 +465,14 @@ def imputar_renglones(anio, mes, datos, usuario=None):
             # (por ejemplo, el artículo heredado de una licencia otorgada).
             cambia = (articulo.pk if articulo else None) != renglon.articulo_id
             if articulo is not None and cambia:
+                if falta_formulario(renglon):
+                    raise ValidationError(
+                        f"{renglon.designacion.persona.apellido_nombre} tiene una "
+                        f"inasistencia sin formulario el {renglon.desde:%d/%m/%Y}: "
+                        "primero registrá el papel (en Recepción de formularios o "
+                        "cargando la licencia en Nueva licencia) y después elegí "
+                        "el artículo."
+                    )
                 situacion = renglon.designacion.situacion_revista and (
                     renglon.designacion.get_situacion_revista_display().lower()
                 )
@@ -456,7 +511,11 @@ def imputar_renglones(anio, mes, datos, usuario=None):
     # Mismo período, misma causa: las materias sin artículo toman el elegido.
     for pk, renglon in renglones.items():
         articulo = elegido_en_bloque.get(renglon.clave_de_bloque)
-        if articulo is not None and renglon.articulo_id is None:
+        if (
+            articulo is not None
+            and renglon.articulo_id is None
+            and not falta_formulario(renglon)
+        ):
             renglon.imputar(_articulo_equivalente(articulo, renglon.designacion))
             modificados.add(pk)
 
@@ -517,6 +576,7 @@ def _bloques_a_numerar(anio, mes):
 
     return sorted(bloques.items(), key=orden)
 
+
 def disposiciones_emitidas_del_mes(anio, mes):
     """
     Disposiciones ya emitidas en los renglones del mes, agrupadas por número
@@ -542,6 +602,7 @@ def disposiciones_emitidas_del_mes(anio, mes):
         }
         for anio_disp, numero in sorted(grupos, key=orden)
     ]
+
 
 def previsualizar_disposiciones_planilla(anio, mes):
     """[(numero, [renglones])] con los números que se asignarían."""

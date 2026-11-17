@@ -44,6 +44,64 @@
         en la asistencia diaria.
     </div>
 {% else %}
+{% if sin_formulario %}
+{# Bandeja de pendientes: faltas que esperan el papel (RF-09). #}
+<div class="card border-danger shadow-sm mb-4" id="faltas-sin-formulario">
+    <div class="card-header bg-danger text-white">
+        <h2 class="h5 mb-0">Faltas sin formulario ({{ sin_formulario|length }})</h2>
+    </div>
+    <div class="card-body">
+        <p class="mb-3">
+            Estas inasistencias todavía no tienen el papel. Según lo que traiga el docente,
+            registralo con el botón que corresponda y después tocá <strong>Volver a procesar el mes</strong>.
+            Si el papel nunca llega, la falta queda como inasistencia en el cuadro IL-02.
+        </p>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Docente</th>
+                        <th>Día</th>
+                        <th>Materias afectadas</th>
+                        <th>Permiso o licencia de 1 día</th>
+                        <th>Licencia de varios días</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for falta in sin_formulario %}
+                        <tr>
+                            <td>{{ falta.docente.apellido_nombre }}<br><small class="text-secondary">DNI {{ falta.docente.dni }}</small></td>
+                            <td class="text-nowrap">{{ falta.fecha|date:"d/m/Y" }}</td>
+                            <td>
+                                {% for r in falta.renglones %}
+                                    <div>{% if r.designacion.espacio_curricular %}{{ r.designacion.espacio_curricular.nombre }}{% else %}{{ r.designacion.cargo.descripcion }}{% endif %} <span class="text-secondary small">· {{ r.horas|floatformat:"-2" }} hs</span></div>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {% if falta.registro %}
+                                    <a class="btn btn-sm btn-outline-danger"
+                                       href="{% url 'asistencia:recepcionar_formulario' falta.registro.pk %}?volver={{ request.get_full_path|urlencode }}">
+                                        Recibir formulario
+                                    </a>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% for r in falta.renglones %}
+                                    <a class="btn btn-sm btn-outline-secondary mb-1"
+                                       href="{% url 'licencias:nueva_licencia_otorgada' %}?designacion={{ r.designacion_id }}&amp;desde={{ falta.fecha|date:'Y-m-d' }}&amp;volver={{ request.get_full_path|urlencode }}">
+                                        Cargar licencia{% if falta.renglones|length > 1 %} · {% if r.designacion.espacio_curricular %}{{ r.designacion.espacio_curricular.nombre }}{% else %}{{ r.designacion.cargo.descripcion }}{% endif %}{% endif %}
+                                    </a>
+                                {% endfor %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <form method="post" id="form-planilla">
     {% csrf_token %}
     <input type="hidden" name="accion" value="guardar">
@@ -99,7 +157,7 @@
                                     <select class="form-select form-select-sm js-articulo"
                                             name="articulo-{{ r.pk }}"
                                             aria-label="Artículo de {{ r.designacion.persona.apellido_nombre }}"
-                                            {% if not puede_modificar %}disabled{% endif %}>
+                                            {% if not puede_modificar %}disabled{% elif r.marca == "I" and not r.nro_formulario and not r.articulo_id %}disabled title="Falta el formulario: usá el cuadro rojo de arriba"{% endif %}>
                                         <option value="" data-cod="" data-articulo="">— elegí el artículo —</option>
                                         {% for a in r.articulos %}
                                             <option value="{{ a.pk }}" data-cod="{{ a.cod_licencia }}" data-articulo="{{ a.articulo }}"
@@ -108,6 +166,9 @@
                                             </option>
                                         {% endfor %}
                                     </select>
+                                    {% if r.marca == "I" and not r.nro_formulario %}
+                                        <div class="small text-danger">Sin formulario (ver cuadro rojo)</div>
+                                    {% endif %}
                                 </td>
                                 <td><output class="fw-semibold js-cod">{{ r.cod_licencia|default:"—" }}</output></td>
                                 <td class="text-nowrap">{{ r.desde|date:"d/m/Y" }}</td>
@@ -188,6 +249,7 @@
         {% endif %}
     </div>
 </div>
+
 {# RN-11: disposiciones ya emitidas, agrupadas por número. #}
 <div class="card shadow-sm border-0 mb-4" id="disposiciones-emitidas">
     <div class="card-header bg-dark text-white">
