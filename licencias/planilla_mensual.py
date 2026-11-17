@@ -627,6 +627,7 @@ def emitir_disposiciones_planilla(anio, mes, usuario=None):
 
     Devuelve [(numero, [renglones])].
     """
+    _rango_del_mes(anio, mes)  # valida el mes (ValueError si no es 1 a 12)
     oficina = _oficina_por_defecto()
     numero = ultimo_numero_emitido(oficina, anio)
     emitidas = []

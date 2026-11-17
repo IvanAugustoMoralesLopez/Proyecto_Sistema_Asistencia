@@ -14,7 +14,7 @@ Cuatro puntos admitían más de una solución. Se resolvieron así:
 | Punto | Decisión | Consecuencia |
 |---|---|---|
 | Alcance | Se corrigieron los cuatro módulos, no solo licencias. | Hay cambios en código de todo el equipo: conviene que cada responsable revise su parte. |
-| RF-14 (mensual desde la diaria) | Se agregó un procesamiento mensual nuevo que lee la diaria. La carga de licencias por designación sigue existiendo. | Conviven la **planilla mensual IL-01/IL-02** (oficial, desde la diaria) y el **reporte por licencias** (el anterior). |
+| RF-14 (mensual desde la diaria) | Se agregó un procesamiento mensual nuevo que lee la diaria. La carga de licencias por designación sigue existiendo. | La **planilla mensual IL-01/IL-02** reemplaza al reporte por licencias y al generador de disposiciones anteriores (ver más abajo). |
 | RF-07 (una vez por agente) | La pantalla carga una fila por docente; la base sigue guardando un registro por materia. | El dato por materia lo arma el sistema, no el operador, y la planilla mensual lo necesita así. |
 | RF-08 (P y PR) | Se cambió al significado del documento y se migraron los datos existentes. | Los P viejos pasan a PR y los PR viejos (presente retirado) pasan a I con una nota. La migración se puede revertir. |
 
@@ -58,8 +58,22 @@ Nuevo: `licencias/planilla_mensual.py`, modelo `RenglonMensual` y la pantalla
 | INC-01 (diferido) | — | Se agregó una exportación CSV básica de los cuadros. La impresión oficial sigue diferida. |
 | INC-02 (diferido) | — | Si la diaria cambia después de emitida una disposición, el renglón no se borra: queda marcado "Revisar" para corregirlo a mano. |
 
-El **reporte por licencias** anterior se mantiene y ahora muestra Cód. lic., Disposición,
-Oficina, Año y el intervalo completo de la licencia.
+**Reporte por licencias y generador de disposiciones anteriores: retirados.** La
+planilla mensual los reemplaza. Se sacaron del menú y se borraron su código y sus
+plantillas; sus direcciones redirigen a la planilla del mismo mes, para que los
+enlaces guardados no den error. La emisión de disposiciones quedó en un solo lugar
+(la planilla y el comando `emitir_disposiciones`, que ahora la usa), así una misma
+licencia no puede recibir dos números.
+
+**Faltas sin formulario.** Arriba de los cuadros, un recuadro rojo lista las
+inasistencias del mes que todavía esperan el papel, una fila por docente y día,
+con dos botones: *Recibir formulario* (abre Recepción de formularios para pasar la
+I a P, LIC o LT) y *Cargar licencia* (abre Nueva licencia con el docente y la fecha
+cargados). Al guardar, se vuelve a la planilla. Una inasistencia sin formulario no
+admite artículo (RF-09: primero el papel, después la imputación).
+
+**Disposiciones del mes.** Debajo de la lista a emitir se ven las disposiciones ya
+emitidas, agrupadas por número con todas sus materias (RN-11).
 
 ## Módulo 4 · Consultas, alertas, usuarios y auditoría (`reportes/`)
 

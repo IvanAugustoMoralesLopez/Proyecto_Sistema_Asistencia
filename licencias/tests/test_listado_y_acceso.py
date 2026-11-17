@@ -135,13 +135,16 @@ class EncabezadosPantallasTests(TestCase):
             Permission.objects.get(codename='change_licenciaotorgada'),
         )
 
-    def test_el_generador_muestra_la_ruta_y_el_titulo(self):
+    def test_el_generador_redirige_a_la_planilla_mensual(self):
         self.client.force_login(self.operador)
         respuesta = self.client.get(
             reverse('licencias:generador_disposiciones'), {'anio': 2026, 'mes': 3},
         )
-        self.assertContains(respuesta, 'Administración / Licencias / Generador de disposiciones')
-        self.assertContains(respuesta, '<h1 class="h3 mb-1">Generador de disposiciones</h1>', html=True)
+        self.assertRedirects(
+            respuesta,
+            reverse('licencias:planilla_mensual', args=[2026, 3]),
+            fetch_redirect_response=False,
+        )
 
     def test_resoluciones_muestra_la_ruta_y_el_titulo(self):
         self.client.force_login(self.operador)

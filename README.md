@@ -8,7 +8,7 @@ Pantallas principales:
 
 1. Personal, legajos y designaciones.
 2. Asistencia diaria y calendario escolar.
-3. Licencias, reporte mensual y disposiciones.
+3. Licencias, planilla mensual IL-01 / IL-02 y disposiciones.
 4. Consultas, alertas y bitácora de auditoría.
 
 ## Requisitos
