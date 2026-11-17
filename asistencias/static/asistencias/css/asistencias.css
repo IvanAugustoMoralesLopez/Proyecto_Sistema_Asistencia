@@ -313,3 +313,32 @@
     .asis-accion-destacada { flex-direction: column; align-items: stretch; }
     .asis-accion-destacada .btn { width: 100%; }
 }
+
+/* ───────── Pie de listas paginadas: tamaño de página + paginación ───────── */
+.asis-paginado {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem 1.25rem;
+    margin-top: 1rem;
+    font-size: .85rem;
+    color: #5d6b82;
+}
+
+.asis-paginado__tamano {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem .75rem;
+}
+
+.asis-paginado__info b { color: #17253b; }
+
+.asis-paginado .btn-group .btn { min-width: 2.6rem; }
+
+.asis-paginado .pagination { margin-bottom: 0; flex-wrap: wrap; }
+
+@media (max-width: 860px) {
+    .asis-paginado { flex-direction: column; align-items: flex-start; }
+}

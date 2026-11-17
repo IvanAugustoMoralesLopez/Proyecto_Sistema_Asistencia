@@ -30,6 +30,7 @@ from ..services import (
     validar_multiples,
 )
 from ._comun import (
+    TAMANOS_PAGINA,
     _aplicar_filtros,
     _asegurar_sesion_edicion,
     contexto_sesion,
@@ -341,6 +342,10 @@ def historial(request):
         .order_by("-fecha", "designacion__persona__apellido_nombre")
     )
 
+    # Si se mira un solo día (por ejemplo, al venir desde «Revisar este día»),
+    # el botón «Asistencia del día» vuelve a ese día y no a hoy.
+    fecha_unica = None
+
     if form.is_valid():
         datos = form.cleaned_data
         registros = _aplicar_filtros(registros, datos)
@@ -350,7 +355,18 @@ def historial(request):
                 estado_justificacion=datos["estado_justificacion"]
             )
 
+        if datos.get("desde") and datos.get("desde") == datos.get("hasta"):
+            fecha_unica = datos["desde"]
+
     pagina, querystring = _paginar(request, registros)
+
+    # La página y el tamaño de página viajan en la URL pero no son filtros:
+    # no tienen que marcar los filtros como «activos».
+    hay_filtros = any(
+        valor
+        for clave, valor in request.GET.items()
+        if clave not in ("page", "por_pagina")
+    )
 
     return render(
         request,
@@ -359,6 +375,9 @@ def historial(request):
             "form": form,
             "pagina": pagina,
             "querystring": querystring,
+            "hay_filtros": hay_filtros,
+            "fecha_unica": fecha_unica,
+            "tamanos_pagina": TAMANOS_PAGINA,
         },
     )
 

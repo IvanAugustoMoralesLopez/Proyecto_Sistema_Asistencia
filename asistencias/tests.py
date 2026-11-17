@@ -3524,3 +3524,139 @@ class PantallasEnLenguajeLlanoTests(BasePlanillaTests):
     def test_el_boton_avisa_que_esta_guardando(self):
         respuesta = self.planilla()
         self.assertContains(respuesta, "Guardando la asistencia")
+
+
+class PaginadoYRevisionDelDiaTests(BaseAsistenciaTests):
+    """Tamaño de página del historial y botón «Revisar este día»."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.usuario)
+
+    def crear_registros(self, cantidad):
+        for dia in range(cantidad):
+            RegistroAsistencia.objects.create(
+                designacion=self.designacion,
+                fecha=date(2026, 3, 1) + timedelta(days=dia),
+                marca=self.marca_p,
+            )
+
+    def historial(self, **parametros):
+        return self.client.get(reverse("asistencia:historial"), parametros)
+
+    # ── Historial: cuántos mostrar por página ──
+    def test_por_defecto_muestra_25_por_pagina(self):
+        self.crear_registros(30)
+        pagina = self.historial().context["pagina"]
+        self.assertEqual(pagina.paginator.per_page, 25)
+        self.assertEqual(len(pagina.object_list), 25)
+
+    def test_muestra_la_cantidad_elegida_y_pagina_el_resto(self):
+        self.crear_registros(30)
+        for tamano, paginas in ((5, 6), (10, 3), (25, 2), (50, 1), (100, 1)):
+            respuesta = self.historial(por_pagina=str(tamano))
+            pagina = respuesta.context["pagina"]
+            self.assertEqual(pagina.paginator.per_page, tamano)
+            self.assertEqual(len(pagina.object_list), min(tamano, 30))
+            self.assertEqual(pagina.paginator.num_pages, paginas)
+
+    def test_las_paginas_conservan_el_tamano_elegido(self):
+        self.crear_registros(30)
+        respuesta = self.historial(por_pagina="5")
+        self.assertContains(respuesta, "?por_pagina=5&page=2")
+        self.assertContains(respuesta, "Mostrando <b>1–5</b>")
+
+    def test_un_tamano_inventado_vuelve_al_de_por_defecto(self):
+        self.crear_registros(30)
+        for valor in ("0", "-5", "7", "abc", "100000", ""):
+            pagina = self.historial(por_pagina=valor).context["pagina"]
+            self.assertEqual(pagina.paginator.per_page, 25, valor)
+
+    def test_cambiar_el_tamano_conserva_los_filtros_y_vuelve_a_la_pagina_1(self):
+        self.crear_registros(30)
+        respuesta = self.historial(dni="30123456", page="2")
+        self.assertContains(
+            respuesta, 'href="?dni=30123456&amp;por_pagina=50"'
+        )
+
+    def test_el_tamano_de_pagina_no_cuenta_como_filtro_activo(self):
+        self.crear_registros(3)
+        respuesta = self.historial(por_pagina="10")
+        self.assertFalse(respuesta.context["hay_filtros"])
+        self.assertNotContains(respuesta, "(activos)")
+        self.assertContains(respuesta, "en total")
+
+        respuesta = self.historial(por_pagina="10", dni="30123456")
+        self.assertTrue(respuesta.context["hay_filtros"])
+
+    def test_buscar_y_limpiar_conservan_el_tamano_elegido(self):
+        self.crear_registros(3)
+        respuesta = self.historial(por_pagina="50")
+        self.assertContains(
+            respuesta, '<input type="hidden" name="por_pagina" value="50">'
+        )
+        self.assertContains(
+            respuesta, f'{reverse("asistencia:historial")}?por_pagina=50'
+        )
+
+    # ── Registro diario: «Revisar este día» ──
+    def dia(self):
+        return self.client.get(
+            reverse("asistencia:registro_diario"), {"fecha": LUNES.isoformat()}
+        )
+
+    def test_revisar_este_dia_lleva_al_historial_con_lo_que_falta_validar(self):
+        pendiente = self.guardar()
+        respuesta = self.dia()
+        self.assertContains(respuesta, "Revisar este día")
+        self.assertContains(respuesta, "1</b> sin revisar por Secretaría")
+        self.assertContains(
+            respuesta,
+            f'{reverse("asistencia:historial")}?desde=2026-09-14'
+            "&amp;hasta=2026-09-14&amp;estado_registro=BORRADOR"
+            "&amp;por_pagina=100",
+        )
+
+        # Otro día y otro ya validado del mismo día no aparecen.
+        otra_persona = Persona.objects.create(
+            dni="27000111", apellido_nombre="GOMEZ, ANA", sexo="F"
+        )
+        otra = Designacion.objects.create(
+            persona=otra_persona, cargo=self.cargo, desde=date(2026, 3, 1)
+        )
+        validado = self.guardar(designacion=otra)
+        validar_asistencia(
+            usuario=self.usuario, token=self.token, registro_id=validado.pk
+        )
+        self.guardar(fecha=MARTES)
+
+        respuesta = self.historial(
+            desde=LUNES.isoformat(),
+            hasta=LUNES.isoformat(),
+            estado_registro="BORRADOR",
+            por_pagina="100",
+        )
+        self.assertEqual(
+            [r.pk for r in respuesta.context["pagina"]], [pendiente.pk]
+        )
+        self.assertEqual(respuesta.context["pagina"].paginator.per_page, 100)
+        # «Asistencia del día» vuelve al día revisado, no a hoy.
+        self.assertContains(
+            respuesta,
+            f'{reverse("asistencia:registro_diario")}?fecha=2026-09-14',
+        )
+
+    def test_revisar_este_dia_no_aparece_si_ya_esta_todo_revisado(self):
+        registro = self.guardar()
+        validar_asistencia(
+            usuario=self.usuario, token=self.token, registro_id=registro.pk
+        )
+        respuesta = self.dia()
+        self.assertNotContains(respuesta, "btn-revisar-dia")
+        self.assertContains(respuesta, "todo revisado por Secretaría")
+
+    def test_revisar_este_dia_no_aparece_a_quien_no_puede_validar(self):
+        self.guardar()
+        self.client.force_login(crear_usuario("bedel", PERMISOS_CARGA))
+        respuesta = self.dia()
+        self.assertNotContains(respuesta, "btn-revisar-dia")
