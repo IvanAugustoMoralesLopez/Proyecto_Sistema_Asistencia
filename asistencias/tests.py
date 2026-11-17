@@ -3820,7 +3820,7 @@ class PaginadoYRevisionDelDiaTests(BaseAsistenciaTests):
             RegistroAsistencia.objects.create(
                 designacion=self.designacion,
                 fecha=date(2026, 3, 1) + timedelta(days=dia),
-                marca=self.marca_p,
+                marca=self.marca_presente,
             )
 
     def historial(self, **parametros):
