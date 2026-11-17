@@ -10,19 +10,12 @@
  * la tabla como protagonista.
  */
 
-/* ───────── Legibilidad (se carga asistencia todos los dias) ───────── */
-.app-content {
-    font-size: 1rem;
-    line-height: 1.55;
-}
+/* ───────── Legibilidad ───────── */
 
 .app-content .text-secondary {
     color: #5d6b82 !important;
 }
 
-.sidebar__titulo { font-size: 0.9rem !important; letter-spacing: .02em; }
-.sidebar__link   { font-size: 0.95rem !important; padding-top: .55rem; padding-bottom: .55rem; }
-.sidebar__link i { font-size: 1.2rem !important; }
 
 .app-content a:focus-visible,
 .app-content button:focus-visible,
@@ -288,8 +281,6 @@
 
 .asis-filtros > summary:hover { text-decoration: underline; }
 
-/* El boton de la barra inferior no se pega al borde en pantallas altas. */
-.app-content { padding-bottom: .5rem; }
 
 /* ───────── Panel de accion de la pantalla diaria ───────── */
 .asis-accion-destacada {
