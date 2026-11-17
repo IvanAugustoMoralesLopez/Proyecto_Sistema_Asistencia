@@ -7,6 +7,7 @@ app_name = "reportes"
 urlpatterns = [
     path("consultas/", views.consultas, name="consultas"),
     path("alertas/", views.alertas, name="alertas"),
+    path("alertas/inasistencias/", views.alertas_inasistencias, name="alertas_inasistencias"),
     path("alertas/designaciones/", views.alertas_designaciones, name="alertas_designaciones"),
     path("alertas/licencias-por-vencer/", views.alertas_licencias_vencimiento, name="alertas_licencias_vencimiento"),
     path("bitacora/", views.bitacora, name="bitacora"),

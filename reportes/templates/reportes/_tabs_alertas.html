@@ -1,5 +1,10 @@
 <ul class="nav nav-tabs mb-4">
     <li class="nav-item">
+        <a class="nav-link {% if tab_alertas == 'inasistencias' %}active{% endif %}" href="{% url 'reportes:alertas_inasistencias' %}">
+            <i class="bi bi-person-exclamation"></i> Inasistencias y permisos
+        </a>
+    </li>
+    <li class="nav-item">
         <a class="nav-link {% if tab_alertas == 'licencias' %}active{% endif %}" href="{% url 'reportes:alertas' %}">
             <i class="bi bi-calendar-x"></i> Topes de licencias
         </a>

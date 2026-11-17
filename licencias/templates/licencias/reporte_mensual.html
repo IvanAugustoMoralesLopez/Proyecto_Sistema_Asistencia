@@ -15,6 +15,13 @@
     </a>
 </div>
 
+<div class="alert alert-info">
+    Este reporte lista las licencias cargadas por designación. Los cuadros oficiales
+    del mes, generados desde la asistencia diaria con un renglón por cada materia,
+    están en la
+    <a href="{% url 'licencias:planilla_mensual' anio mes %}">planilla mensual IL-01 / IL-02</a>.
+</div>
+
 {% if desglose %}
     {% for grupo in grupos %}
         {% if grupo.filas or grupo.planilla != "SIN CLASIFICAR" %}
@@ -33,6 +40,10 @@
                                         <th>Espacio curricular</th>
                                         <th>Cargo</th>
                                         <th>Licencia</th>
+                                        <th>Cód. lic.</th>
+                                        <th>Disposición</th>
+                                        <th>Oficina</th>
+                                        <th>Año</th>
                                         <th>Desde</th>
                                         <th>Hasta</th>
                                         <th class="text-end">Días</th>
@@ -50,8 +61,12 @@
                                             <td>{{ fila.espacio_curricular|default:"-" }}</td>
                                             <td>{{ fila.cargo|default:"-" }}</td>
                                             <td>{{ fila.licencia_solicitada }}</td>
+                                            <td>{{ fila.cod_licencia }}</td>
+                                            <td>{{ fila.disposicion|default:"—" }}</td>
+                                            <td>{{ fila.oficina }}</td>
+                                            <td>{{ fila.anio }}</td>
                                             <td>{{ fila.fecha_inicio|date:"d/m/Y" }}</td>
-                                            <td>{{ fila.fecha_fin|date:"d/m/Y" }}</td>
+                                            <td>{{ fila.fecha_fin|date:"d/m/Y"|default:"Sin fecha de fin" }}</td>
                                             <td class="text-end">{{ fila.dias_totales }}</td>
                                             <td class="text-end">{{ fila.horas_descontadas }}</td>
                                         </tr>
@@ -60,7 +75,7 @@
 
                                 <tfoot>
                                     <tr class="table-light fw-semibold">
-                                        <td colspan="7" class="text-end">Subtotal de horas afectadas</td>
+                                        <td colspan="11" class="text-end">Subtotal de horas afectadas</td>
                                         <td class="text-end">{{ grupo.total_horas }}</td>
                                     </tr>
                                 </tfoot>

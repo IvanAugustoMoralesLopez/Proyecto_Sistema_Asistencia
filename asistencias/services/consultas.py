@@ -5,15 +5,15 @@ el reporte mensual de licencias). No modifican nada.
 
 from ..models import RegistroAsistencia
 
-# Marcas que son una inasistencia propiamente dicha. LIC y LT tambien computan
-# inasistencia, pero esos dias ya se cuentan desde las licencias: incluirlos
-# aca los contaria dos veces.
-CODIGOS_INASISTENCIA = ("I", "PR")
+# Inasistencias (I) y permisos (P) del registro diario (catalogo v2.0, RF-08).
+# LIC y LT tambien computan inasistencia, pero esos dias ya se cuentan desde
+# las licencias: incluirlos aca los contaria dos veces.
+CODIGOS_INASISTENCIA = ("I", "P")
 
 
 def inasistencias_del_periodo(desde, hasta):
     """
-    Registros de inasistencia (marcas I y PR) con fecha entre `desde` y
+    Registros de inasistencia y permiso (marcas I y P) con fecha entre `desde` y
     `hasta`, ambas inclusive, ordenados por fecha. Trae ya cargados la marca,
     la persona, el cargo y el espacio curricular para armar el reporte sin
     consultas extra.

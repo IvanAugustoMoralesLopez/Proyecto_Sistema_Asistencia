@@ -102,6 +102,7 @@ def recepcionar_formulario_view(request, pk):
                     nro_formulario=datos["nro_formulario"],
                     fecha_recepcion=datos["fecha_recepcion"],
                     motivo=datos["motivo"],
+                    nueva_marca=datos.get("nueva_marca", ""),
                 )
             except (ValidationError, PermissionDenied) as exc:
                 messages.error(request, _mensaje_error(exc))

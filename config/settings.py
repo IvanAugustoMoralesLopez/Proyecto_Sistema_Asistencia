@@ -26,12 +26,22 @@ load_dotenv(BASE_DIR / '.env') #esto sirve para cargar las variables de entorno 
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-qtq)jw4!!ehyivkn=!33ye5z69#a*!1!nw55c006n--tfr90t+'
+# Se toma del .env; el valor de respaldo es solo para desarrollo local.
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY',
+    'django-insecure-qtq)jw4!!ehyivkn=!33ye5z69#a*!1!nw55c006n--tfr90t+',
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# En desarrollo queda activado (sirve los archivos estáticos con runserver).
+# Para la puesta en marcha: DJANGO_DEBUG=0 y DJANGO_ALLOWED_HOSTS en el .env.
+DEBUG = os.environ.get('DJANGO_DEBUG', '1').strip().lower() in ('1', 'true', 'si', 'sí')
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
+    if host.strip()
+]
 
 
 # Application definition

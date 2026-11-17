@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Planilla mensual IL-01 / IL-02{% endblock %}
+{% block seccion %}informe-licencias{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+    <div>
+        <p class="ruta mb-1">Administración / Licencias / Planilla mensual</p>
+        <h1 class="h3 mb-1">Planilla mensual · {{ nombre_mes }} de {{ anio }}</h1>
+        <p class="text-secondary mb-0">
+            Se genera desde la asistencia diaria: un renglón por cada materia o cargo
+            que el docente tenía en los días de la novedad.
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-primary btn-sm"
+           href="{% url 'licencias:planilla_mensual' mes_anterior.anio mes_anterior.mes %}">&laquo; Mes anterior</a>
+        <a class="btn btn-outline-primary btn-sm"
+           href="{% url 'licencias:planilla_mensual' mes_siguiente.anio mes_siguiente.mes %}">Mes siguiente &raquo;</a>
+    </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mb-4">
+    {% if puede_modificar %}
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="procesar">
+            <button type="submit" class="btn btn-primary" id="btn-procesar-mes">
+                {% if hay_renglones %}Volver a procesar el mes{% else %}Procesar el mes{% endif %}
+            </button>
+        </form>
+    {% endif %}
+    {% if hay_renglones %}
+        <a class="btn btn-outline-secondary"
+           href="{% url 'licencias:planilla_mensual_csv' anio mes %}">Exportar CSV</a>
+    {% endif %}
+</div>
+
+{% if not hay_renglones %}
+    <div class="alert alert-info">
+        Todavía no hay renglones para este mes. Tocá <strong>Procesar el mes</strong>
+        para generarlos a partir de las inasistencias, permisos y licencias cargados
+        en la asistencia diaria.
+    </div>
+{% else %}
+<form method="post" id="form-planilla">
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="guardar">
+
+    {% for cuadro in cuadros %}
+        {% if cuadro.filas or cuadro.planilla != "PENDIENTE" %}
+        <div class="card shadow-sm border-0 mb-4" data-cuadro="{{ cuadro.planilla }}">
+            <div class="card-header {% if cuadro.planilla == 'PENDIENTE' %}bg-warning{% else %}bg-dark text-white{% endif %}">
+                <h2 class="h5 mb-0">{{ cuadro.titulo }}</h2>
+            </div>
+            <div class="card-body">
+                {% if cuadro.filas %}
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Disp. N°</th>
+                                <th>Docente</th>
+                                <th>Materia / cargo</th>
+                                <th>Sit. rev.</th>
+                                <th>Marca</th>
+                                <th style="min-width: 15rem;">Artículo</th>
+                                <th>Cód. lic.</th>
+                                <th>Desde</th>
+                                <th>Hasta</th>
+                                <th class="text-end">Días</th>
+                                <th class="text-end">Horas</th>
+                                <th>Oficina</th>
+                                <th>Año</th>
+                                <th>Resolución (M.E.C.C. y T.)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in cuadro.filas %}
+                            <tr data-bloque="{{ r.designacion.persona_id }}-{{ r.desde|date:'Ymd' }}-{{ r.hasta|date:'Ymd' }}"
+                                class="{% if r.desactualizado %}table-warning{% endif %}">
+                                <td class="text-nowrap">
+                                    {% if r.disp_numero %}{{ r.disp_numero }}/{{ r.disp_anio }}{% else %}<span class="text-secondary">—</span>{% endif %}
+                                    {% if r.desactualizado %}<div class="small text-danger">Revisar: cambió la diaria</div>{% endif %}
+                                </td>
+                                <td>
+                                    {{ r.designacion.persona.apellido_nombre }}
+                                    <br><small class="text-secondary">DNI {{ r.designacion.persona.dni }}</small>
+                                </td>
+                                <td>
+                                    {% if r.designacion.espacio_curricular %}{{ r.designacion.espacio_curricular.nombre }}{% else %}{{ r.designacion.cargo.descripcion }}{% endif %}
+                                    {% if r.designacion.espacio_curricular %}<br><small class="text-secondary">{{ r.designacion.espacio_curricular.carrera.nombre }}</small>{% endif %}
+                                </td>
+                                <td>{{ r.designacion.situacion_revista|default:"—" }}</td>
+                                <td>{{ r.marca }}</td>
+                                <td>
+                                    {# RF-15: selector de artículos; al elegir se autocompleta el código. #}
+                                    <select class="form-select form-select-sm js-articulo"
+                                            name="articulo-{{ r.pk }}"
+                                            aria-label="Artículo de {{ r.designacion.persona.apellido_nombre }}"
+                                            {% if not puede_modificar %}disabled{% endif %}>
+                                        <option value="" data-cod="" data-articulo="">— elegí el artículo —</option>
+                                        {% for a in r.articulos %}
+                                            <option value="{{ a.pk }}" data-cod="{{ a.cod_licencia }}" data-articulo="{{ a.articulo }}"
+                                                    {% if a.pk == r.articulo_id %}selected{% endif %}>
+                                                {{ a.articulo }} - {{ a.tipo_licencia }}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td><output class="fw-semibold js-cod">{{ r.cod_licencia|default:"—" }}</output></td>
+                                <td class="text-nowrap">{{ r.desde|date:"d/m/Y" }}</td>
+                                <td class="text-nowrap">{{ r.hasta|date:"d/m/Y" }}</td>
+                                <td class="text-end">{{ r.dias }}</td>
+                                <td class="text-end">{{ r.horas|floatformat:"-2" }}</td>
+                                <td>
+                                    <input class="form-control form-control-sm" style="width: 5rem;"
+                                           name="oficina-{{ r.pk }}" value="{{ r.oficina }}" maxlength="10"
+                                           aria-label="Oficina" {% if not puede_modificar %}disabled{% endif %}>
+                                </td>
+                                <td>
+                                    <input class="form-control form-control-sm" style="width: 5rem;" type="number"
+                                           name="anio-{{ r.pk }}" value="{{ r.anio_planilla }}" min="2000" max="2100"
+                                           aria-label="Año" {% if not puede_modificar %}disabled{% endif %}>
+                                </td>
+                                <td>
+                                    <input class="form-control form-control-sm"
+                                           name="resolucion-{{ r.pk }}" value="{{ r.resolucion }}" maxlength="100"
+                                           placeholder="Si corresponde"
+                                           aria-label="Resolución" {% if not puede_modificar %}disabled{% endif %}>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-light fw-semibold">
+                                <td colspan="10" class="text-end">Subtotal de horas afectadas</td>
+                                <td class="text-end">{{ cuadro.total_horas|floatformat:"-2" }}</td>
+                                <td colspan="3"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                {% else %}
+                    <div class="alert alert-info mb-0">No hay renglones de este cuadro en el mes.</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    {% endfor %}
+
+    {% if puede_modificar %}
+        <button type="submit" class="btn btn-primary mb-4">Guardar artículos, oficina, año y resoluciones</button>
+    {% endif %}
+</form>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Disposiciones internas a emitir</h2>
+    </div>
+    <div class="card-body">
+        <p class="text-secondary">
+            Una sola disposición por docente y período, numeradas en forma correlativa
+            y en orden alfabético por apellido.
+        </p>
+        {% if por_emitir %}
+            <ul class="mb-3">
+                {% for numero, renglones in por_emitir %}
+                    <li>
+                        <strong>N° {{ numero }}/{{ anio }}</strong> —
+                        {{ renglones.0.designacion.persona.apellido_nombre }},
+                        {{ renglones.0.desde|date:"d/m/Y" }} al {{ renglones.0.hasta|date:"d/m/Y" }}
+                        ({{ renglones|length }} materia{{ renglones|length|pluralize }})
+                    </li>
+                {% endfor %}
+            </ul>
+            {% if puede_modificar %}
+            <form method="post"
+                  onsubmit="return confirm('Se van a emitir {{ por_emitir|length }} disposiciones. ¿Confirma?');">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="emitir">
+                <button type="submit" class="btn btn-primary">Emitir disposiciones</button>
+            </form>
+            {% endif %}
+        {% else %}
+            <p class="text-muted mb-0">No hay disposiciones pendientes de emitir en este mes.</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+(function () {
+    /* RF-15: al seleccionar el ARTÍCULO se autocompleta el COD.LIC. Si otras
+       materias del mismo período todavía no tienen artículo, toman el mismo. */
+    var selects = document.querySelectorAll("select.js-articulo");
+
+    function mostrarCodigo(select) {
+        var opcion = select.options[select.selectedIndex];
+        var salida = select.closest("tr").querySelector(".js-cod");
+        if (salida) { salida.textContent = (opcion && opcion.dataset.cod) || "—"; }
+    }
+
+    selects.forEach(function (select) {
+        select.addEventListener("change", function () {
+            mostrarCodigo(select);
+            var opcion = select.options[select.selectedIndex];
+            var bloque = select.closest("tr").dataset.bloque;
+            if (!opcion || !opcion.dataset.articulo) { return; }
+
+            selects.forEach(function (otro) {
+                if (otro === select || otro.value) { return; }
+                if (otro.closest("tr").dataset.bloque !== bloque) { return; }
+                for (var i = 0; i < otro.options.length; i += 1) {
+                    if (otro.options[i].dataset.articulo === opcion.dataset.articulo) {
+                        otro.selectedIndex = i;
+                        mostrarCodigo(otro);
+                        break;
+                    }
+                }
+            });
+        });
+    });
+})();
+</script>
+{% endblock %}

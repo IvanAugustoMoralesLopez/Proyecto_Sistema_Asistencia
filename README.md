@@ -71,7 +71,14 @@ DB_USER=asistencia
 DB_PASSWORD=la_clave_que_elegiste
 DB_HOST=127.0.0.1
 DB_PORT=3307
+
+# Opcionales
+DJANGO_DEBUG=1
+DJANGO_SECRET_KEY=
+DJANGO_ALLOWED_HOSTS=
 ```
+
+`DJANGO_DEBUG=1` es para desarrollo. Para la puesta en marcha poné `DJANGO_DEBUG=0`, una `DJANGO_SECRET_KEY` propia y el nombre del servidor en `DJANGO_ALLOWED_HOSTS`.
 
 El puerto es **3307**, el mismo que `settings.py` usa por defecto. Si tu MariaDB quedó en otro puerto (por ejemplo 3306), poné el que mostró `SHOW VARIABLES LIKE 'port'`.
 
@@ -84,7 +91,7 @@ python manage.py migrate
 python manage.py sincronizar_roles
 ```
 
-`migrate` crea las tablas, las marcas de asistencia (P, I, LIC, LT, PR) y los tres roles. `sincronizar_roles` deja los permisos de cada rol al día.
+`migrate` crea las tablas, las marcas de asistencia y los tres roles. Las marcas siguen el Documento de Requerimientos v2.0: **P = Permiso, I = Inasistencia, LIC = Licencia médica o especial, LT = Largo tratamiento, PR = Presente**. Si tu base ya tenía registros con el significado anterior (P = Presente, PR = Presente retirado), la migración `asistencias 0011` los convierte solos: los P pasan a PR y los PR pasan a I con una nota en las observaciones. También crea el catálogo de tipos de instrumento legal (Resolución y Disposición). `sincronizar_roles` deja los permisos de cada rol al día.
 
 ### 6. Cargar datos de prueba (opcional)
 
@@ -92,7 +99,16 @@ El archivo `datos_prueba.sql` carga datos ficticios: 20 docentes, 22 designacion
 
 Ejecutalo completo como script SQL sobre la base `asistencia` (por ejemplo con "Execute SQL File" en Navicat o "Execute SQL Script" en DBeaver, no una sentencia suelta). Está pensado para poder volver a ejecutarse sin duplicar datos. El bloque de limpieza al final del archivo sirve para borrarlos.
 
-### 7. Levantar el servidor
+### 7. Uso mensual (cuadros IL-01 / IL-02)
+
+1. Todos los días se carga la asistencia en la **planilla rápida**, una sola vez por docente: el sistema reparte la marca entre sus materias con las horas de cada horario.
+2. Al recibir el formulario en papel, en **Recepción de formularios** se cambia la I por LIC, LT o P.
+3. A fin de mes, en **Planilla mensual IL-01 / IL-02** se toca *Procesar el mes*: se genera un renglón por cada materia afectada, con Desde/Hasta del período y las horas de su horario.
+4. Se elige el artículo de cada renglón (el código de licencia se completa solo y el renglón pasa a IL-01 o IL-02), se revisan Oficina (1452), Año y Resolución, y se tocan *Guardar* y *Emitir disposiciones*.
+
+El detalle de qué cambió para cumplir cada requerimiento está en `CAMBIOS_REQUERIMIENTOS_v2.md`.
+
+### 8. Levantar el servidor
 
 ```
 python manage.py runserver
@@ -126,7 +142,7 @@ Tienen que pasar todos antes de integrar cambios a `main`.
 config/       configuración de Django (settings, urls)
 personal/     legajos, designaciones, catálogos, importación CSV
 asistencias/  registro diario, planilla rápida, cierres, calendario escolar
-licencias/    licencias otorgadas, reporte mensual, disposiciones
+licencias/    licencias otorgadas, planilla mensual IL-01/IL-02, disposiciones
 reportes/     consultas, alertas, bitácora, usuarios, parámetros, roles
 templates/    base.html y páginas compartidas (403, 404, 500)
 static/       estilos propios (static/css)

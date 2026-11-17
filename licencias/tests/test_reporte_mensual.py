@@ -175,7 +175,7 @@ class ReporteMensualInasistenciasTests(TestCase):
             )
 
         registrar(date(2026, 3, 10), 'I', '2')
-        registrar(date(2026, 3, 11), 'PR', '1')
+        registrar(date(2026, 3, 11), 'P', '1')  # permiso
         registrar(date(2026, 3, 12), 'LIC', '2')  # ya cuenta como licencia
         registrar(date(2026, 4, 1), 'I', '2')  # otro mes
 

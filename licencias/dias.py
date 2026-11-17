@@ -30,23 +30,25 @@ def obtener_feriados(desde: date, hasta: date) -> set:
     )
 
 
-def es_dia_habil(fecha: date, feriados) -> bool:
-    """Lunes a viernes y que no sea feriado/asueto."""
-    return fecha.weekday() < 5 and fecha not in feriados
+def es_dia_habil(fecha: date, feriados=None) -> bool:
+    """
+    Lunes a viernes.
+
+    RF-10: los feriados y asuetos del calendario son solo visuales; no se
+    descuentan de ningún cómputo. `feriados` se conserva en la firma para no
+    romper las llamadas existentes, pero ya no se usa.
+    """
+    return fecha.weekday() < 5
 
 
 def listar_dias_habiles(desde: date, hasta: date, feriados=None) -> list:
     """
     Lista de fechas hábiles en [desde, hasta].
 
-    Si `feriados` es None se consultan a la base (una sola query). Pasalos
-    ya calculados cuando proceses muchos rangos seguidos.
-    Sirve también para la propagación LIC/LT de RN-07.
+    Lunes a viernes; los feriados no se descuentan (RF-10).
     """
     if hasta < desde:
         return []
-    if feriados is None:
-        feriados = obtener_feriados(desde, hasta)
     cantidad = (hasta - desde).days + 1
     return [
         dia

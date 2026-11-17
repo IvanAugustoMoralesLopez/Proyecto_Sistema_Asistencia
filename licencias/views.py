@@ -1,12 +1,14 @@
+import csv
 import os
 import calendar
 from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
@@ -21,9 +23,17 @@ from asistencias.services import (
 )
 
 from .clasificacion import CategoriaSinPlanillaError, PLANILLA_IL01, PLANILLA_IL02
-from .dias import fecha_de_hoy, mes_vecino, obtener_feriados
+from .dias import fecha_de_hoy, mes_vecino
 from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm, ResolucionAdjuntaForm
 from .models import LicenciaArticulo, LicenciaOtorgada, ResolucionAdjunta
+from .planilla_mensual import (
+    articulos_para_renglon,
+    cuadros_del_mes,
+    emitir_disposiciones_planilla,
+    imputar_renglones,
+    previsualizar_disposiciones_planilla,
+    procesar_mes,
+)
 from .services import (
     clasificar_planilla_licencia,
     emitir_disposiciones_mes,
@@ -57,9 +67,6 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
     primer_dia = date(anio, mes, 1)
     ultimo_dia = date(anio, mes, calendar.monthrange(anio, mes)[1])
 
-    # RF-10: los feriados/asuetos no generan horas afectadas. Una sola consulta.
-    feriados = obtener_feriados(primer_dia, ultimo_dia)
-
     # RF-12: licencias que intersecan con este mes
     licencias = LicenciaOtorgada.objects.filter(
         desde__lte=ultimo_dia
@@ -74,6 +81,8 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
 
     desglose = []
     cache_horarios = {}
+    from reportes.models import ParametroSistema
+    oficina_por_defecto = ParametroSistema.obtener().codigo_oficina
 
     for lic in licencias:
         # RF-15: clasificación IL-01 / IL-02 (estricta, RN-04 / RN-05)
@@ -92,13 +101,10 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
         horas_afectadas = 0
         dias_totales_mes = (fin_mes - inicio_mes).days + 1
 
-        # RF-13: se recorren los días de la licencia y se suman las horas afectadas.
-        # No se usa "solo días hábiles" porque pueden existir horarios en sábado;
-        # lo único que se omite son los feriados (RF-10).
+        # RF-13: se recorren los días de la licencia y se suman las horas del
+        # horario semanal. RF-10: los feriados son solo visuales, no descuentan.
         for i in range(dias_totales_mes):
             dia_evaluado = inicio_mes + timedelta(days=i)
-            if dia_evaluado in feriados:
-                continue
             horas_afectadas += horas_por_dia.get(MAPEO_DIAS[dia_evaluado.weekday()], 0)
 
         desglose.append({
@@ -115,10 +121,18 @@ def reporte_mensual_licencias(request, anio: int, mes: int):
                 else None
             ),
             'licencia_solicitada': f"{lic.articulo.articulo} - {lic.articulo.tipo_licencia}",
+            # RF-15: código de licencia del artículo imputado.
+            'cod_licencia': lic.articulo.cod_licencia,
+            # RN-07 / RN-08: oficina y año precargados.
+            'oficina': lic.disp_oficina or oficina_por_defecto,
+            'anio': lic.disp_anio or anio,
+            'disposicion': lic.disp_numero or '',
             'planilla': planilla_destino,
             'requiere_revision': requiere_revision,
-            'fecha_inicio': inicio_mes,
-            'fecha_fin': fin_mes,
+            # RF-14: Desde y Hasta son el inicio y el fin del período completo,
+            # aunque cruce de mes. Días y horas son los de este mes.
+            'fecha_inicio': lic.desde,
+            'fecha_fin': lic.hasta,
             'dias_totales': dias_totales_mes,
             'horas_descontadas': horas_afectadas,
         })
@@ -455,3 +469,170 @@ def descargar_resolucion(request, resolucion_id):
         filename=os.path.basename(resolucion.archivo.name),
         content_type="application/pdf",
     )
+
+
+# ───────────── Planilla mensual IL-01 / IL-02 desde la diaria ─────────────
+
+def _periodo_valido(anio, mes):
+    if not 1 <= mes <= 12:
+        raise Http404("Mes inválido")
+    if not 2000 <= anio <= 2100:
+        raise Http404("Año fuera de rango")
+
+
+@login_required
+@permission_required("licencias.view_licenciaotorgada", raise_exception=True)
+@require_http_methods(["GET", "POST"])
+def planilla_mensual(request, anio: int, mes: int):
+    """
+    Interfaz mensual (RF-12 a RF-16). Tres acciones, todas por POST:
+
+    - procesar: genera o actualiza los renglones desde la asistencia diaria.
+    - guardar:  imputa artículos (autocompleta código y cuadro), oficina,
+                año y resolución.
+    - emitir:   numera las disposiciones internas del mes.
+    """
+    _periodo_valido(anio, mes)
+    url = reverse("licencias:planilla_mensual", args=[anio, mes])
+
+    if request.method == "POST":
+        if not request.user.has_perm("licencias.change_licenciaotorgada"):
+            messages.error(request, "No tenés permiso para modificar la planilla mensual.")
+            return redirect(url)
+
+        accion = request.POST.get("accion")
+
+        if accion == "procesar":
+            resumen = procesar_mes(anio, mes, usuario=request.user)
+            _registrar_en_bitacora(
+                request.user, "Procesamiento de la planilla mensual",
+                {"anio": anio, "mes": mes, **resumen},
+            )
+            messages.success(
+                request,
+                f"Mes procesado: {resumen['creados']} renglones nuevos, "
+                f"{resumen['actualizados']} actualizados y "
+                f"{resumen['eliminados']} eliminados.",
+            )
+            if resumen["desactualizados"]:
+                messages.warning(
+                    request,
+                    f"{resumen['desactualizados']} renglones con disposición emitida "
+                    "ya no coinciden con la asistencia diaria: revisalos a mano.",
+                )
+
+        elif accion == "guardar":
+            datos = {}
+            for clave, valor in request.POST.items():
+                campo, _, pk = clave.rpartition("-")
+                if campo in ("articulo", "resolucion", "oficina", "anio") and pk.isdigit():
+                    datos.setdefault(int(pk), {})[campo] = valor
+            try:
+                cantidad = imputar_renglones(anio, mes, datos, usuario=request.user)
+            except ValidationError as error:
+                messages.error(request, " ".join(error.messages))
+            else:
+                messages.success(request, f"Se guardaron {cantidad} renglones.")
+
+        elif accion == "emitir":
+            emitidas = emitir_disposiciones_planilla(anio, mes, usuario=request.user)
+            if emitidas:
+                _registrar_en_bitacora(
+                    request.user, "Emisión de disposiciones de la planilla mensual",
+                    {"anio": anio, "mes": mes, "disposiciones": [n for n, _ in emitidas]},
+                )
+                messages.success(
+                    request,
+                    f"Se emitieron {len(emitidas)} disposiciones "
+                    f"(N° {emitidas[0][0]} a {emitidas[-1][0]}).",
+                )
+            else:
+                messages.info(request, "No había disposiciones para emitir en este mes.")
+
+        return redirect(url)
+
+    cuadros = cuadros_del_mes(anio, mes)
+    articulos = list(LicenciaArticulo.objects.order_by("articulo", "sit_rev"))
+    for cuadro in cuadros:
+        for renglon in cuadro["filas"]:
+            renglon.articulos = articulos_para_renglon(renglon, articulos)
+
+    anio_anterior, mes_anterior = mes_vecino(anio, mes, -1)
+    anio_siguiente, mes_siguiente = mes_vecino(anio, mes, 1)
+    hay_renglones = any(cuadro["filas"] for cuadro in cuadros)
+
+    return render(request, "licencias/planilla_mensual.html", {
+        "anio": anio,
+        "mes": mes,
+        "nombre_mes": dict(MESES)[mes],
+        "cuadros": cuadros,
+        "hay_renglones": hay_renglones,
+        "por_emitir": previsualizar_disposiciones_planilla(anio, mes),
+        "puede_modificar": request.user.has_perm("licencias.change_licenciaotorgada"),
+        "mes_anterior": {"anio": anio_anterior, "mes": mes_anterior},
+        "mes_siguiente": {"anio": anio_siguiente, "mes": mes_siguiente},
+    })
+
+
+def _registrar_en_bitacora(usuario, motivo, datos):
+    """RF-20: el procesamiento y la emisión quedan en la bitácora única."""
+    # Import local: reportes importa licencias, no al revés.
+    from reportes.auditoria import AccionesReportes, registrar_evento
+    registrar_evento(usuario, AccionesReportes.PLANILLA_MENSUAL, motivo=motivo, despues=datos)
+
+
+ENCABEZADO_PLANILLA = [
+    "Cuadro", "N° disposición", "Año disp.", "Resolución", "Oficina", "Año",
+    "DNI", "Apellido y nombre", "Materia / cargo", "Sit. de revista", "Marca",
+    "Artículo", "Cód. licencia", "Desde", "Hasta", "Días", "Horas",
+]
+
+
+def _texto_seguro(valor):
+    """Evita que una planilla de cálculo interprete el texto como fórmula."""
+    valor = "" if valor is None else str(valor)
+    return "'" + valor if valor.startswith(("=", "+", "-", "@", "\t", "\r")) else valor
+
+
+@login_required
+@permission_required("licencias.view_licenciaotorgada", raise_exception=True)
+def planilla_mensual_csv(request, anio: int, mes: int):
+    """Exportación básica de los cuadros del mes (INC-01: datos básicos)."""
+    _periodo_valido(anio, mes)
+
+    respuesta = HttpResponse(content_type="text/csv; charset=utf-8")
+    respuesta["Content-Disposition"] = (
+        f'attachment; filename="planilla_mensual_{anio}_{mes:02d}.csv"'
+    )
+    respuesta.write("\ufeff")
+    escritor = csv.writer(respuesta, delimiter=";")
+    escritor.writerow(ENCABEZADO_PLANILLA)
+
+    for cuadro in cuadros_del_mes(anio, mes):
+        for r in cuadro["filas"]:
+            designacion = r.designacion
+            materia = (
+                designacion.espacio_curricular.nombre
+                if designacion.espacio_curricular else designacion.cargo.descripcion
+            )
+            escritor.writerow([
+                cuadro["planilla"],
+                r.disp_numero,
+                r.disp_anio or "",
+                _texto_seguro(r.resolucion),
+                _texto_seguro(r.oficina),
+                r.anio_planilla,
+                _texto_seguro(designacion.persona.dni),
+                _texto_seguro(designacion.persona.apellido_nombre),
+                _texto_seguro(materia),
+                designacion.situacion_revista,
+                r.marca,
+                _texto_seguro(r.articulo.articulo if r.articulo else ""),
+                _texto_seguro(r.cod_licencia),
+                r.desde.strftime("%d/%m/%Y"),
+                r.hasta.strftime("%d/%m/%Y"),
+                r.dias,
+                r.horas,
+            ])
+
+    return respuesta

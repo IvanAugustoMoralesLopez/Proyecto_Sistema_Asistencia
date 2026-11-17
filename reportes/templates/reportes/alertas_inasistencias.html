@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Inasistencias y permisos por agente{% endblock %}
+{% block seccion %}reportes-alertas{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Alertas</h1>
+{% include "reportes/_tabs_alertas.html" with tab_alertas="inasistencias" %}
+
+<form method="get" class="card card-body mb-4">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label" for="{{ form.anio.id_for_label }}">{{ form.anio.label }}</label>
+            {{ form.anio }}
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="{{ form.umbral.id_for_label }}">{{ form.umbral.label }}</label>
+            {{ form.umbral }}
+        </div>
+        <div class="col-md-4">
+            <div class="form-check">
+                {{ form.solo_alertas }}
+                <label class="form-check-label" for="{{ form.solo_alertas.id_for_label }}">{{ form.solo_alertas.label }}</label>
+            </div>
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button class="btn btn-primary" type="submit">Ver</button>
+            <a class="btn btn-outline-secondary" href="{% url 'reportes:alertas_inasistencias' %}">Restablecer</a>
+        </div>
+    </div>
+</form>
+
+{% if cant_alertas %}
+    <div class="alert alert-warning" role="alert">
+        <strong>{{ cant_alertas }}</strong> agente{{ cant_alertas|pluralize }} cerca del límite
+        anual de {{ limite }} días o que ya lo agot{{ cant_alertas|pluralize:"ó,aron" }}.
+    </div>
+{% endif %}
+
+<p class="text-muted small">
+    Total acumulado de inasistencias (I) y permisos (P) de la asistencia diaria en el ciclo
+    lectivo. Se cuenta un día por agente aunque ese día tenga varias materias. El límite
+    anual ({{ limite }} días) se cambia en <a href="{% url 'reportes:parametros' %}">Parámetros</a>.
+</p>
+
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>Estado</th>
+                <th>DNI</th>
+                <th>Docente</th>
+                <th class="text-end">Inasistencias</th>
+                <th class="text-end">Permisos</th>
+                <th class="text-end">Total acumulado</th>
+                <th class="text-end">Límite</th>
+                <th class="text-end">Restantes</th>
+                <th class="text-end">%</th>
+                <th class="text-end">Horas</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in agentes %}
+                <tr class="{% if a.estado == 'agotado' %}table-danger{% elif a.estado == 'proximo' %}table-warning{% endif %}">
+                    <td>
+                        {% if a.estado == "agotado" %}<span class="badge text-bg-danger">Límite agotado</span>
+                        {% elif a.estado == "proximo" %}<span class="badge text-bg-warning">Próximo al límite</span>
+                        {% else %}<span class="badge text-bg-success">Normal</span>{% endif %}
+                    </td>
+                    <td>{{ a.dni }}</td>
+                    <td>{{ a.docente }}</td>
+                    <td class="text-end">{{ a.inasistencias }}</td>
+                    <td class="text-end">{{ a.permisos }}</td>
+                    <td class="text-end fw-semibold">{{ a.total }}</td>
+                    <td class="text-end">{{ a.limite }}</td>
+                    <td class="text-end">{{ a.restantes }}</td>
+                    <td class="text-end">{{ a.porcentaje }}</td>
+                    <td class="text-end">{{ a.horas|floatformat:"-2" }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="10" class="text-center text-muted py-4">No hay inasistencias ni permisos registrados con estos criterios.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

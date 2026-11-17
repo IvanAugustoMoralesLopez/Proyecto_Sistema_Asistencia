@@ -69,15 +69,14 @@ def _clave_alfabetica(licencia):
 
 
 def _ultimo_numero_emitido(oficina, anio):
-    """Mayor número de disposición ya usado en esa oficina y año (0 si no hay)."""
-    mayor = 0
-    numeros = LicenciaOtorgada.objects.filter(
-        disp_oficina=oficina, disp_anio=anio,
-    ).values_list('disp_numero', flat=True)
-    for numero in numeros:
-        if numero and numero.isdigit():
-            mayor = max(mayor, int(numero))
-    return mayor
+    """
+    Mayor número de disposición ya usado en esa oficina y año (0 si no hay).
+    Mira también la planilla mensual, para que las dos formas de emitir no
+    repitan un número.
+    """
+    # Import local: planilla_mensual importa models, igual que este módulo.
+    from .planilla_mensual import ultimo_numero_emitido
+    return ultimo_numero_emitido(oficina, anio)
 
 
 def _clasificar_pendientes(anio: int, mes: int):
@@ -220,6 +219,7 @@ def articulos_para_asistente(situacion: str = None) -> list:
         datos.append({
             'id': articulo.pk,
             'articulo': articulo.articulo,
+            'cod_licencia': articulo.cod_licencia,
             'tipo_licencia': articulo.tipo_licencia,
             'situacion': (articulo.sit_rev or '').strip().lower(),
             'planilla': planilla,

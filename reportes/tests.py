@@ -390,8 +390,8 @@ class ConsultaUnificadaTests(TestCase):
     def setUp(self):
         ConsultasTests.setUp(self)  # mismos datos base: 2 docentes, 2 licencias
         inasistencia = MarcaAsistencia.objects.get(codigo="I")
-        retirado = MarcaAsistencia.objects.get(codigo="PR")
-        presente = MarcaAsistencia.objects.get(codigo="P")
+        retirado = MarcaAsistencia.objects.get(codigo="P")
+        presente = MarcaAsistencia.objects.get(codigo="PR")
         licencia = MarcaAsistencia.objects.get(codigo="LIC")
 
         def registro(designacion, fecha, marca, **extra):

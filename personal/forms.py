@@ -2,15 +2,109 @@ from django import forms
 from django.db import transaction
 from django.db.models import Q
 
+from datetime import date, datetime
+
 from .models import (
+    FECHA_SIN_INICIO,
+    TEXTO_SIN_INICIO,
+    TEXTO_SIN_TERMINO,
     Cargo,
     Carrera,
     Designacion,
     EspacioCurricular,
     Horario,
     Persona,
+    TipoInstrumentoLegal,
     UnidadEducativa,
 )
+
+
+def _sin_espacios(texto):
+    return " ".join((texto or "").upper().split())
+
+
+def interpretar_fecha_de_vigencia(texto):
+    """
+    RN-09: convierte lo escrito en Desde/Hasta. Devuelve una fecha, la cadena
+    especial («SIN INICIO» / «SIN TERMINO») o None si está vacío. Acepta
+    dd/mm/aaaa y AAAA-MM-DD. Lanza ValueError si no se entiende.
+    """
+    texto = (texto or "").strip()
+
+    if not texto:
+        return None
+
+    normalizado = _sin_espacios(texto).replace("É", "E")
+
+    if normalizado in (TEXTO_SIN_INICIO, TEXTO_SIN_TERMINO):
+        return normalizado
+
+    for formato in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(texto, formato).date()
+        except ValueError:
+            continue
+
+    raise ValueError(texto)
+
+
+class FechaDeVigenciaField(forms.CharField):
+    """
+    Campo de vigencia de una designación (RN-09): una fecha estándar o la
+    cadena especial que le corresponde (`especial`).
+    """
+
+    def __init__(self, *, especial, **kwargs):
+        self.especial = especial
+        kwargs.setdefault(
+            "widget",
+            forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": f"dd/mm/aaaa o {especial}",
+                    "list": f"opciones-{especial.replace(' ', '-').lower()}",
+                    "autocomplete": "off",
+                }
+            ),
+        )
+        super().__init__(**kwargs)
+
+    def to_python(self, value):
+        if isinstance(value, date):
+            return value
+
+        try:
+            valor = interpretar_fecha_de_vigencia(super().to_python(value))
+        except ValueError:
+            raise forms.ValidationError(
+                f"Ingrese una fecha (dd/mm/aaaa) o {self.especial}."
+            )
+
+        if isinstance(valor, str) and valor != self.especial:
+            raise forms.ValidationError(
+                f"En este campo la cadena especial es {self.especial}."
+            )
+
+        return valor
+
+    def prepare_value(self, value):
+        if isinstance(value, date):
+            if value == FECHA_SIN_INICIO:
+                return TEXTO_SIN_INICIO
+            return value.strftime("%d/%m/%Y")
+        return value
+
+
+class TipoInstrumentoLegalForm(forms.ModelForm):
+    class Meta:
+        model = TipoInstrumentoLegal
+        fields = ["nombre", "activo"]
+        widgets = {
+            "nombre": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Ej.: Resolución"}
+            ),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
 
 
 class CargoForm(forms.ModelForm):
@@ -234,6 +328,18 @@ class DesignacionForm(forms.ModelForm):
         widget=forms.NumberInput(attrs={"class": "form-control", "min": "0"}),
     )
 
+    # RN-09: Desde y Hasta admiten una fecha o SIN INICIO / SIN TERMINO.
+    desde = FechaDeVigenciaField(especial=TEXTO_SIN_INICIO, label="Desde")
+    hasta = FechaDeVigenciaField(
+        especial=TEXTO_SIN_TERMINO, label="Hasta", required=False
+    )
+    # RF-05: el tipo de norma sale del catálogo de instrumentos legales.
+    norma_tipo = forms.ChoiceField(
+        label="Tipo de norma",
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
     class Meta:
         model = Designacion
         fields = [
@@ -277,18 +383,11 @@ class DesignacionForm(forms.ModelForm):
             "especialidad": forms.Select(attrs={"class": "form-select"}),
             "disp_alta_nro": forms.TextInput(attrs={"class": "form-control"}),
             "sello_regional_as": forms.TextInput(attrs={"class": "form-control"}),
-            "norma_tipo": forms.Select(attrs={"class": "form-select"}),
             "norma_numero": forms.TextInput(attrs={"class": "form-control"}),
             "norma_anio": forms.NumberInput(
                 attrs={"class": "form-control", "min": "1900", "max": "2200"}
             ),
             "organismo_emisor": forms.TextInput(attrs={"class": "form-control"}),
-            "desde": forms.DateInput(
-                attrs={"class": "form-control", "type": "date"}
-            ),
-            "hasta": forms.DateInput(
-                attrs={"class": "form-control", "type": "date"}
-            ),
             "pof": forms.TextInput(attrs={"class": "form-control"}),
             "anio_pof": forms.NumberInput(
                 attrs={"class": "form-control", "min": "1900", "max": "2200"}
@@ -307,6 +406,12 @@ class DesignacionForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["norma_tipo"].choices = TipoInstrumentoLegal.opciones(
+            actual=self.instance.norma_tipo if self.instance else ""
+        )
+        if self.instance and self.instance.pk:
+            self.initial["desde"] = self.instance.desde_texto
+            self.initial["hasta"] = self.instance.hasta_texto
         self.fields["cargo"].queryset = Cargo.objects.order_by("descripcion")
         self.fields["espacio_curricular"].queryset = (
             EspacioCurricular.objects.select_related("carrera")
@@ -342,6 +447,18 @@ class DesignacionForm(forms.ModelForm):
         cleaned_data = super().clean()
         desde = cleaned_data.get("desde")
         hasta = cleaned_data.get("hasta")
+
+        # RN-09: cadenas especiales. SIN INICIO se guarda con la fecha
+        # convenida y la marca `sin_inicio`; SIN TERMINO deja `hasta` vacío.
+        self.instance.sin_inicio = desde == TEXTO_SIN_INICIO
+        if desde == TEXTO_SIN_INICIO:
+            desde = cleaned_data["desde"] = FECHA_SIN_INICIO
+        if hasta == TEXTO_SIN_TERMINO:
+            hasta = cleaned_data["hasta"] = None
+            # Una suplencia SIN TERMINO es de plazo indeterminado.
+            if cleaned_data.get("es_suplencia"):
+                cleaned_data["plazo_indeterminado"] = True
+
         plazo_indeterminado = cleaned_data.get("plazo_indeterminado")
         reemplaza = cleaned_data.get("reemplaza")
         if desde and hasta and hasta < desde:

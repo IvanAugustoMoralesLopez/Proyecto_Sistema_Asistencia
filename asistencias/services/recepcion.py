@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from ..models import EventoAsistencia, RegistroAsistencia
+from ..models import EventoAsistencia, MarcaAsistencia, RegistroAsistencia
 from .reglas import (
     MOTIVO_MINIMO,
     _datos_registro,
@@ -17,6 +17,9 @@ from .reglas import (
 )
 from .sesiones import _validar_sesion_edicion
 
+
+# RF-09: marcas que se pueden asignar al recibir el formulario en papel.
+MARCAS_AL_RECEPCIONAR = ("LIC", "LT", "P")
 
 TRANSICIONES_JUSTIFICACION = {
     RegistroAsistencia.EstadoJustificacion.INJUSTIFICADA: {
@@ -40,11 +43,17 @@ def recepcionar_formulario(
     nro_formulario="",
     fecha_recepcion=None,
     motivo="",
+    nueva_marca="",
 ):
     """
     Cambia el estado de justificación de una inasistencia al recibir (o
     rechazar) el formulario en papel. Injustificada pasa a en trámite o
     justificada; en trámite pasa a justificada o vuelve a injustificada.
+
+    RF-09: con `nueva_marca` ("LIC", "LT" o "P") el registro deja de ser una
+    inasistencia (I) y pasa a la marca que corresponde al formulario. RF-07:
+    como la novedad es una por agente y jornada, el cambio alcanza también a
+    las otras materias del docente que ese día tenían la misma inasistencia.
     """
     _exigir_permiso(
         usuario,
@@ -99,6 +108,23 @@ def recepcionar_formulario(
             f"{maximo_formulario} caracteres."
         )
 
+    nueva_marca = (nueva_marca or "").strip().upper()
+    marca_nueva = None
+
+    if nueva_marca:
+        if nueva_marca not in MARCAS_AL_RECEPCIONAR:
+            raise ValidationError(
+                "Al recibir el formulario la marca solo puede pasar a "
+                "Licencia (LIC), Largo tratamiento (LT) o Permiso (P)."
+            )
+
+        if nuevo_estado == Justificacion.INJUSTIFICADA:
+            raise ValidationError(
+                "Si rechazás el formulario la marca sigue siendo Inasistencia."
+            )
+
+        marca_nueva = MarcaAsistencia.objects.get(codigo=nueva_marca)
+
     if nuevo_estado == Justificacion.INJUSTIFICADA:
         if len(motivo) < MOTIVO_MINIMO:
             raise ValidationError(
@@ -121,25 +147,51 @@ def recepcionar_formulario(
                 "La fecha de recepción no puede ser futura."
             )
 
-    antes = _datos_registro(registro)
+    afectados = [registro]
 
-    registro.estado_justificacion = nuevo_estado
-    registro.nro_formulario = nro_formulario
-    registro.fecha_recepcion = fecha_recepcion
-    registro.recepcionado_por = (
-        usuario if nuevo_estado != Justificacion.INJUSTIFICADA else None
-    )
-    registro.actualizado_por = usuario
-    registro.save()
+    if marca_nueva is not None:
+        # RF-07: las otras materias del docente con la misma inasistencia
+        # ese día reciben el mismo formulario.
+        afectados += list(
+            RegistroAsistencia.objects.select_for_update()
+            .select_related("marca")
+            .filter(
+                fecha=registro.fecha,
+                designacion__persona_id=registro.designacion.persona_id,
+                marca=registro.marca,
+                estado_justificacion=registro.estado_justificacion,
+            )
+            .exclude(pk=registro.pk)
+        )
 
-    EventoAsistencia.objects.create(
-        asistencia=registro,
-        usuario=usuario,
-        accion=EventoAsistencia.Accion.RECEPCIONAR,
-        motivo=motivo,
-        antes=antes,
-        despues=_datos_registro(registro),
-    )
+    for afectado in afectados:
+        antes = _datos_registro(afectado)
+
+        afectado.estado_justificacion = nuevo_estado
+        afectado.nro_formulario = nro_formulario
+        afectado.fecha_recepcion = fecha_recepcion
+        afectado.recepcionado_por = (
+            usuario if nuevo_estado != Justificacion.INJUSTIFICADA else None
+        )
+
+        if marca_nueva is not None:
+            afectado.marca = marca_nueva
+            if marca_nueva.requiere_observacion and not afectado.observaciones.strip():
+                afectado.observaciones = (
+                    f"{marca_nueva.descripcion} - formulario N° {nro_formulario}"
+                )
+
+        afectado.actualizado_por = usuario
+        afectado.save()
+
+        EventoAsistencia.objects.create(
+            asistencia=afectado,
+            usuario=usuario,
+            accion=EventoAsistencia.Accion.RECEPCIONAR,
+            motivo=motivo,
+            antes=antes,
+            despues=_datos_registro(afectado),
+        )
 
     return registro
 
