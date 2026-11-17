@@ -57,6 +57,7 @@ class AccionesReportes:
     CATALOGO_EDITAR = "CATALOGO_EDITAR"
     CATALOGO_BAJA = "CATALOGO_BAJA"
     IMPORTACION = "IMPORTACION"
+    PLANILLA_MENSUAL = "PLANILLA_MENSUAL"
 
     CHOICES = [
         (LICENCIA_ALTA, "Alta de licencia"),
@@ -66,6 +67,7 @@ class AccionesReportes:
         (CATALOGO_EDITAR, "Modificar catálogo"),
         (CATALOGO_BAJA, "Baja en catálogo"),
         (IMPORTACION, "Importación CSV"),
+        (PLANILLA_MENSUAL, "Planilla mensual"),
     ]
 
 

@@ -1,7 +1,7 @@
 
 from django.db.models import Q
 from django import forms
-from personal.models import Designacion
+from personal.models import Designacion, TipoInstrumentoLegal
 from .models import LicenciaArticulo, LicenciaOtorgada, ResolucionAdjunta
 from .services import articulos_para_asistente
 from django.utils.dateparse import parse_date
@@ -132,6 +132,28 @@ class LicenciaOtorgadaForm(forms.ModelForm):
         )
         # La opción muestra también la situación de revista de la designación.
         self.fields["designacion"].label_from_instance = _etiqueta_designacion
+
+        # RF-05: el tipo de instrumento sale del catálogo de instrumentos legales.
+        self.fields["disp_tipo"] = forms.ChoiceField(
+            label="Tipo de instrumento",
+            required=False,
+            choices=TipoInstrumentoLegal.opciones(
+                actual=self.instance.disp_tipo or ""
+            ),
+            widget=forms.Select(attrs={"class": "form-select"}),
+        )
+
+        # RN-07 / RN-08: en un alta, Oficina y Año nacen precargados.
+        if not self.instance.pk:
+            from reportes.models import ParametroSistema
+            from .dias import fecha_de_hoy
+
+            self.fields["disp_oficina"].initial = (
+                ParametroSistema.obtener().codigo_oficina
+            )
+            self.fields["disp_anio"].initial = (
+                fecha_desde.year if fecha_desde else fecha_de_hoy().year
+            )
 
     def datos_articulos(self):
         """RF-15: catálogo con su planilla de salida, para el asistente."""

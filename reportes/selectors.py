@@ -70,6 +70,7 @@ _OBJETIVO_FIJO = {
     _A.CATALOGO_EDITAR: "Catálogo",
     _A.CATALOGO_BAJA: "Catálogo",
     _A.IMPORTACION: "Importación de personal",
+    _A.PLANILLA_MENSUAL: "Planilla mensual IL-01 / IL-02",
 }
 
 
@@ -442,6 +443,107 @@ def calcular_alertas(anio, umbral=UMBRAL_POR_DEFECTO):
 
     alertas.sort(key=lambda a: (-a["porcentaje"], a["docente"]))
     return alertas
+
+
+# ───────────── Contador de inasistencias por agente (RF-18) ─────────────
+
+# Marcas de la diaria que cuentan para el límite anual: inasistencias (I) y
+# permisos (P). Las licencias (LIC, LT) tienen su propio tope por artículo.
+MARCAS_QUE_CUENTAN = ("I", "P")
+
+
+def calcular_acumulado_inasistencias(anio, umbral=UMBRAL_POR_DEFECTO,
+                                     solo_alertas=False, limite=None):
+    """
+    RF-18: por cada agente, total acumulado de inasistencias y permisos
+    tomados en el ciclo lectivo `anio`, comparado con el límite anual
+    reglamentario (parámetro del sistema).
+
+    Se cuenta por AGENTE y por DÍA: un docente que faltó un día a sus tres
+    materias suma una inasistencia, no tres. `estado` es:
+      - "agotado":  alcanzó o superó el límite;
+      - "proximo":  consumió al menos `umbral` % del límite (alerta previa);
+      - "normal":   por debajo del umbral.
+    Orden: primero los más cercanos al límite.
+    """
+    # Import local: evita el ciclo reportes.models <-> selectors en la carga.
+    from .models import ParametroSistema
+
+    if limite is None:
+        limite = ParametroSistema.obtener().limite_inasistencias_anual
+
+    registros = (
+        RegistroAsistencia.objects.filter(
+            fecha__range=(date(anio, 1, 1), date(anio, 12, 31)),
+            marca__codigo__in=MARCAS_QUE_CUENTAN,
+        )
+        .values_list(
+            "designacion__persona_id",
+            "designacion__persona__apellido_nombre",
+            "fecha",
+            "marca__codigo",
+            "horas_inasistidas",
+        )
+    )
+
+    agentes = {}
+    for dni, nombre, fecha, codigo, horas in registros:
+        agente = agentes.setdefault(dni, {
+            "dni": dni,
+            "docente": nombre,
+            "dias_inasistencia": set(),
+            "dias_permiso": set(),
+            "horas": 0,
+        })
+        clave = "dias_inasistencia" if codigo == "I" else "dias_permiso"
+        agente[clave].add(fecha)
+        agente["horas"] += horas or 0
+
+    filas = []
+    for agente in agentes.values():
+        inasistencias = len(agente["dias_inasistencia"])
+        permisos = len(agente["dias_permiso"] - agente["dias_inasistencia"])
+        total = inasistencias + permisos
+        porcentaje = round(total * 100 / limite) if limite else 0
+
+        if total >= limite:
+            estado = "agotado"
+        elif porcentaje >= umbral:
+            estado = "proximo"
+        else:
+            estado = "normal"
+
+        if solo_alertas and estado == "normal":
+            continue
+
+        filas.append({
+            "dni": agente["dni"],
+            "docente": agente["docente"],
+            "inasistencias": inasistencias,
+            "permisos": permisos,
+            "total": total,
+            "horas": agente["horas"],
+            "limite": limite,
+            "restantes": max(limite - total, 0),
+            "porcentaje": porcentaje,
+            "estado": estado,
+        })
+
+    filas.sort(key=lambda fila: (-fila["total"], fila["docente"]))
+    return filas
+
+
+def estados_de_inasistencias(anio, dnis=None):
+    """
+    {dni: fila} solo de los agentes en alerta ("proximo" o "agotado"), para
+    mostrar el aviso en la carga diaria (RF-18: alerta visual al personal
+    administrativo antes de que se agote el límite).
+    """
+    return {
+        fila["dni"]: fila
+        for fila in calcular_acumulado_inasistencias(anio, solo_alertas=True)
+        if dnis is None or fila["dni"] in dnis
+    }
 
 
 # ───────────── Alertas de vencimiento de designaciones ─────────────

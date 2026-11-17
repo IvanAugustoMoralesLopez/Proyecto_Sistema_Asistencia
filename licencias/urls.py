@@ -6,6 +6,8 @@ from .views import (
     editar_licencia_otorgada,
     reporte_mensual_licencias,
     generador_disposiciones,
+    planilla_mensual,
+    planilla_mensual_csv,
     resoluciones_licencia,
     descargar_resolucion,
 )
@@ -32,6 +34,16 @@ urlpatterns = [
         "reporte/<int:anio>/<int:mes>/",
         reporte_mensual_licencias,
         name="reporte_mensual_licencias",
+    ),
+    path(
+        "planilla/<int:anio>/<int:mes>/",
+        planilla_mensual,
+        name="planilla_mensual",
+    ),
+    path(
+        "planilla/<int:anio>/<int:mes>/csv/",
+        planilla_mensual_csv,
+        name="planilla_mensual_csv",
     ),
     path(
         "generador-disposiciones/",

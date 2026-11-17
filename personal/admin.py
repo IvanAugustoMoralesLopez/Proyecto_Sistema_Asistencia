@@ -12,8 +12,16 @@ from .models import (
     Motivo,
     Persona,
     SituacionRevista,
+    TipoInstrumentoLegal,
     UnidadEducativa,
 )
+
+
+@admin.register(TipoInstrumentoLegal)
+class TipoInstrumentoLegalAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "activo")
+    search_fields = ("nombre",)
+    list_filter = ("activo",)
 
 
 @admin.register(Persona)
@@ -22,6 +30,10 @@ class PersonaAdmin(admin.ModelAdmin):
     search_fields = ("dni", "apellido_nombre", "apellido", "nombres", "email")
     list_filter = ("activa", "sexo", "localidad")
     ordering = ("apellido_nombre",)
+
+    def has_delete_permission(self, request, obj=None):
+        # RN-03: los legajos nunca se eliminan; la baja es lógica (activa).
+        return False
 
 
 @admin.register(Cargo)
@@ -99,6 +111,10 @@ class HistorialDesignacionInline(admin.TabularInline):
 
 @admin.register(Designacion)
 class DesignacionAdmin(admin.ModelAdmin):
+    def has_delete_permission(self, request, obj=None):
+        # RN-03: al cesar, la designación pasa a inactiva; no se elimina.
+        return False
+
     list_display = (
         "persona",
         "cargo",

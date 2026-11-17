@@ -124,10 +124,10 @@ class BaseAsistenciaTests(TestCase):
         self.token = str(uuid.uuid4())
         adquirir_sesion_edicion(self.usuario, self.token)
 
-        self.marca_p = MarcaAsistencia.objects.get(codigo="P")
+        self.marca_presente = MarcaAsistencia.objects.get(codigo="PR")
         self.marca_i = MarcaAsistencia.objects.get(codigo="I")
         self.marca_lic = MarcaAsistencia.objects.get(codigo="LIC")
-        self.marca_pr = MarcaAsistencia.objects.get(codigo="PR")
+        self.marca_permiso = MarcaAsistencia.objects.get(codigo="P")
 
     def abrir_sesion(self, usuario):
         """Sesión de edición para otro usuario, respetando el límite de operadores."""
@@ -140,7 +140,7 @@ class BaseAsistenciaTests(TestCase):
         datos = {
             "designacion": self.designacion,
             "fecha": LUNES,
-            "marca": self.marca_p,
+            "marca": self.marca_presente,
             "horas_inasistidas": Decimal("0"),
             "licencia": None,
             "observaciones": "",
@@ -181,11 +181,29 @@ class CatalogoMarcasTests(BaseAsistenciaTests):
             set(CODIGOS_MARCA),
         )
 
-    def test_p_es_presente_y_pr_es_presente_retirado(self):
-        self.assertEqual(self.marca_p.descripcion, "Presente")
-        self.assertFalse(self.marca_p.computa_inasistencia)
-        self.assertEqual(self.marca_pr.descripcion, "Presente retirado")
-        self.assertTrue(self.marca_pr.computa_inasistencia)
+    def test_p_es_permiso_y_pr_es_presente(self):
+        """RF-08 (documento v2.0): P = Permiso y PR = Presente."""
+        self.assertEqual(self.marca_presente.codigo, "PR")
+        self.assertEqual(self.marca_presente.descripcion, "Presente")
+        self.assertFalse(self.marca_presente.computa_inasistencia)
+        self.assertEqual(self.marca_permiso.codigo, "P")
+        self.assertEqual(self.marca_permiso.descripcion, "Permiso")
+        self.assertTrue(self.marca_permiso.computa_inasistencia)
+
+    def test_las_cinco_marcas_tienen_la_descripcion_del_documento(self):
+        descripciones = dict(
+            MarcaAsistencia.vigentes().values_list("codigo", "descripcion")
+        )
+        self.assertEqual(
+            descripciones,
+            {
+                "P": "Permiso",
+                "I": "Inasistencia",
+                "LIC": "Licencia médica o especial",
+                "LT": "Largo tratamiento",
+                "PR": "Presente",
+            },
+        )
 
     def test_una_marca_fuera_del_catalogo_no_esta_vigente(self):
         MarcaAsistencia.objects.create(codigo="XX", descripcion="Otra")
@@ -206,23 +224,34 @@ class CatalogoMarcasTests(BaseAsistenciaTests):
         self.assertEqual(registro.horas_inasistidas, Decimal("4"))
 
     def test_presente_descarta_las_horas(self):
-        registro = self.guardar(marca=self.marca_p, horas_inasistidas=Decimal("3"))
+        registro = self.guardar(marca=self.marca_presente, horas_inasistidas=Decimal("3"))
         self.assertEqual(registro.horas_inasistidas, Decimal("0"))
 
-    def test_presente_retirado_exige_observacion(self):
+    def test_permiso_exige_observacion(self):
         with self.assertRaises(ValidationError):
-            self.guardar(marca=self.marca_pr, horas_inasistidas=Decimal("2"))
+            self.guardar(marca=self.marca_permiso, horas_inasistidas=Decimal("2"))
 
         registro = self.guardar(
-            marca=self.marca_pr,
+            marca=self.marca_permiso,
             horas_inasistidas=Decimal("2"),
-            observaciones="Se retiró por una urgencia familiar.",
+            observaciones="Permiso por trámite personal.",
         )
-        self.assertEqual(registro.marca.codigo, "PR")
+        self.assertEqual(registro.marca.codigo, "P")
 
-    def test_licencia_exige_licencia_vinculada(self):
+    def test_licencia_se_asienta_sin_licencia_vinculada(self):
+        """
+        RF-09 / RF-14: LIC se marca en la diaria al recibir el formulario;
+        el artículo se imputa después, en la planilla mensual.
+        """
+        registro = self.guardar(
+            marca=self.marca_lic, horas_inasistidas=Decimal("4")
+        )
+        self.assertEqual(registro.marca.codigo, "LIC")
+        self.assertIsNone(registro.licencia_id)
+
+    def test_licencia_sigue_exigiendo_horas(self):
         with self.assertRaises(ValidationError):
-            self.guardar(marca=self.marca_lic, horas_inasistidas=Decimal("4"))
+            self.guardar(marca=self.marca_lic, horas_inasistidas=Decimal("0"))
 
 
 class LicenciaVinculadaTests(BaseAsistenciaTests):
@@ -283,7 +312,7 @@ class GuardarAsistenciaTests(BaseAsistenciaTests):
         self.assertEqual(evento.accion, EventoAsistencia.Accion.CREAR)
         self.assertEqual(evento.usuario, self.usuario)
         self.assertIsNone(evento.antes)
-        self.assertEqual(evento.despues["marca"], "P")
+        self.assertEqual(evento.despues["marca"], "PR")
 
     def test_editar_guarda_antes_despues_y_motivo(self):
         registro = self.guardar()
@@ -305,7 +334,7 @@ class GuardarAsistenciaTests(BaseAsistenciaTests):
             asistencia=registro,
             accion=EventoAsistencia.Accion.EDITAR,
         ).get()
-        self.assertEqual(evento.antes["marca"], "P")
+        self.assertEqual(evento.antes["marca"], "PR")
         self.assertEqual(evento.despues["marca"], "I")
         self.assertEqual(evento.motivo, "Error de carga")
 
@@ -322,7 +351,7 @@ class GuardarAsistenciaTests(BaseAsistenciaTests):
                 datos={
                     "designacion": self.designacion,
                     "fecha": LUNES,
-                    "marca": self.marca_p,
+                    "marca": self.marca_presente,
                 },
             )
 
@@ -364,32 +393,56 @@ class DiasNoLaborablesTests(BaseAsistenciaTests):
             self.guardar(fecha=SABADO)
         self.assertFalse(RegistroAsistencia.objects.exists())
 
-    def test_no_se_registra_asistencia_en_feriado(self):
+    def test_en_feriado_se_registra_y_se_avisa(self):
+        """
+        RF-10: los feriados son visuales y organizativos. La asistencia se
+        carga igual y el día se informa con un indicador.
+        """
+        from .services import aviso_del_calendario
+
         DiaNoLaborable.objects.create(
             fecha=MARTES,
             tipo=DiaNoLaborable.Tipo.FERIADO,
             descripcion="Feriado de prueba",
         )
-        self.assertIn("feriado", motivo_dia_no_laborable(MARTES))
-        with self.assertRaises(ValidationError):
-            self.guardar(fecha=MARTES)
+        self.assertIsNone(motivo_dia_no_laborable(MARTES))
+        self.assertIn("feriado", aviso_del_calendario(MARTES))
+        self.assertIn("Feriado de prueba", aviso_del_calendario(MARTES))
+        registro = self.guardar(fecha=MARTES)
+        self.assertEqual(registro.fecha, MARTES)
 
-    def test_tampoco_en_asuetos_ni_dias_inhabiles(self):
+    def test_un_dia_sin_calendario_no_tiene_aviso(self):
+        from .services import aviso_del_calendario
+
+        self.assertEqual(aviso_del_calendario(MARTES), "")
+
+    def test_tambien_se_registra_en_asuetos_y_dias_inhabiles(self):
         for fecha, tipo in (
             (MARTES, DiaNoLaborable.Tipo.ASUETO),
             (MARTES + timedelta(days=1), DiaNoLaborable.Tipo.INHABIL),
         ):
             DiaNoLaborable.objects.create(fecha=fecha, tipo=tipo)
-            with self.assertRaises(ValidationError):
-                self.guardar(fecha=fecha)
+            self.assertEqual(self.guardar(fecha=fecha).fecha, fecha)
 
-    def test_el_formulario_marca_el_error_en_la_fecha(self):
+    def test_el_formulario_acepta_un_feriado(self):
         DiaNoLaborable.objects.create(fecha=MARTES)
         form = RegistroAsistenciaForm(
             {
                 "designacion": self.designacion.pk,
                 "fecha": MARTES.isoformat(),
-                "marca": self.marca_p.pk,
+                "marca": self.marca_presente.pk,
+                "horas_inasistidas": "0",
+                "observaciones": "",
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_el_formulario_marca_el_error_en_la_fecha(self):
+        form = RegistroAsistenciaForm(
+            {
+                "designacion": self.designacion.pk,
+                "fecha": SABADO.isoformat(),
+                "marca": self.marca_presente.pk,
                 "horas_inasistidas": "0",
                 "observaciones": "",
             }
@@ -421,9 +474,13 @@ class FinDeSemanaDePruebaTests(BaseAsistenciaTests):
 
     @override_settings(DEBUG=True)
     @mock.patch.dict(os.environ, VARIABLE)
-    def test_los_feriados_siguen_bloqueando(self):
+    def test_un_feriado_se_avisa_pero_no_bloquea(self):
+        """RF-10: el calendario es visual; con el sábado habilitado se carga."""
+        from .services import aviso_del_calendario
+
         DiaNoLaborable.objects.create(fecha=SABADO, descripcion="Feriado")
-        self.assertIn("feriado", motivo_dia_no_laborable(SABADO))
+        self.assertIsNone(motivo_dia_no_laborable(SABADO))
+        self.assertIn("feriado", aviso_del_calendario(SABADO))
 
     @override_settings(DEBUG=False)
     @mock.patch.dict(os.environ, VARIABLE)
@@ -475,7 +532,7 @@ class EdicionDeRegistroValidadoTests(BaseAsistenciaTests):
                 self.editar(registro, motivo=motivo)
 
         registro.refresh_from_db()
-        self.assertEqual(registro.marca.codigo, "P")
+        self.assertEqual(registro.marca.codigo, "PR")
         self.assertEqual(
             registro.estado_registro, RegistroAsistencia.Estado.VALIDADO
         )
@@ -713,7 +770,7 @@ class RecepcionFormulariosTests(BaseAsistenciaTests):
             datos={
                 "designacion": self.designacion,
                 "fecha": LUNES,
-                "marca": self.marca_p,
+                "marca": self.marca_presente,
                 "horas_inasistidas": Decimal("0"),
                 "licencia": None,
                 "observaciones": "",
@@ -765,7 +822,7 @@ class RecepcionFormulariosTests(BaseAsistenciaTests):
         presente = RegistroAsistencia.objects.create(
             designacion=self.designacion,
             fecha=MARTES,
-            marca=self.marca_p,
+            marca=self.marca_presente,
         )
         modulo.marcar_inasistencias_injustificadas(django_apps, None)
         inasistencia.refresh_from_db()
@@ -847,6 +904,66 @@ class RecepcionFormulariosVistasTests(BaseAsistenciaTests):
         self.assertEqual(self.inasistencia.estado_justificacion, "EN_TRAMITE")
         self.assertEqual(self.inasistencia.nro_formulario, "F-77")
 
+    def test_al_recibir_el_formulario_la_inasistencia_pasa_a_licencia(self):
+        """RF-09: la I se edita asignando LIC (o P) al recibir el papel."""
+        respuesta = self.client.post(
+            reverse("asistencia:recepcionar_formulario", args=[self.inasistencia.pk]),
+            {
+                "estado_justificacion": "JUSTIFICADA",
+                "nro_formulario": "F-80",
+                "fecha_recepcion": LUNES.isoformat(),
+                "nueva_marca": "LIC",
+                "motivo": "",
+            },
+        )
+        self.assertRedirects(respuesta, reverse("asistencia:recepcion_formularios"))
+        self.inasistencia.refresh_from_db()
+        self.assertEqual(self.inasistencia.marca.codigo, "LIC")
+        self.assertEqual(self.inasistencia.estado_justificacion, "JUSTIFICADA")
+
+    def test_al_recibir_un_permiso_la_marca_pasa_a_p_en_todas_las_materias(self):
+        """RF-09 + RF-07: el cambio vale para todas las materias del día."""
+        from .services import recepcionar_formulario
+
+        segunda = Designacion.objects.create(
+            persona=self.persona, cargo=self.cargo, desde=date(2026, 3, 1)
+        )
+        otra = RegistroAsistencia.objects.create(
+            designacion=segunda,
+            fecha=self.inasistencia.fecha,
+            marca=self.inasistencia.marca,
+            horas_inasistidas=Decimal("2"),
+            estado_justificacion="INJUSTIFICADA",
+            creado_por=self.usuario,
+            actualizado_por=self.usuario,
+        )
+        recepcionar_formulario(
+            usuario=self.usuario,
+            token=self.token,
+            registro_id=self.inasistencia.pk,
+            nuevo_estado="JUSTIFICADA",
+            nro_formulario="F-81",
+            nueva_marca="P",
+        )
+        for registro in (self.inasistencia, otra):
+            registro.refresh_from_db()
+            self.assertEqual(registro.marca.codigo, "P")
+            self.assertEqual(registro.nro_formulario, "F-81")
+            self.assertIn("F-81", registro.observaciones)
+
+    def test_no_se_puede_pasar_a_presente_al_recibir(self):
+        from .services import recepcionar_formulario
+
+        with self.assertRaises(ValidationError):
+            recepcionar_formulario(
+                usuario=self.usuario,
+                token=self.token,
+                registro_id=self.inasistencia.pk,
+                nuevo_estado="JUSTIFICADA",
+                nro_formulario="F-82",
+                nueva_marca="PR",
+            )
+
     def test_la_pantalla_pide_el_numero_de_formulario(self):
         respuesta = self.client.post(
             reverse("asistencia:recepcionar_formulario", args=[self.inasistencia.pk]),
@@ -915,7 +1032,7 @@ class PermisosServiciosTests(BaseAsistenciaTests):
                 datos={
                     "designacion": self.designacion,
                     "fecha": LUNES,
-                    "marca": self.marca_p,
+                    "marca": self.marca_presente,
                 },
             )
 
@@ -929,7 +1046,7 @@ class PermisosServiciosTests(BaseAsistenciaTests):
             datos={
                 "designacion": self.designacion,
                 "fecha": LUNES,
-                "marca": self.marca_p,
+                "marca": self.marca_presente,
                 "horas_inasistidas": Decimal("0"),
                 "licencia": None,
                 "observaciones": "",
@@ -1115,12 +1232,14 @@ class CalendarioServicioTests(BaseAsistenciaTests):
     def cerrar_septiembre(self):
         cerrar_mes(usuario=self.usuario, token=self.token, anio=2026, mes=9)
 
-    def test_un_dia_cargado_deja_de_ser_laborable(self):
+    def test_un_dia_cargado_en_el_calendario_se_avisa_y_no_bloquea(self):
+        from .services import aviso_del_calendario
+
         self.cargar(MARTES)
 
-        self.assertIn("feriado", motivo_dia_no_laborable(MARTES))
-        with self.assertRaises(ValidationError):
-            self.guardar(fecha=MARTES)
+        self.assertIn("feriado", aviso_del_calendario(MARTES))
+        self.assertIsNone(motivo_dia_no_laborable(MARTES))
+        self.assertEqual(self.guardar(fecha=MARTES).fecha, MARTES)
 
     def test_modificar_cambia_el_tipo_y_la_descripcion(self):
         dia = self.cargar(MARTES)
@@ -1465,7 +1584,7 @@ class RobustezTests(BaseAsistenciaTests):
         datos = {
             "designacion": self.designacion,
             "fecha": LUNES,
-            "marca": self.marca_p,
+            "marca": self.marca_presente,
             "horas_inasistidas": Decimal("0"),
             "licencia": None,
             "observaciones": "",
@@ -1501,7 +1620,7 @@ class RobustezTests(BaseAsistenciaTests):
             {
                 "designacion": self.designacion.pk,
                 "fecha": LUNES.isoformat(),
-                "marca": self.marca_p.pk,
+                "marca": self.marca_presente.pk,
                 "horas_inasistidas": "0",
                 "observaciones": "cambio",
                 "motivo": self.LARGO,
@@ -1572,7 +1691,7 @@ class RobustezTests(BaseAsistenciaTests):
             {"marca-²": "1"},
             {f"marca-{self.designacion.pk}": "²"},
             {
-                f"marca-{self.designacion.pk}": str(self.marca_p.pk),
+                f"marca-{self.designacion.pk}": str(self.marca_presente.pk),
                 f"licencia-{self.designacion.pk}": "²",
             },
         ):
@@ -1712,7 +1831,7 @@ class CierreDiarioTests(BaseAsistenciaTests):
         datos = {
             "designacion": self.designacion,
             "fecha": LUNES,
-            "marca": self.marca_p,
+            "marca": self.marca_presente,
             "horas_inasistidas": Decimal("0"),
             "licencia": None,
             "observaciones": "",
@@ -1738,11 +1857,14 @@ class CierreDiarioTests(BaseAsistenciaTests):
         with self.assertRaises(ValidationError):
             self.cerrar(timezone.localdate() + timedelta(days=1))
 
-    def test_no_se_cierra_un_dia_no_laborable(self):
+    def test_no_se_cierra_un_fin_de_semana(self):
+        with self.assertRaises(ValidationError):
+            self.cerrar(SABADO)
+
+    def test_un_feriado_se_cierra_como_cualquier_jornada(self):
+        """RF-10: el feriado no cambia la operación."""
         DiaNoLaborable.objects.create(fecha=MARTES)
-        for fecha in (SABADO, MARTES):
-            with self.assertRaises(ValidationError):
-                self.cerrar(fecha)
+        self.assertEqual(self.cerrar(MARTES).fecha, MARTES)
 
     def test_no_se_cierra_la_jornada_de_un_periodo_cerrado(self):
         cerrar_mes(usuario=self.usuario, token=self.token, anio=2026, mes=9)
@@ -1780,7 +1902,7 @@ class CierreDiarioTests(BaseAsistenciaTests):
                 motivo="Error tipográfico en la marca",
             )
         registro.refresh_from_db()
-        self.assertEqual(registro.marca.codigo, "P")
+        self.assertEqual(registro.marca.codigo, "PR")
 
     def test_con_autorizacion_se_modifica_con_motivo(self):
         registro = self.guardar()
@@ -1917,7 +2039,7 @@ class CierreDiarioVistasTests(BaseAsistenciaTests):
             {
                 "designacion": self.designacion.pk,
                 "fecha": LUNES.isoformat(),
-                "marca": self.marca_p.pk,
+                "marca": self.marca_presente.pk,
                 "horas_inasistidas": "0",
                 "observaciones": "",
                 "motivo": "Carga omitida",
@@ -1956,7 +2078,7 @@ class BasePlanillaTests(BaseAsistenciaTests):
     def fila(self, designacion, marca=None, **cambios):
         datos = {
             "designacion": designacion,
-            "marca": marca or self.marca_p,
+            "marca": marca or self.marca_presente,
             "horas_inasistidas": Decimal("0"),
             "licencia": None,
             "observaciones": "",
@@ -2107,8 +2229,9 @@ class PlanillaVistasTests(BasePlanillaTests):
         self.assertEqual(
             orden, [self.gomez.pk, self.designacion.pk, self.perez_2.pk]
         )
-        self.assertEqual(respuesta.context["total"], 3)
-        self.assertEqual(respuesta.context["pendientes"], 3)
+        # RF-07: los totales cuentan agentes (PEREZ y GOMEZ), no materias.
+        self.assertEqual(respuesta.context["total"], 2)
+        self.assertEqual(respuesta.context["pendientes"], 2)
 
     def test_la_primera_fila_de_cada_docente_se_marca_como_tal(self):
         filas = self.ver().context["filas"]
@@ -2143,13 +2266,161 @@ class PlanillaVistasTests(BasePlanillaTests):
         ids = {fila["designacion"].pk for fila in self.ver().context["filas"]}
         self.assertNotIn(self.gomez.pk, ids)
 
-    def test_las_ya_marcadas_se_muestran_sin_campos_de_carga(self):
+    def test_los_ya_cargados_se_muestran_sin_campos_de_carga(self):
+        # PEREZ tiene dos designaciones: recién cuando están las dos cargadas
+        # el docente figura como cargado.
         self.guardar()
+        self.guardar(designacion=self.perez_2)
         respuesta = self.ver()
-        self.assertNotContains(respuesta, f'name="marca-{self.designacion.pk}"')
-        self.assertContains(respuesta, f'name="marca-{self.gomez.pk}"')
+        self.assertNotContains(
+            respuesta, f'name="agente-marca-{self.persona.dni}"'
+        )
+        self.assertContains(
+            respuesta, f'name="agente-marca-{self.persona_2.dni}"'
+        )
+        self.assertContains(respuesta, "Ya cargado")
         self.assertEqual(respuesta.context["marcadas"], 1)
-        self.assertEqual(respuesta.context["pendientes"], 2)
+        self.assertEqual(respuesta.context["pendientes"], 1)
+
+    # ── RF-07: la novedad se registra una sola vez por agente ──
+
+    def test_corregir_una_materia_corrige_las_demas_del_agente(self):
+        """RF-07 / RF-11: la corrección también es una sola por agente."""
+        from personal.models import Horario
+        from .services import aplicar_al_agente
+
+        Horario.objects.create(designacion=self.designacion, dia="LUN", horas_catedra=2)
+        Horario.objects.create(designacion=self.perez_2, dia="LUN", horas_catedra=3)
+        primero = self.guardar()
+        self.guardar(designacion=self.perez_2)
+
+        respuesta = self.client.post(
+            reverse("asistencia:editar_asistencia", args=[primero.pk]),
+            {
+                "designacion": self.designacion.pk,
+                "fecha": LUNES.isoformat(),
+                "marca": self.marca_i.pk,
+                "horas_inasistidas": "2",
+                "observaciones": "",
+                "aplicar_al_agente": "1",
+            },
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(
+            sorted(
+                RegistroAsistencia.objects.filter(fecha=LUNES).values_list(
+                    "marca__codigo", "horas_inasistidas"
+                )
+            ),
+            [("I", Decimal("2")), ("I", Decimal("3"))],
+        )
+
+    def test_sin_tildar_la_opcion_solo_cambia_esa_materia(self):
+        primero = self.guardar()
+        self.guardar(designacion=self.perez_2)
+
+        self.client.post(
+            reverse("asistencia:editar_asistencia", args=[primero.pk]),
+            {
+                "designacion": self.designacion.pk,
+                "fecha": LUNES.isoformat(),
+                "marca": self.marca_i.pk,
+                "horas_inasistidas": "2",
+                "observaciones": "",
+            },
+        )
+        self.assertEqual(
+            sorted(
+                RegistroAsistencia.objects.filter(fecha=LUNES).values_list(
+                    "marca__codigo", flat=True
+                )
+            ),
+            ["I", "PR"],
+        )
+
+    def test_hay_una_sola_fila_y_un_solo_selector_por_agente(self):
+        respuesta = self.ver()
+        agentes = respuesta.context["agentes"]
+        self.assertEqual(
+            [agente["persona"].dni for agente in agentes],
+            [self.persona_2.dni, self.persona.dni],
+        )
+        # PEREZ tiene dos materias pero un único selector.
+        self.assertEqual(len(agentes[1]["materias"]), 2)
+        self.assertContains(
+            respuesta, f'name="agente-marca-{self.persona.dni}"', count=1
+        )
+        self.assertNotContains(respuesta, 'name="marca-')
+
+    def test_una_marca_por_agente_se_reparte_entre_sus_materias(self):
+        from personal.models import Horario
+
+        Horario.objects.create(designacion=self.designacion, dia="LUN", horas_catedra=2)
+        Horario.objects.create(designacion=self.perez_2, dia="LUN", horas_catedra=3)
+
+        respuesta = self.enviar(
+            {
+                f"agente-marca-{self.persona.dni}": self.marca_i.pk,
+                f"agente-obs-{self.persona.dni}": "Avisó por teléfono",
+            }
+        )
+        self.assertEqual(respuesta.status_code, 302)
+
+        registros = RegistroAsistencia.objects.filter(fecha=LUNES).order_by("designacion_id")
+        self.assertEqual(
+            [(r.designacion_id, r.marca.codigo, r.horas_inasistidas) for r in registros],
+            [
+                (self.designacion.pk, "I", Decimal("2")),
+                (self.perez_2.pk, "I", Decimal("3")),
+            ],
+        )
+        self.assertEqual(
+            {r.observaciones for r in registros}, {"Avisó por teléfono"}
+        )
+
+    def test_presente_por_agente_cubre_todas_sus_materias(self):
+        self.enviar(
+            {
+                f"agente-marca-{self.persona.dni}": self.marca_presente.pk,
+                f"agente-marca-{self.persona_2.dni}": self.marca_presente.pk,
+            }
+        )
+        self.assertEqual(RegistroAsistencia.objects.filter(fecha=LUNES).count(), 3)
+
+    def test_sin_horario_cargado_pide_las_horas_y_no_guarda_nada(self):
+        respuesta = self.enviar(
+            {f"agente-marca-{self.persona.dni}": self.marca_i.pk}
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "no tiene horario cargado")
+        self.assertFalse(RegistroAsistencia.objects.exists())
+
+    def test_sin_horario_valen_las_horas_escritas(self):
+        self.enviar(
+            {
+                f"agente-marca-{self.persona_2.dni}": self.marca_i.pk,
+                f"agente-horas-{self.persona_2.dni}": "2",
+            }
+        )
+        registro = RegistroAsistencia.objects.get(designacion=self.gomez)
+        self.assertEqual(registro.horas_inasistidas, Decimal("2"))
+
+    def test_solo_se_reparte_entre_las_materias_con_clase_ese_dia(self):
+        from personal.models import Horario
+
+        # PEREZ da clase el lunes solo en una de sus dos designaciones.
+        Horario.objects.create(designacion=self.designacion, dia="LUN", horas_catedra=2)
+        Horario.objects.create(designacion=self.perez_2, dia="MAR", horas_catedra=3)
+
+        self.enviar({f"agente-marca-{self.persona.dni}": self.marca_i.pk})
+
+        self.assertEqual(
+            list(
+                RegistroAsistencia.objects.filter(fecha=LUNES)
+                .values_list("designacion_id", flat=True)
+            ),
+            [self.designacion.pk],
+        )
 
     def test_filtra_por_apellido_o_dni(self):
         for texto in ("gomez", "20111222"):
@@ -2161,7 +2432,7 @@ class PlanillaVistasTests(BasePlanillaTests):
     def test_guarda_la_planilla_y_vuelve_al_registro_diario(self):
         respuesta = self.enviar(
             {
-                f"marca-{self.gomez.pk}": self.marca_p.pk,
+                f"marca-{self.gomez.pk}": self.marca_presente.pk,
                 f"marca-{self.designacion.pk}": self.marca_i.pk,
                 f"horas-{self.designacion.pk}": "2,5",
                 f"obs-{self.designacion.pk}": "Aviso por teléfono",
@@ -2187,7 +2458,7 @@ class PlanillaVistasTests(BasePlanillaTests):
     def test_una_fila_con_error_no_guarda_ninguna_y_conserva_lo_cargado(self):
         respuesta = self.enviar(
             {
-                f"marca-{self.gomez.pk}": self.marca_p.pk,
+                f"marca-{self.gomez.pk}": self.marca_presente.pk,
                 f"marca-{self.designacion.pk}": self.marca_i.pk,
                 f"horas-{self.designacion.pk}": "0",
                 f"obs-{self.designacion.pk}": "Texto que debe conservarse",
@@ -2271,7 +2542,7 @@ class PlanillaVistasTests(BasePlanillaTests):
             desde=date(2026, 3, 1),
             hasta=date(2026, 9, 11),
         )
-        self.enviar({f"marca-{vencida.pk}": self.marca_p.pk})
+        self.enviar({f"marca-{vencida.pk}": self.marca_presente.pk})
         self.assertFalse(RegistroAsistencia.objects.exists())
 
     def test_un_fin_de_semana_bloquea_la_planilla(self):
@@ -2279,14 +2550,18 @@ class PlanillaVistasTests(BasePlanillaTests):
         self.assertContains(respuesta, "es fin de semana")
         self.assertNotContains(respuesta, "btn-guardar-asistencia")
 
-        respuesta = self.enviar({f"marca-{self.gomez.pk}": self.marca_p.pk}, SABADO)
+        respuesta = self.enviar({f"marca-{self.gomez.pk}": self.marca_presente.pk}, SABADO)
         self.assertFalse(RegistroAsistencia.objects.exists())
         textos = [str(m) for m in get_messages(respuesta.wsgi_request)]
         self.assertTrue(any("fin de semana" in t for t in textos))
 
-    def test_un_feriado_bloquea_la_planilla(self):
+    def test_un_feriado_se_indica_en_la_planilla_sin_bloquearla(self):
+        """RF-10: fondo e indicador visual; los campos siguen habilitados."""
         DiaNoLaborable.objects.create(fecha=MARTES, descripcion="Feriado de prueba")
-        self.assertContains(self.ver(MARTES), "es feriado")
+        respuesta = self.ver(MARTES)
+        self.assertContains(respuesta, "es feriado")
+        self.assertContains(respuesta, "asis-dia-calendario")
+        self.assertIsNone(respuesta.context["bloqueo"])
 
     def test_una_fecha_futura_bloquea_la_planilla(self):
         manana = timezone.localdate() + timedelta(days=1)
@@ -2314,12 +2589,12 @@ class PlanillaVistasTests(BasePlanillaTests):
         respuesta = self.ver()
         self.assertContains(respuesta, 'name="motivo"')
 
-        self.enviar({f"marca-{self.gomez.pk}": self.marca_p.pk})
+        self.enviar({f"marca-{self.gomez.pk}": self.marca_presente.pk})
         self.assertFalse(RegistroAsistencia.objects.exists())
 
         self.enviar(
             {
-                f"marca-{self.gomez.pk}": self.marca_p.pk,
+                f"marca-{self.gomez.pk}": self.marca_presente.pk,
                 "motivo": "Carga omitida por corte de energía",
             }
         )
@@ -2558,7 +2833,7 @@ class VistasTests(BaseAsistenciaTests):
             {
                 "designacion": self.designacion.pk,
                 "fecha": LUNES.isoformat(),
-                "marca": self.marca_p.pk,
+                "marca": self.marca_presente.pk,
                 "horas_inasistidas": "0",
                 "observaciones": "",
             },
@@ -2582,7 +2857,7 @@ class VistasTests(BaseAsistenciaTests):
             {
                 "designacion": self.designacion.pk,
                 "fecha": LUNES.isoformat(),
-                "marca": self.marca_p.pk,
+                "marca": self.marca_presente.pk,
                 "horas_inasistidas": "0",
                 "observaciones": "",
             },
@@ -2607,7 +2882,7 @@ class VistasTests(BaseAsistenciaTests):
             RegistroAsistencia.objects.create(
                 designacion=self.designacion,
                 fecha=date(2026, 3, 1) + timedelta(days=dia),
-                marca=self.marca_p,
+                marca=self.marca_presente,
             )
         respuesta = self.client.get(
             reverse("asistencia:historial"), {"dni": "30123456"}
@@ -2688,7 +2963,11 @@ class MarcarLicenciaTests(TestCase):
         )
         return LicenciaOtorgada.objects.get(pk=self.licencia.pk)
 
-    def test_saltea_los_feriados_y_lo_informa(self):
+    def test_un_feriado_tambien_se_marca(self):
+        """
+        RF-10: la licencia se computa según el formulario y el horario; el
+        feriado del calendario no saltea el día.
+        """
         from .services import marcar_licencia
 
         DiaNoLaborable.objects.create(
@@ -2699,12 +2978,11 @@ class MarcarLicenciaTests(TestCase):
 
         self.assertEqual(
             resumen["marcados"],
-            [date(2026, 3, 9), date(2026, 3, 10),
+            [date(2026, 3, 9), date(2026, 3, 10), date(2026, 3, 11),
              date(2026, 3, 12), date(2026, 3, 13)],
         )
-        omitidos = dict(resumen["omitidos"])
-        self.assertIn("feriado", omitidos[date(2026, 3, 11)].lower())
-        self.assertFalse(
+        self.assertNotIn(date(2026, 3, 11), dict(resumen["omitidos"]))
+        self.assertTrue(
             RegistroAsistencia.objects.filter(fecha=date(2026, 3, 11)).exists()
         )
 
@@ -2843,7 +3121,7 @@ class MarcarLicenciaTests(TestCase):
         RegistroAsistencia.objects.create(
             designacion=self.designacion,
             fecha=date(2026, 3, 11),
-            marca=MarcaAsistencia.objects.get(codigo="P"),
+            marca=MarcaAsistencia.objects.get(codigo="PR"),
             estado_registro=RegistroAsistencia.Estado.VALIDADO,
         )
 
@@ -2963,9 +3241,9 @@ class InasistenciasDelPeriodoTests(TestCase):
         from .services import inasistencias_del_periodo
 
         self._registrar(date(2026, 3, 10), "I", "2")
-        self._registrar(date(2026, 3, 11), "PR", "1")
+        self._registrar(date(2026, 3, 11), "P", "1")  # permiso
         self._registrar(date(2026, 3, 12), "LIC", "2")  # ya cuenta como licencia
-        self._registrar(date(2026, 3, 13), "P")
+        self._registrar(date(2026, 3, 13), "PR")  # presente
         self._registrar(date(2026, 4, 1), "I", "2")  # fuera del periodo
 
         registros = inasistencias_del_periodo(
@@ -2974,7 +3252,7 @@ class InasistenciasDelPeriodoTests(TestCase):
 
         self.assertEqual(
             [(registro.fecha, registro.marca.codigo) for registro in registros],
-            [(date(2026, 3, 10), "I"), (date(2026, 3, 11), "PR")],
+            [(date(2026, 3, 10), "I"), (date(2026, 3, 11), "P")],
         )
 
 
@@ -3111,7 +3389,7 @@ class AutocompletadoPlanillaTests(BasePlanillaTests):
 
     def test_propone_presente_en_las_filas_pendientes(self):
         fila = self.fila_de(self.ver(), self.designacion)
-        self.assertEqual(fila["valores"]["marca"], str(self.marca_p.pk))
+        self.assertEqual(fila["valores"]["marca"], str(self.marca_presente.pk))
         self.assertEqual(fila["valores"]["origen"], "presente")
 
     def test_con_licencia_vigente_propone_la_marca_y_la_licencia(self):
@@ -3257,13 +3535,13 @@ class LenguajeDeLasMarcasTests(BaseAsistenciaTests):
     """Punto 9: cada marca tiene un nombre llano y una explicación."""
 
     def test_la_etiqueta_usa_el_nombre_llano(self):
-        self.assertEqual(self.marca_p.etiqueta, "Asistió")
+        self.assertEqual(self.marca_presente.etiqueta, "Asistió")
         self.assertEqual(self.marca_i.etiqueta, "Faltó")
-        self.assertEqual(self.marca_pr.etiqueta, "Asistió y se retiró")
+        self.assertEqual(self.marca_permiso.etiqueta, "Permiso")
 
     def test_el_termino_administrativo_no_cambia(self):
-        self.assertEqual(self.marca_p.descripcion, "Presente")
-        self.assertEqual(self.marca_pr.descripcion, "Presente retirado")
+        self.assertEqual(self.marca_presente.descripcion, "Presente")
+        self.assertEqual(self.marca_permiso.descripcion, "Permiso")
 
     def test_sin_nombre_llano_la_etiqueta_cae_en_la_descripcion(self):
         otra = MarcaAsistencia.objects.create(codigo="XX", descripcion="Otra")
@@ -3273,8 +3551,9 @@ class LenguajeDeLasMarcasTests(BaseAsistenciaTests):
         for marca in MarcaAsistencia.vigentes():
             self.assertTrue(marca.ayuda, f"{marca.codigo} sin ayuda")
 
-    def test_la_explicacion_de_pr_avisa_que_cuenta_como_inasistencia(self):
-        self.assertIn("INASISTENCIA", self.marca_pr.ayuda)
+    def test_la_explicacion_del_permiso_pide_horas_y_motivo(self):
+        self.assertIn("horas", self.marca_permiso.ayuda)
+        self.assertIn("motivo", self.marca_permiso.ayuda)
 
 
 class AvisoDeLugaresOcupadosTests(BaseAsistenciaTests):
@@ -3343,14 +3622,15 @@ class SalidaDeLosDiasSinCargaTests(BasePlanillaTests):
             dia_habil_mas_cercano(SABADO), SABADO - timedelta(days=1)
         )
 
-    def test_salta_los_feriados_ademas_del_fin_de_semana(self):
+    def test_un_feriado_no_se_saltea(self):
+        """RF-10: el viernes feriado sigue siendo un día en el que se carga."""
         from .services import dia_habil_mas_cercano
 
         DiaNoLaborable.objects.create(
             fecha=SABADO - timedelta(days=1), descripcion="Feriado"
         )
         self.assertEqual(
-            dia_habil_mas_cercano(SABADO), SABADO - timedelta(days=2)
+            dia_habil_mas_cercano(SABADO), SABADO - timedelta(days=1)
         )
 
     def test_la_pantalla_diaria_de_un_sabado_ofrece_el_viernes(self):
@@ -3395,7 +3675,7 @@ class AvisoDeErroresDeLaPlanillaTests(BasePlanillaTests):
 
     def test_cuenta_las_filas_buenas_y_las_que_fallan(self):
         respuesta = self.enviar({
-            f"marca-{self.gomez.pk}": self.marca_p.pk,
+            f"marca-{self.gomez.pk}": self.marca_presente.pk,
             f"marca-{self.designacion.pk}": self.marca_i.pk,
             f"horas-{self.designacion.pk}": "0",
         })
@@ -3411,13 +3691,13 @@ class AvisoDeErroresDeLaPlanillaTests(BasePlanillaTests):
             f"horas-{self.gomez.pk}": "0",
             f"marca-{self.designacion.pk}": self.marca_i.pk,
             f"horas-{self.designacion.pk}": "0",
-            f"marca-{self.perez_2.pk}": self.marca_p.pk,
+            f"marca-{self.perez_2.pk}": self.marca_presente.pk,
         })
         texto = " ".join(self.mensajes(respuesta))
         self.assertIn("2 filas tienen un problema", texto)
 
     def test_sin_errores_no_avisa_nada(self):
-        self.enviar({f"marca-{self.gomez.pk}": self.marca_p.pk})
+        self.enviar({f"marca-{self.gomez.pk}": self.marca_presente.pk})
         self.assertEqual(RegistroAsistencia.objects.count(), 1)
 
 
@@ -3449,7 +3729,7 @@ class PantallasEnLenguajeLlanoTests(BasePlanillaTests):
     def test_la_planilla_explica_que_significa_cada_opcion(self):
         respuesta = self.planilla()
         self.assertContains(respuesta, "significa cada opci")
-        self.assertContains(respuesta, self.marca_pr.ayuda)
+        self.assertContains(respuesta, self.marca_permiso.ayuda)
 
     def test_la_pantalla_diaria_tambien_trae_la_ayuda(self):
         self.assertContains(self.diaria(), "cargo la asistencia de hoy")
@@ -3465,7 +3745,9 @@ class PantallasEnLenguajeLlanoTests(BasePlanillaTests):
         self.guardar()
         respuesta = self.planilla(alcance="todos")
         self.assertContains(respuesta, "Corregir")
-        self.assertContains(respuesta, "Ya cargado")
+        self.assertContains(respuesta, "Asistió")
+        # PEREZ tiene otra materia sin cargar: la fila sigue abierta para ella.
+        self.assertContains(respuesta, "Vale para las materias que faltan cargar")
 
     # ── Punto 11: el estado se explica, no se codifica ──
     def test_el_estado_se_explica_en_castellano(self):
@@ -3538,7 +3820,7 @@ class PaginadoYRevisionDelDiaTests(BaseAsistenciaTests):
             RegistroAsistencia.objects.create(
                 designacion=self.designacion,
                 fecha=date(2026, 3, 1) + timedelta(days=dia),
-                marca=self.marca_p,
+                marca=self.marca_presente,
             )
 
     def historial(self, **parametros):

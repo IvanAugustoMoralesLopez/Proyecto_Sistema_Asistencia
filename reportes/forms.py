@@ -1,3 +1,5 @@
+import calendar
+from datetime import date
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -18,12 +20,29 @@ User = get_user_model()
 class ParametroSistemaForm(forms.ModelForm):
     class Meta:
         model = ParametroSistema
-        fields = ["codigo_oficina", "nombre_oficina", "ciclo_lectivo"]
+        fields = [
+            "codigo_oficina",
+            "nombre_oficina",
+            "ciclo_lectivo",
+            "limite_inasistencias_anual",
+        ]
         widgets = {
             "codigo_oficina": forms.TextInput(attrs={"class": "form-control"}),
             "nombre_oficina": forms.TextInput(attrs={"class": "form-control"}),
             "ciclo_lectivo": forms.NumberInput(attrs={"class": "form-control"}),
+            "limite_inasistencias_anual": forms.NumberInput(
+                attrs={"class": "form-control", "min": 1, "max": 365}
+            ),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Si no se envía, se conserva el límite que ya estaba configurado.
+        self.fields["limite_inasistencias_anual"].required = False
+
+    def clean_limite_inasistencias_anual(self):
+        valor = self.cleaned_data.get("limite_inasistencias_anual")
+        return self.instance.limite_inasistencias_anual if valor is None else valor
 
 
 class FiltroBitacoraForm(forms.Form):
@@ -62,8 +81,24 @@ class FiltroBitacoraForm(forms.Form):
             .order_by("username")
         )
 
+    def clean_mes(self):
+        texto = (self.cleaned_data.get("mes") or "").strip()
+        if not texto:
+            return None
+        try:
+            anio, mes = (int(parte) for parte in texto.split("-"))
+            return date(anio, mes, 1)
+        except (TypeError, ValueError):
+            raise forms.ValidationError("Elegí un mes válido (AAAA-MM).")
+
     def clean(self):
         datos = super().clean()
+        mes = datos.get("mes")
+        if mes:
+            # RF-17: el mes manda sobre el rango escrito a mano.
+            ultimo = calendar.monthrange(mes.year, mes.month)[1]
+            datos["desde"] = mes
+            datos["hasta"] = date(mes.year, mes.month, ultimo)
         desde, hasta = datos.get("desde"), datos.get("hasta")
         if desde and hasta and desde > hasta:
             raise forms.ValidationError("La fecha «desde» no puede ser posterior a «hasta».")
@@ -197,6 +232,12 @@ class FiltroConsultaForm(forms.Form):
         choices=ORIGENES,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
+    # RF-17: filtro por mes; completa Desde y Hasta con el primer y el último día.
+    mes = forms.CharField(
+        label="Mes",
+        required=False,
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "month"}),
+    )
     desde = forms.DateField(label="Desde", required=False, widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
     hasta = forms.DateField(label="Hasta", required=False, widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
     tipo_licencia = forms.ChoiceField(label="Tipo de licencia", required=False, widget=forms.Select(attrs={"class": "form-select"}))
@@ -246,6 +287,28 @@ class FiltroAlertasForm(forms.Form):
         choices=UMBRALES,
         coerce=int,
         widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+
+class FiltroInasistenciasForm(forms.Form):
+    """RF-18: acumulado de inasistencias y permisos por agente."""
+
+    anio = forms.IntegerField(
+        label="Ciclo lectivo",
+        min_value=2000,
+        max_value=2100,
+        widget=forms.NumberInput(attrs={"class": "form-control"}),
+    )
+    umbral = forms.TypedChoiceField(
+        label="Avisar desde",
+        choices=FiltroAlertasForm.UMBRALES,
+        coerce=int,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    solo_alertas = forms.BooleanField(
+        label="Mostrar solo quienes están cerca del límite o lo agotaron",
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
 
 

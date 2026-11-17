@@ -1,7 +1,18 @@
+from datetime import date
+
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models, transaction
 from django.db.models import F, Q
+
+
+# RN-09: las vigencias admiten una fecha o las cadenas especiales.
+TEXTO_SIN_INICIO = "SIN INICIO"
+TEXTO_SIN_TERMINO = "SIN TERMINO"
+# Una designación SIN INICIO guarda esta fecha en `desde` (y sin_inicio=True),
+# así todas las consultas por vigencia (`desde__lte=fecha`) siguen funcionando
+# sin tener que contemplar un valor nulo.
+FECHA_SIN_INICIO = date(1900, 1, 1)
 
 
 class Persona(models.Model):
@@ -184,6 +195,44 @@ class Motivo(models.Model):
         return self.descripcion
 
 
+def _usuario_de_la_peticion():
+    """Usuario de la petición en curso (lo guarda el middleware de reportes)."""
+    # Import local: reportes importa personal, no al revés.
+    from reportes.usuario_actual import obtener_usuario_actual
+
+    return obtener_usuario_actual()
+
+
+class TipoInstrumentoLegal(models.Model):
+    """
+    Catálogo de tipos de instrumento legal (RF-05): Resolución, Disposición,
+    etc. Se administra desde Personal → Catálogos y alimenta el campo «tipo de
+    norma» de las designaciones y el «tipo de instrumento» de las licencias.
+    """
+
+    nombre = models.CharField(max_length=30, unique=True)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "personal_tipo_instrumento_legal"
+        ordering = ["nombre"]
+        verbose_name = "tipo de instrumento legal"
+        verbose_name_plural = "tipos de instrumento legal"
+
+    def __str__(self):
+        return self.nombre
+
+    @classmethod
+    def opciones(cls, actual=""):
+        """Lista (valor, etiqueta) para un desplegable: los activos y el actual."""
+        nombres = list(
+            cls.objects.filter(activo=True).values_list("nombre", flat=True)
+        )
+        if actual and actual not in nombres:
+            nombres.append(actual)
+        return [("", "---------")] + [(nombre, nombre) for nombre in nombres]
+
+
 class Designacion(models.Model):
     class Situacion(models.TextChoices):
         TITULAR = "TIT", "Titular"
@@ -191,6 +240,9 @@ class Designacion(models.Model):
         SUPLENTE = "SUP", "Suplente"
 
     class TipoNorma(models.TextChoices):
+        # Valores iniciales del catálogo TipoInstrumentoLegal (RF-05). El campo
+        # `norma_tipo` ya no está limitado a esta lista: toma sus opciones del
+        # catálogo, que se administra desde la pantalla de catálogos.
         RESOLUCION = "Resolución", "Resolución"
         DISPOSICION = "Disposición", "Disposición"
 
@@ -257,13 +309,16 @@ class Designacion(models.Model):
     )
     norma_tipo = models.CharField(
         max_length=30,
-        choices=TipoNorma.choices,
         blank=True,
     )
     norma_numero = models.CharField(max_length=30, blank=True)
     norma_anio = models.PositiveSmallIntegerField(blank=True, null=True)
     organismo_emisor = models.CharField(max_length=120, blank=True)
     desde = models.DateField()
+    # RN-09: vigencia SIN INICIO (ver FECHA_SIN_INICIO). SIN TERMINO es
+    # `hasta` vacío.
+    # db_default: los INSERT de datos_prueba.sql no traen esta columna.
+    sin_inicio = models.BooleanField(default=False, db_default=False)
     hasta = models.DateField(blank=True, null=True)
     pof = models.CharField(max_length=30, blank=True)
     anio_pof = models.PositiveSmallIntegerField(blank=True, null=True)
@@ -293,6 +348,18 @@ class Designacion(models.Model):
             ),
             models.Index(fields=["desde", "hasta"], name="ix_desig_vigencia"),
         ]
+
+    @property
+    def desde_texto(self):
+        """Desde para mostrar: dd/mm/aaaa o «SIN INICIO» (RN-09)."""
+        if self.sin_inicio or self.desde == FECHA_SIN_INICIO:
+            return TEXTO_SIN_INICIO
+        return self.desde.strftime("%d/%m/%Y") if self.desde else ""
+
+    @property
+    def hasta_texto(self):
+        """Hasta para mostrar: dd/mm/aaaa o «SIN TERMINO» (RN-09)."""
+        return self.hasta.strftime("%d/%m/%Y") if self.hasta else TEXTO_SIN_TERMINO
 
     def vigente_en(self, fecha):
         return (
@@ -360,6 +427,7 @@ class Designacion(models.Model):
                 "norma_anio",
                 "organismo_emisor",
                 "desde",
+                "sin_inicio",
                 "hasta",
                 "pof",
                 "anio_pof",
@@ -369,6 +437,11 @@ class Designacion(models.Model):
                 "es_suplencia",
                 "plazo_indeterminado",
             )
+            # RN-09: SIN INICIO se guarda con la fecha convenida.
+            if self.sin_inicio:
+                self.desde = FECHA_SIN_INICIO
+            elif self.desde == FECHA_SIN_INICIO:
+                self.sin_inicio = True
             if not es_nueva:
                 anterior = (
                     type(self).objects.filter(pk=self.pk)
@@ -412,13 +485,15 @@ class Designacion(models.Model):
                 activo=self.activo,
                 datos_anteriores=_serializar_valores(anterior),
                 datos_nuevos=_serializar_valores(actual),
+                # RF-20: usuario responsable del cambio.
+                usuario=_usuario_de_la_peticion(),
             )
 
     def __str__(self):
         return (
             f"{self.persona.apellido_nombre} - "
             f"{self.cargo.descripcion} - "
-            f"{self.desde}"
+            f"{TEXTO_SIN_INICIO if self.sin_inicio else self.desde}"
         )
 
 
@@ -487,6 +562,14 @@ class HistorialDesignacion(models.Model):
     activo = models.BooleanField()
     datos_anteriores = models.JSONField(default=dict)
     datos_nuevos = models.JSONField(default=dict)
+    # RF-20: quién hizo el cambio (vacío si vino de un comando o del shell).
+    usuario = models.ForeignKey(
+        "auth.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="cambios_de_designaciones",
+    )
 
     class Meta:
         db_table = "personal_historial_designacion"

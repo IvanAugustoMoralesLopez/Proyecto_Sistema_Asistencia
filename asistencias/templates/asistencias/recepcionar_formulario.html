@@ -32,6 +32,7 @@
                 {% if puede_recepcionar %}
                     <form method="post">
                         {% csrf_token %}
+                        {% if volver %}<input type="hidden" name="volver" value="{{ volver }}">{% endif %}
 
                         {% if form.non_field_errors %}
                             <div class="alert alert-danger">{{ form.non_field_errors }}</div>

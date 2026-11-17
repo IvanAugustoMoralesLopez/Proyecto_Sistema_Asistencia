@@ -1,10 +1,10 @@
 """
 Calendario escolar (RF-10): feriados, asuetos y días inhábiles.
 
-Junto con los fines de semana, `DiaNoLaborable` define los días sin
-obligación de marcado (ver `reglas.motivo_dia_no_laborable`). Cambiar el
-calendario de un período ya cerrado alteraría después de cerrado qué
-asistencias eran válidas, por eso no se permite.
+El calendario es visual y organizativo: la pantalla diaria muestra el día
+con fondo e indicador (ver `reglas.aviso_del_calendario`), pero no bloquea
+la carga ni cambia el cómputo de días u horas. El calendario de un período
+ya cerrado no se modifica, para que lo que se vio al cerrar no cambie.
 """
 
 from django.core.exceptions import ValidationError

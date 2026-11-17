@@ -346,6 +346,21 @@ class RecepcionFormularioForm(forms.Form):
         label="¿Qué día lo recibiste?",
         widget=forms.DateInput(attrs={"type": "date"}),
     )
+    # RF-09: al recibir el formulario el registro pasa de I a LIC o P.
+    nueva_marca = forms.ChoiceField(
+        required=False,
+        label="¿Qué formulario presentó?",
+        choices=[
+            ("", "No cambiar la marca"),
+            ("LIC", "Licencia médica o especial (LIC)"),
+            ("LT", "Largo tratamiento (LT)"),
+            ("P", "Permiso (P)"),
+        ],
+        help_text=(
+            "La marca cambia en todas las materias del docente ese día. "
+            "El artículo se elige después, en la planilla mensual."
+        ),
+    )
     motivo = forms.CharField(
         required=False,
         max_length=500,
@@ -356,6 +371,9 @@ class RecepcionFormularioForm(forms.Form):
 
     def __init__(self, *args, registro, **kwargs):
         super().__init__(*args, **kwargs)
+        if registro.marca.codigo != "I":
+            # Ya tiene la marca del formulario: no hay nada que elegir.
+            del self.fields["nueva_marca"]
 
         permitidos = TRANSICIONES_JUSTIFICACION.get(
             registro.estado_justificacion, set()

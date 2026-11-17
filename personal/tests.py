@@ -394,9 +394,16 @@ class DesignacionTests(TestCase):
             ).encode("utf-8"),
         )
 
-        respuesta = cliente.post(
+        # RF-06: primero la vista previa (no guarda nada), después la confirmación.
+        previa = cliente.post(
             reverse("personal:gestion_legajos"),
             {"accion": "importar_csv", "archivo": archivo},
+        )
+        self.assertEqual(previa.status_code, 200)
+        self.assertContains(previa, "Todavía no se guardó nada")
+        respuesta = cliente.post(
+            reverse("personal:gestion_legajos"),
+            {"accion": "confirmar_csv"},
             follow=True,
         )
 
@@ -423,9 +430,16 @@ class DesignacionTests(TestCase):
             b"dni,apellido_nombre\n30123459,Alta CSV\n",
         )
 
-        respuesta = cliente.post(
+        # RF-06: primero la vista previa (no guarda nada), después la confirmación.
+        previa = cliente.post(
             reverse("personal:gestion_legajos"),
             {"accion": "importar_csv", "archivo": archivo},
+        )
+        self.assertEqual(previa.status_code, 200)
+        self.assertContains(previa, "Todavía no se guardó nada")
+        respuesta = cliente.post(
+            reverse("personal:gestion_legajos"),
+            {"accion": "confirmar_csv"},
             follow=True,
         )
 
@@ -447,9 +461,16 @@ class DesignacionTests(TestCase):
             b"dni,cargo_codigo,desde\n30123456,PROF,2026-03-01\n",
         )
 
-        respuesta = cliente.post(
+        # RF-06: primero la vista previa (no guarda nada), después la confirmación.
+        previa = cliente.post(
             reverse("personal:gestion_legajos"),
             {"accion": "importar_csv", "archivo": archivo},
+        )
+        self.assertEqual(previa.status_code, 200)
+        self.assertContains(previa, "Todavía no se guardó nada")
+        respuesta = cliente.post(
+            reverse("personal:gestion_legajos"),
+            {"accion": "confirmar_csv"},
             follow=True,
         )
 
@@ -470,9 +491,16 @@ class DesignacionTests(TestCase):
             b"dni,cargo_codigo,desde\n30123456,PROF,2026-03-01\n",
         )
 
-        respuesta = cliente.post(
+        # RF-06: primero la vista previa (no guarda nada), después la confirmación.
+        previa = cliente.post(
             reverse("personal:gestion_legajos"),
             {"accion": "importar_csv", "archivo": archivo},
+        )
+        self.assertEqual(previa.status_code, 200)
+        self.assertContains(previa, "Todavía no se guardó nada")
+        respuesta = cliente.post(
+            reverse("personal:gestion_legajos"),
+            {"accion": "confirmar_csv"},
             follow=True,
         )
 
@@ -836,3 +864,210 @@ class DesignacionTests(TestCase):
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, "Modificar designación docente")
         self.assertContains(respuesta, self.persona.dni)
+
+
+class RequerimientosV2PersonalTests(TestCase):
+    """RF-05, RF-06 y RN-09 según el Documento de Requerimientos v2.0."""
+
+    def setUp(self):
+        from .models import TipoInstrumentoLegal
+
+        self.TipoInstrumentoLegal = TipoInstrumentoLegal
+        self.cargo = Cargo.objects.create(codigo="PROF", descripcion="Profesor")
+        self.persona = Persona.objects.create(
+            dni="30123456", apellido_nombre="PEREZ, JUAN"
+        )
+        self.admin = get_user_model().objects.create_superuser(
+            username="admin-v2", password="x"
+        )
+        self.cliente = Client()
+        self.cliente.force_login(self.admin)
+        self.url = reverse("personal:gestion_legajos")
+
+    def csv(self, texto, nombre="personal.csv"):
+        return SimpleUploadedFile(nombre, texto.encode("utf-8"))
+
+    # ── RF-05: catálogo de tipos de instrumento legal ──
+
+    def test_el_catalogo_trae_resolucion_y_disposicion(self):
+        self.assertEqual(
+            set(self.TipoInstrumentoLegal.objects.values_list("nombre", flat=True)),
+            {"Resolución", "Disposición"},
+        )
+
+    def test_abmc_de_tipos_de_instrumento_legal(self):
+        url = reverse("personal:catalogos") + "?seccion=instrumentos"
+
+        # Alta
+        self.cliente.post(url, {"accion": "guardar", "nombre": "Decreto", "activo": "on"})
+        decreto = self.TipoInstrumentoLegal.objects.get(nombre="Decreto")
+        # Consulta
+        self.assertContains(self.cliente.get(url), "Decreto")
+        # Modificación
+        self.cliente.post(
+            url,
+            {"accion": "guardar", "objeto_id": decreto.pk, "nombre": "Decreto provincial", "activo": "on"},
+        )
+        decreto.refresh_from_db()
+        self.assertEqual(decreto.nombre, "Decreto provincial")
+        # Baja lógica: no se elimina
+        self.cliente.post(url, {"accion": "eliminar", "objeto_id": decreto.pk})
+        decreto.refresh_from_db()
+        self.assertFalse(decreto.activo)
+
+    def test_un_tipo_nuevo_se_ofrece_en_la_designacion(self):
+        from .forms import DesignacionForm
+
+        self.TipoInstrumentoLegal.objects.create(nombre="Decreto")
+        opciones = [valor for valor, _ in DesignacionForm().fields["norma_tipo"].choices]
+        self.assertIn("Decreto", opciones)
+
+    # ── RN-09: SIN INICIO / SIN TERMINO ──
+
+    def datos_designacion(self, **cambios):
+        datos = {
+            "persona": self.persona.pk,
+            "cargo": self.cargo.pk,
+            "situacion_revista": "TIT",
+            "norma_tipo": "",
+            "desde": "SIN INICIO",
+            "hasta": "SIN TERMINO",
+        }
+        datos.update(cambios)
+        return datos
+
+    def test_el_formulario_acepta_las_cadenas_especiales(self):
+        from .forms import NuevaDesignacionForm
+
+        form = NuevaDesignacionForm(self.datos_designacion())
+        self.assertTrue(form.is_valid(), form.errors)
+        designacion = form.save()
+
+        self.assertTrue(designacion.sin_inicio)
+        self.assertIsNone(designacion.hasta)
+        self.assertEqual(designacion.desde_texto, "SIN INICIO")
+        self.assertEqual(designacion.hasta_texto, "SIN TERMINO")
+        # SIN INICIO / SIN TERMINO = vigente en cualquier fecha.
+        self.assertTrue(designacion.vigente_en(date(2010, 5, 5)))
+        self.assertTrue(designacion.vigente_en(date(2040, 5, 5)))
+
+    def test_el_formulario_acepta_fechas_en_los_dos_formatos(self):
+        from .forms import NuevaDesignacionForm
+
+        form = NuevaDesignacionForm(
+            self.datos_designacion(desde="01/03/2026", hasta="2026-12-31")
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        designacion = form.save()
+        self.assertEqual(designacion.desde, date(2026, 3, 1))
+        self.assertEqual(designacion.hasta, date(2026, 12, 31))
+        self.assertFalse(designacion.sin_inicio)
+        self.assertEqual(designacion.desde_texto, "01/03/2026")
+
+    def test_el_formulario_rechaza_un_texto_cualquiera(self):
+        from .forms import NuevaDesignacionForm
+
+        form = NuevaDesignacionForm(self.datos_designacion(desde="ayer"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("desde", form.errors)
+
+    def test_al_editar_se_muestran_las_cadenas_especiales(self):
+        from .forms import NuevaDesignacionForm
+
+        designacion = NuevaDesignacionForm(self.datos_designacion())
+        designacion.is_valid()
+        designacion = designacion.save()
+        form = NuevaDesignacionForm(instance=designacion)
+        self.assertIn("SIN INICIO", str(form["desde"]))
+        self.assertIn("SIN TERMINO", str(form["hasta"]))
+
+    def test_la_pantalla_muestra_sin_inicio_y_sin_termino(self):
+        Designacion.objects.create(
+            persona=self.persona, cargo=self.cargo,
+            desde=date(2026, 3, 1), sin_inicio=True,
+        )
+        respuesta = self.cliente.get(self.url, {"dni": self.persona.pk})
+        self.assertContains(respuesta, "SIN INICIO")
+        self.assertContains(respuesta, "SIN TERMINO")
+
+    # ── RF-06: CSV con confirmación, horarios y vigencias especiales ──
+
+    def test_la_vista_previa_no_guarda_nada(self):
+        respuesta = self.cliente.post(
+            self.url,
+            {
+                "accion": "importar_csv",
+                "archivo": self.csv(
+                    "dni,apellido_nombre,cargo_codigo,desde\n"
+                    "31000001,Nuevo Uno,PROF,2026-03-01\n"
+                    "31000002,Nuevo Dos,NOEXISTE,2026-03-01\n"
+                ),
+            },
+        )
+        self.assertContains(respuesta, "Todavía no se guardó nada")
+        self.assertEqual(respuesta.context["csv_pendiente"]["validas"], 1)
+        self.assertEqual(len(respuesta.context["csv_pendiente"]["rechazos"]), 1)
+        self.assertContains(respuesta, "No existe el cargo")
+        self.assertFalse(Persona.objects.filter(pk="31000001").exists())
+        self.assertFalse(Persona.objects.filter(pk="31000002").exists())
+        self.assertEqual(ImportacionPersonalError.objects.count(), 0)
+
+    def test_cancelar_descarta_la_importacion(self):
+        self.cliente.post(
+            self.url,
+            {
+                "accion": "importar_csv",
+                "archivo": self.csv("dni,apellido_nombre\n31000001,Nuevo Uno\n"),
+            },
+        )
+        self.cliente.post(self.url, {"accion": "cancelar_csv"})
+        respuesta = self.cliente.post(self.url, {"accion": "confirmar_csv"}, follow=True)
+        self.assertContains(respuesta, "No hay ninguna importación pendiente")
+        self.assertFalse(Persona.objects.filter(pk="31000001").exists())
+
+    def test_confirmar_importa_horarios_y_vigencias_especiales(self):
+        self.cliente.post(
+            self.url,
+            {
+                "accion": "importar_csv",
+                "archivo": self.csv(
+                    "dni,apellido_nombre,cargo_codigo,situacion_revista,desde,hasta,"
+                    "horas_lun,horas_mie,horas_vie,norma_tipo,observaciones\n"
+                    "31000001,Nuevo Uno,PROF,TITULAR,SIN INICIO,SIN TERMINO,"
+                    "2,3,0,Resolución,Alta por CSV\n"
+                ),
+            },
+        )
+        respuesta = self.cliente.post(self.url, {"accion": "confirmar_csv"}, follow=True)
+        self.assertContains(respuesta, "1 filas importadas")
+
+        designacion = Designacion.objects.get(persona_id="31000001")
+        self.assertTrue(designacion.sin_inicio)
+        self.assertIsNone(designacion.hasta)
+        self.assertEqual(designacion.norma_tipo, "Resolución")
+        self.assertEqual(designacion.observaciones, "Alta por CSV")
+        self.assertEqual(
+            {h.dia: h.horas_catedra for h in designacion.horarios.all()},
+            {"LUN": 2, "MIE": 3},
+        )
+
+    def test_el_csv_rechaza_un_instrumento_que_no_esta_en_el_catalogo(self):
+        archivo = self.csv(
+            "dni,cargo_codigo,desde,norma_tipo\n30123456,PROF,2026-03-01,Papelito\n"
+        )
+        total, rechazadas = _procesar_csv(archivo)
+        self.assertEqual((total, rechazadas), (1, 1))
+        self.assertIn(
+            "tipo de instrumento legal",
+            ImportacionPersonalError.objects.get().motivo_error,
+        )
+
+    def test_el_csv_detecta_un_duplicado_dentro_del_mismo_archivo(self):
+        archivo = self.csv(
+            "dni,cargo_codigo,desde\n"
+            "30123456,PROF,2026-03-01\n"
+            "30123456,PROF,2026-03-01\n"
+        )
+        total, rechazadas = _procesar_csv(archivo)
+        self.assertEqual((total, rechazadas), (2, 1))
+        self.assertEqual(Designacion.objects.filter(persona=self.persona).count(), 1)

@@ -7,6 +7,7 @@ import csv
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -21,6 +22,8 @@ from ..models import CierreDiario, CierreMensual, EventoAsistencia, RegistroAsis
 from ..services import (
     clave_dia,
     conteo_del_dia,
+    aplicar_al_agente,
+    aviso_del_calendario,
     dia_habil_mas_cercano,
     guardar_asistencia,
     horario_del_dia,
@@ -139,6 +142,7 @@ def registro_diario(request):
             "jornada_cerrada": jornada_cerrada,
             "puede_cerrar_jornada": puede_cerrar_jornada,
             "motivo_no_laborable": motivo_no_laborable,
+            "aviso_calendario": aviso_del_calendario(fecha_objeto),
             "total": total,
             "presentes": presentes,
             "inasistencias": inasistencias,
@@ -223,21 +227,42 @@ def editar_asistencia(request, pk):
         )
 
         if form.is_valid():
+            otras = []
+
             try:
                 token = _asegurar_sesion_edicion(request)
-                guardar_asistencia(
-                    usuario=request.user,
-                    token=token,
-                    datos=form.cleaned_data,
-                    registro_id=registro.pk,
-                    motivo=request.POST.get("motivo", ""),
-                )
+                motivo = request.POST.get("motivo", "")
+
+                # Todo o nada: la corrección y su copia a las otras materias.
+                with transaction.atomic():
+                    corregido = guardar_asistencia(
+                        usuario=request.user,
+                        token=token,
+                        datos=form.cleaned_data,
+                        registro_id=registro.pk,
+                        motivo=motivo,
+                    )
+
+                    # RF-07: la novedad es una por agente y jornada.
+                    if request.POST.get("aplicar_al_agente"):
+                        otras = aplicar_al_agente(
+                            usuario=request.user,
+                            token=token,
+                            registro=corregido,
+                            motivo=motivo,
+                        )
             except (ValidationError, PermissionDenied) as exc:
                 messages.error(request, _mensaje_error(exc))
             else:
                 messages.success(
                     request,
-                    "La asistencia se actualizó correctamente.",
+                    "La asistencia se actualizó correctamente."
+                    + (
+                        f" También se cambió en {len(otras)} materia(s) más "
+                        "del docente ese día."
+                        if otras
+                        else ""
+                    ),
                 )
                 if volver:
                     return redirect(volver)
@@ -254,6 +279,10 @@ def editar_asistencia(request, pk):
         {
             "form": form,
             "registro": registro,
+            "otras_materias": RegistroAsistencia.objects.filter(
+                fecha=registro.fecha,
+                designacion__persona_id=registro.designacion.persona_id,
+            ).exclude(pk=registro.pk).count(),
             "titulo": "Editar asistencia",
             "volver": volver,
             "url_cancelar": volver or reverse("asistencia:historial"),
@@ -314,6 +343,7 @@ def datos_designacion(request):
             else ""
         ),
         "motivo_no_laborable": motivo_dia_no_laborable(fecha) or "",
+        "aviso_calendario": aviso_del_calendario(fecha),
         "licencias": [
             {
                 "id": licencia.pk,

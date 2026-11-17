@@ -24,19 +24,78 @@ from .forms import (
     EspacioCurricularForm,
     NuevaDesignacionForm,
     PersonaForm,
+    TipoInstrumentoLegalForm,
+    interpretar_fecha_de_vigencia,
 )
 from .models import (
+    FECHA_SIN_INICIO,
+    TEXTO_SIN_INICIO,
+    TEXTO_SIN_TERMINO,
     Cargo,
     Carrera,
     Designacion,
     EspacioCurricular,
+    Horario,
     ImportacionPersonalError,
     Persona,
+    TipoInstrumentoLegal,
 )
 from licencias.models import LicenciaArticulo, LicenciaOtorgada
 from licencias.forms import LicenciaArticuloForm
 
 MAX_CSV_BYTES = 5 * 1024 * 1024
+
+# Clave de sesión donde queda el CSV ya validado a la espera de la
+# confirmación de la persona administradora (RF-06).
+SESION_CSV = "personal_csv_pendiente"
+
+# Columnas del CSV con las horas cátedra de cada día (RF-03 / RF-06).
+COLUMNAS_HORAS = {
+    "horas_lun": Horario.Dia.LUNES,
+    "horas_mar": Horario.Dia.MARTES,
+    "horas_mie": Horario.Dia.MIERCOLES,
+    "horas_jue": Horario.Dia.JUEVES,
+    "horas_vie": Horario.Dia.VIERNES,
+}
+
+
+def _fecha_de_vigencia_csv(texto, columna, especial):
+    """RN-09: fecha (AAAA-MM-DD o dd/mm/aaaa) o la cadena especial de la columna."""
+    try:
+        valor = interpretar_fecha_de_vigencia(texto)
+    except ValueError as exc:
+        raise ValidationError(
+            f"La fecha '{columna}' debe tener formato AAAA-MM-DD "
+            f"(o dd/mm/aaaa) o ser {especial}."
+        ) from exc
+
+    if isinstance(valor, str) and valor != especial:
+        raise ValidationError(
+            f"En la columna '{columna}' la cadena especial es {especial}."
+        )
+
+    return valor
+
+
+def _horas_de_la_fila(fila):
+    """Horas por día indicadas en la fila: {dia: horas}. Vacío = no indicado."""
+    horas = {}
+
+    for columna, dia in COLUMNAS_HORAS.items():
+        texto = (fila.get(columna) or "").strip()
+
+        if not texto:
+            continue
+
+        if not texto.isdigit() or int(texto) > 255:
+            raise ValidationError(
+                f"La columna '{columna}' debe ser un número entero de horas."
+            )
+
+        if int(texto):
+            horas[dia] = int(texto)
+
+    return horas
 
 
 def _pk_valido(modelo, valor):
@@ -157,24 +216,52 @@ def _importar_fila_personal(fila, usuario=None):
         raise ValidationError(f"No existe el cargo '{codigo_cargo}'.")
 
     espacio_nombre = (fila.get("espacio_curricular") or "").strip()
+    carrera_nombre = (fila.get("carrera") or "").strip()
     espacio = None
     if espacio_nombre:
-        espacio = EspacioCurricular.objects.filter(
+        espacios = EspacioCurricular.objects.filter(
             nombre__iexact=espacio_nombre,
             activo=True,
-        ).first()
+        )
+        if carrera_nombre:
+            espacios = espacios.filter(carrera__nombre__iexact=carrera_nombre)
+        elif espacios.count() > 1:
+            raise ValidationError(
+                f"El espacio curricular '{espacio_nombre}' existe en más de "
+                "una carrera: indique la columna 'carrera'."
+            )
+        espacio = espacios.first()
         if espacio is None:
             raise ValidationError(
-                f"No existe el espacio curricular '{espacio_nombre}'."
+                f"No existe el espacio curricular '{espacio_nombre}'"
+                + (f" en la carrera '{carrera_nombre}'." if carrera_nombre else ".")
             )
 
-    fecha_inicio = (fila.get("desde") or "").strip()
-    try:
-        desde = date.fromisoformat(fecha_inicio)
-    except ValueError as exc:
+    # RN-09: 'desde' admite una fecha o SIN INICIO.
+    desde = _fecha_de_vigencia_csv(
+        fila.get("desde"), "desde", TEXTO_SIN_INICIO
+    )
+    if desde is None:
         raise ValidationError(
-            "La fecha 'desde' debe tener formato AAAA-MM-DD."
-        ) from exc
+            "Falta la fecha 'desde' (AAAA-MM-DD, dd/mm/aaaa o SIN INICIO)."
+        )
+    sin_inicio = desde == TEXTO_SIN_INICIO
+    if sin_inicio:
+        desde = FECHA_SIN_INICIO
+
+    horas_por_dia = _horas_de_la_fila(fila)
+
+    norma_tipo = (fila.get("norma_tipo") or "").strip()
+    if norma_tipo:
+        tipo = TipoInstrumentoLegal.objects.filter(
+            nombre__iexact=norma_tipo
+        ).first()
+        if tipo is None:
+            raise ValidationError(
+                f"No existe el tipo de instrumento legal '{norma_tipo}'. "
+                "Agréguelo en Catálogos → Instrumentos legales."
+            )
+        norma_tipo = tipo.nombre
 
     situacion = (fila.get("situacion_revista") or "").strip().upper()
     situacion = {
@@ -200,10 +287,12 @@ def _importar_fila_personal(fila, usuario=None):
         espacio_curricular=espacio,
         reemplaza=reemplaza,
         situacion_revista=situacion,
-        norma_tipo=(fila.get("norma_tipo") or "").strip(),
+        norma_tipo=norma_tipo,
         norma_numero=(fila.get("norma_numero") or "").strip(),
         organismo_emisor=(fila.get("organismo_emisor") or "").strip(),
+        observaciones=(fila.get("observaciones") or "").strip(),
         desde=desde,
+        sin_inicio=sin_inicio,
         es_suplencia=(fila.get("es_suplencia") or "").strip().lower()
         in {"1", "si", "sí", "true"},
         plazo_indeterminado=(fila.get("plazo_indeterminado") or "")
@@ -211,16 +300,15 @@ def _importar_fila_personal(fila, usuario=None):
         .lower()
         in {"1", "si", "sí", "true"},
     )
-    fecha_fin = (fila.get("hasta") or "").strip()
-    if fecha_fin:
-        try:
-            designacion.hasta = date.fromisoformat(fecha_fin)
-        except ValueError as exc:
-            raise ValidationError(
-                "La fecha 'hasta' debe tener formato AAAA-MM-DD."
-            ) from exc
-    elif designacion.plazo_indeterminado:
-        designacion.hasta = None
+    # RN-09: 'hasta' admite una fecha o SIN TERMINO (o quedar vacío).
+    hasta = _fecha_de_vigencia_csv(
+        fila.get("hasta"), "hasta", TEXTO_SIN_TERMINO
+    )
+    if hasta == TEXTO_SIN_TERMINO:
+        hasta = None
+        if designacion.es_suplencia:
+            designacion.plazo_indeterminado = True
+    designacion.hasta = hasta
 
     designacion.full_clean()
     if Designacion.objects.filter(
@@ -236,8 +324,19 @@ def _importar_fila_personal(fila, usuario=None):
         )
     designacion.save()
 
+    # RF-03 / RF-06: distribución horaria por día de la designación.
+    for dia, horas in horas_por_dia.items():
+        Horario.objects.create(
+            designacion=designacion, dia=dia, horas_catedra=horas
+        )
 
-def _procesar_csv(archivo, usuario=None):
+
+class _DeshacerSimulacion(Exception):
+    """Fuerza el rollback de la importación simulada."""
+
+
+def _leer_archivo_csv(archivo):
+    """Valida tamaño, extensión y codificación. Devuelve (nombre, contenido)."""
     if archivo.size > MAX_CSV_BYTES:
         raise ValidationError("El archivo CSV supera el máximo de 5 MB.")
     if not archivo.name.lower().endswith(".csv"):
@@ -248,31 +347,68 @@ def _procesar_csv(archivo, usuario=None):
     except UnicodeDecodeError as exc:
         raise ValidationError("El archivo debe estar codificado en UTF-8.") from exc
 
+    return archivo.name[:255], contenido
+
+
+def _importar_contenido(nombre, contenido, usuario=None, *, simular=False):
+    """
+    Recorre el CSV fila por fila. Devuelve (total, rechazos), donde cada
+    rechazo es {"fila", "dni", "motivo"}.
+
+    Con `simular=True` hace exactamente las mismas validaciones (duplicados e
+    inconsistencias) pero no deja nada guardado: es la vista previa que la
+    persona administradora confirma antes de importar (RF-06).
+    """
     lector = csv.DictReader(io.StringIO(contenido))
     if not lector.fieldnames:
         raise ValidationError("El CSV debe incluir una fila de encabezados.")
-    lector.fieldnames = [nombre.strip().lower() for nombre in lector.fieldnames]
+    lector.fieldnames = [campo.strip().lower() for campo in lector.fieldnames]
     if "dni" not in lector.fieldnames:
         raise ValidationError("El CSV debe incluir una columna 'dni'.")
 
     total = 0
-    rechazadas = 0
-    for numero_fila, fila in enumerate(lector, start=2):
-        total += 1
-        try:
-            with transaction.atomic():
-                _importar_fila_personal(fila, usuario=usuario)
-        except (ValidationError, IntegrityError, ValueError) as exc:
-            rechazadas += 1
+    rechazos = []
+
+    try:
+        with transaction.atomic():
+            for numero_fila, fila in enumerate(lector, start=2):
+                total += 1
+                try:
+                    with transaction.atomic():
+                        _importar_fila_personal(fila, usuario=usuario)
+                except (ValidationError, IntegrityError, ValueError) as exc:
+                    rechazos.append(
+                        {
+                            "fila": numero_fila,
+                            "dni": (fila.get("dni") or "")[:20],
+                            "motivo": _mensaje_errores(exc)[:255],
+                            "original": fila,
+                        }
+                    )
+
+            if simular:
+                raise _DeshacerSimulacion
+    except _DeshacerSimulacion:
+        pass
+
+    if not simular:
+        for rechazo in rechazos:
             ImportacionPersonalError.objects.create(
-                archivo=archivo.name[:255],
-                numero_fila=numero_fila,
-                dni_texto=(fila.get("dni") or "")[:20],
-                motivo_error=_mensaje_errores(exc)[:255],
-                fila_original=fila,
+                archivo=nombre,
+                numero_fila=rechazo["fila"],
+                dni_texto=rechazo["dni"],
+                motivo_error=rechazo["motivo"],
+                fila_original=rechazo["original"],
             )
 
-    return total, rechazadas
+    return total, rechazos
+
+
+def _procesar_csv(archivo, usuario=None):
+    """Importa el archivo de una vez. Devuelve (total, rechazadas)."""
+    nombre, contenido = _leer_archivo_csv(archivo)
+    total, rechazos = _importar_contenido(nombre, contenido, usuario)
+    return total, len(rechazos)
 
 
 @login_required
@@ -284,32 +420,86 @@ def gestion_legajos(request):
     if request.method == "POST":
         accion = request.POST.get("accion")
         if accion == "importar_csv":
+            # RF-06, paso 1: se valida todo el archivo SIN guardar nada y se
+            # muestra el resultado para que la administradora lo confirme.
             if not _puede_importar_csv(request.user):
                 raise PermissionDenied
             archivo = request.FILES.get("archivo")
             if not archivo:
                 messages.error(request, "Seleccione un archivo CSV.")
+                return redirect(reverse("personal:gestion_legajos"))
+            try:
+                nombre, contenido = _leer_archivo_csv(archivo)
+                total, rechazos = _importar_contenido(
+                    nombre, contenido, usuario=request.user, simular=True
+                )
+            except ValidationError as exc:
+                messages.error(request, _mensaje_errores(exc))
+                return redirect(reverse("personal:gestion_legajos"))
+
+            request.session[SESION_CSV] = {
+                "nombre": nombre,
+                "contenido": contenido,
+            }
+            return render(
+                request,
+                "personal/gestion_legajos.html",
+                {
+                    **_contexto_pantalla(request),
+                    "csv_pendiente": {
+                        "nombre": nombre,
+                        "total": total,
+                        "validas": total - len(rechazos),
+                        "rechazos": [
+                            {k: r[k] for k in ("fila", "dni", "motivo")}
+                            for r in rechazos
+                        ],
+                    },
+                },
+            )
+
+        if accion == "cancelar_csv":
+            request.session.pop(SESION_CSV, None)
+            messages.info(request, "La importación se canceló: no se guardó nada.")
+            return redirect(reverse("personal:gestion_legajos"))
+
+        if accion == "confirmar_csv":
+            # RF-06, paso 2: la administradora confirmó; recién ahora se guarda.
+            if not _puede_importar_csv(request.user):
+                raise PermissionDenied
+            pendiente = request.session.pop(SESION_CSV, None)
+            if not pendiente:
+                messages.error(
+                    request,
+                    "No hay ninguna importación pendiente de confirmar. "
+                    "Vuelva a seleccionar el archivo.",
+                )
+                return redirect(reverse("personal:gestion_legajos"))
+            try:
+                total, rechazos = _importar_contenido(
+                    pendiente["nombre"],
+                    pendiente["contenido"],
+                    usuario=request.user,
+                )
+            except ValidationError as exc:
+                messages.error(request, _mensaje_errores(exc))
             else:
-                try:
-                    total, rechazadas = _procesar_csv(archivo, usuario=request.user)
-                except ValidationError as exc:
-                    messages.error(request, _mensaje_errores(exc))
-                else:
-                    registrar_evento(
-                        request.user,
-                        AccionesReportes.IMPORTACION,
-                        motivo=f"Archivo {archivo.name}"[:500],
-                        despues={
-                            "filas": total,
-                            "importadas": total - rechazadas,
-                            "rechazadas": rechazadas,
-                        },
-                    )
-                    messages.success(
-                        request,
-                        f"Importación finalizada: {total - rechazadas} filas "
-                        f"importadas y {rechazadas} rechazadas.",
-                    )
+                rechazadas = len(rechazos)
+                registrar_evento(
+                    request.user,
+                    AccionesReportes.IMPORTACION,
+                    motivo=f"Archivo {pendiente['nombre']}"[:500],
+                    despues={
+                        "filas": total,
+                        "importadas": total - rechazadas,
+                        "rechazadas": rechazadas,
+                    },
+                )
+                messages.success(
+                    request,
+                    f"Importación finalizada: {total - rechazadas} filas "
+                    f"importadas y {rechazadas} rechazadas.",
+                )
             return redirect(reverse("personal:gestion_legajos"))
 
         if accion == "guardar_persona":
@@ -574,6 +764,12 @@ def catalogos_personal(request):
             "form": EspacioCurricularForm,
             "campo_activo": "activo",
         },
+        "instrumentos": {
+            "titulo": "Instrumentos legales",
+            "modelo": TipoInstrumentoLegal,
+            "form": TipoInstrumentoLegalForm,
+            "campo_activo": "activo",
+        },
         "licencias": {
             "titulo": "Tipos de licencia",
             "modelo": LicenciaArticulo,
@@ -588,6 +784,7 @@ def catalogos_personal(request):
         "cargos": "personal.change_cargo",
         "carreras": "personal.change_carrera",
         "espacios": "personal.change_espaciocurricular",
+        "instrumentos": "personal.change_tipoinstrumentolegal",
         "licencias": "licencias.change_licenciaarticulo",
     }
     if not request.user.has_perm(permisos_seccion[seccion]):

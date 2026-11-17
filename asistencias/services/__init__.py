@@ -59,7 +59,12 @@ from .recepcion import (
     validar_asistencia,
     validar_multiples,
 )
-from .registro import PlanillaConErrores, guardar_asistencia, guardar_planilla
+from .registro import (
+    PlanillaConErrores,
+    aplicar_al_agente,
+    guardar_asistencia,
+    guardar_planilla,
+)
 from .reglas import (
     DIA_HORARIO,
     DIAS_HABILES,
@@ -70,6 +75,8 @@ from .reglas import (
     fecha_admitida,
     id_admitido,
     dia_habil_mas_cercano,
+    aviso_del_calendario,
+    dia_del_calendario,
     motivo_dia_no_laborable,
     nombre_del_mes,
     validar_dia_laborable,
@@ -114,8 +121,11 @@ __all__ = [
     "renovar_sesion_edicion",
     "liberar_sesion_edicion",
     "motivo_dia_no_laborable",
+    "aviso_del_calendario",
+    "dia_del_calendario",
     "validar_dia_laborable",
     "guardar_asistencia",
+    "aplicar_al_agente",
     "guardar_planilla",
     "recepcionar_formulario",
     "validar_asistencia",

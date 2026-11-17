@@ -155,21 +155,41 @@ def _fin_de_semana_habilitado():
     )
 
 
+def dia_del_calendario(fecha):
+    """
+    Feriado, asueto o día inhábil cargado en el calendario escolar para la
+    fecha, o None.
+
+    RF-10: el calendario es visual y organizativo (fondo e indicador en la
+    pantalla diaria). No bloquea la carga ni cambia ningún cómputo: los días
+    se computan según el formulario presentado y los horarios vigentes.
+    """
+    return DiaNoLaborable.objects.filter(fecha=fecha).first()
+
+
+def aviso_del_calendario(fecha):
+    """Texto del indicador visual del día («09/07/2026 es feriado (…)»), o ""."""
+    dia = dia_del_calendario(fecha)
+
+    if dia is None:
+        return ""
+
+    texto = f"{fecha:%d/%m/%Y} es {dia.get_tipo_display().lower()}"
+
+    if dia.descripcion:
+        texto += f" ({dia.descripcion})"
+
+    return texto
+
+
 def motivo_dia_no_laborable(fecha):
     """
-    Devuelve el motivo por el que la fecha no tiene obligación de marcado
-    (feriado, asueto, día inhábil o fin de semana), o None si es hábil.
+    Devuelve el motivo por el que en la fecha no se carga asistencia, o None.
+
+    Solo los fines de semana: los horarios de las designaciones van de lunes
+    a viernes. Los feriados, asuetos y días inhábiles del calendario NO
+    bloquean (RF-10): se informan con `aviso_del_calendario`.
     """
-    dia = DiaNoLaborable.objects.filter(fecha=fecha).first()
-
-    if dia:
-        texto = f"{fecha:%d/%m/%Y} es {dia.get_tipo_display().lower()}"
-
-        if dia.descripcion:
-            texto += f" ({dia.descripcion})"
-
-        return texto
-
     if fecha.weekday() not in DIAS_HABILES and not _fin_de_semana_habilitado():
         return f"{fecha:%d/%m/%Y} es fin de semana"
 

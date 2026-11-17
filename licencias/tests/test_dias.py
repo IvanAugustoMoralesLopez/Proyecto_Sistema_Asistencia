@@ -11,9 +11,10 @@ class DiasHabilesTests(SimpleTestCase):
     def test_semana_completa_cuenta_cinco(self):
         self.assertEqual(contar_dias_habiles(date(2026, 10, 26), date(2026, 11, 1), set()), 5)
 
-    def test_feriado_en_dia_habil_se_descuenta(self):
+    def test_feriado_en_dia_habil_no_se_descuenta(self):
+        # RF-10: el calendario es solo visual; el feriado cuenta como cualquier día.
         feriados = {date(2026, 10, 28)}
-        self.assertEqual(contar_dias_habiles(date(2026, 10, 26), date(2026, 11, 1), feriados), 4)
+        self.assertEqual(contar_dias_habiles(date(2026, 10, 26), date(2026, 11, 1), feriados), 5)
 
     def test_feriado_en_fin_de_semana_no_descuenta_dos_veces(self):
         feriados = {date(2026, 10, 31)}

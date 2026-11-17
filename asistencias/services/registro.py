@@ -155,6 +155,59 @@ def guardar_asistencia(
     return registro
 
 
+@transaction.atomic
+def aplicar_al_agente(*, usuario, token, registro, motivo=""):
+    """
+    RF-07 / RF-11: la novedad diaria es una sola por agente y jornada. Al
+    corregir la marca de una materia, la misma marca se lleva a las demás
+    materias que el docente ya tiene cargadas ese día, cada una con las
+    horas de su horario. Devuelve los registros que cambiaron.
+    """
+    from .agenda import horas_del_dia
+
+    otros = (
+        RegistroAsistencia.objects.select_related(
+            "designacion__persona", "marca"
+        )
+        .prefetch_related("designacion__horarios")
+        .filter(
+            fecha=registro.fecha,
+            designacion__persona_id=registro.designacion.persona_id,
+        )
+        .exclude(pk=registro.pk)
+    )
+    marca = registro.marca
+    cambiados = []
+
+    for otro in otros:
+        if otro.marca_id == marca.pk:
+            continue
+
+        horas = horas_del_dia(otro.designacion, registro.fecha)
+
+        if marca.requiere_horas and horas <= 0:
+            horas = otro.horas_inasistidas or registro.horas_inasistidas
+
+        cambiados.append(
+            guardar_asistencia(
+                usuario=usuario,
+                token=token,
+                datos={
+                    "designacion": otro.designacion,
+                    "fecha": registro.fecha,
+                    "marca": marca,
+                    "horas_inasistidas": horas,
+                    "licencia": None,
+                    "observaciones": registro.observaciones,
+                },
+                registro_id=otro.pk,
+                motivo=motivo,
+            )
+        )
+
+    return cambiados
+
+
 class PlanillaConErrores(Exception):
     """Filas de la planilla rápida con errores: {designacion_id: mensaje}."""
 

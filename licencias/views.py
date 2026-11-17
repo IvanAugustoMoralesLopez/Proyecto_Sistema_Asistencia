@@ -1,192 +1,50 @@
+import csv
 import os
-import calendar
-from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
+from django.core.exceptions import ValidationError
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.dateparse import parse_date
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
-from personal.models import Horario
-
 from asistencias.services import (
-    inasistencias_del_periodo,
     marcar_licencia,
     motivo_dia_no_laborable,
     registros_huerfanos_de_licencia,
 )
 
-from .clasificacion import CategoriaSinPlanillaError, PLANILLA_IL01, PLANILLA_IL02
-from .dias import fecha_de_hoy, mes_vecino, obtener_feriados
+from .dias import fecha_de_hoy, mes_vecino
 from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm, ResolucionAdjuntaForm
 from .models import LicenciaArticulo, LicenciaOtorgada, ResolucionAdjunta
-from .services import (
-    clasificar_planilla_licencia,
-    emitir_disposiciones_mes,
-    previsualizar_disposiciones_mes,
+from .planilla_mensual import (
+    articulos_para_renglon,
+    cuadros_del_mes,
+    emitir_disposiciones_planilla,
+    disposiciones_emitidas_del_mes,
+    faltas_sin_formulario,
+    imputar_renglones,
+    previsualizar_disposiciones_planilla,
+    procesar_mes,
 )
-# Mapeo de Python weekday() a formato varchar(3) de la DB
-MAPEO_DIAS = {
-    0: 'LUN', 1: 'MAR', 2: 'MIE', 3: 'JUE', 4: 'VIE', 5: 'SAB', 6: 'DOM'
-}
-
-SIN_CLASIFICAR = 'SIN CLASIFICAR'
-
-
-def _horas_por_dia(designacion_id, cache):
-    """Horas cátedra por día de la semana de una designación (ej: {'LUN': 4})."""
-    if designacion_id not in cache:
-        horas = {}
-        for h in Horario.objects.filter(designacion_id=designacion_id):
-            horas[h.dia] = horas.get(h.dia, 0) + h.horas_catedra
-        cache[designacion_id] = horas
-    return cache[designacion_id]
-
 @login_required
 @permission_required("licencias.view_licenciaotorgada", raise_exception=True)
 def reporte_mensual_licencias(request, anio: int, mes: int):
-    if not 1 <= mes <= 12:
-        raise Http404("Mes inválido")
-    if not 2000 <= anio <= 2100:
-        raise Http404("Año fuera de rango")
-
-    primer_dia = date(anio, mes, 1)
-    ultimo_dia = date(anio, mes, calendar.monthrange(anio, mes)[1])
-
-    # RF-10: los feriados/asuetos no generan horas afectadas. Una sola consulta.
-    feriados = obtener_feriados(primer_dia, ultimo_dia)
-
-    # RF-12: licencias que intersecan con este mes
-    licencias = LicenciaOtorgada.objects.filter(
-        desde__lte=ultimo_dia
-    ).exclude(
-        hasta__lt=primer_dia
-    ).select_related(
-        'designacion__persona',
-        'designacion__espacio_curricular',
-        'designacion__cargo',
-        'articulo',
+    """
+    El reporte por licencias fue reemplazado por la planilla mensual IL-01 /
+    IL-02, que se arma desde la asistencia diaria (RF-12 a RF-16). La
+    dirección se conserva para que los enlaces guardados no den error.
+    """
+    messages.info(
+        request,
+        "El reporte por licencias se reemplazó por la planilla mensual IL-01 / IL-02.",
     )
-
-    desglose = []
-    cache_horarios = {}
-
-    for lic in licencias:
-        # RF-15: clasificación IL-01 / IL-02 (estricta, RN-04 / RN-05)
-        try:
-            planilla_destino = clasificar_planilla_licencia(lic)
-            requiere_revision = False
-        except CategoriaSinPlanillaError:
-            planilla_destino = SIN_CLASIFICAR
-            requiere_revision = True
-
-        inicio_mes = max(lic.desde, primer_dia)
-        fin_mes = min(lic.hasta, ultimo_dia) if lic.hasta else ultimo_dia
-
-        horas_por_dia = _horas_por_dia(lic.designacion_id, cache_horarios)
-
-        horas_afectadas = 0
-        dias_totales_mes = (fin_mes - inicio_mes).days + 1
-
-        # RF-13: se recorren los días de la licencia y se suman las horas afectadas.
-        # No se usa "solo días hábiles" porque pueden existir horarios en sábado;
-        # lo único que se omite son los feriados (RF-10).
-        for i in range(dias_totales_mes):
-            dia_evaluado = inicio_mes + timedelta(days=i)
-            if dia_evaluado in feriados:
-                continue
-            horas_afectadas += horas_por_dia.get(MAPEO_DIAS[dia_evaluado.weekday()], 0)
-
-        desglose.append({
-            'dni_docente': lic.designacion.persona_id,
-            'docente': lic.designacion.persona.apellido_nombre,
-            'espacio_curricular': (
-                lic.designacion.espacio_curricular.nombre
-                if lic.designacion.espacio_curricular
-                else None
-            ),
-            'cargo': (
-                lic.designacion.cargo.descripcion
-                if lic.designacion.cargo_id
-                else None
-            ),
-            'licencia_solicitada': f"{lic.articulo.articulo} - {lic.articulo.tipo_licencia}",
-            'planilla': planilla_destino,
-            'requiere_revision': requiere_revision,
-            'fecha_inicio': inicio_mes,
-            'fecha_fin': fin_mes,
-            'dias_totales': dias_totales_mes,
-            'horas_descontadas': horas_afectadas,
-        })
-
-    total_horas = sum(fila['horas_descontadas'] for fila in desglose)
-
-    # Una tabla por planilla: IL-01, IL-02 y las que no se pudieron clasificar.
-    grupos = []
-    for planilla, titulo in (
-        (PLANILLA_IL01, 'Licencias por salud (planilla IL-01): enfermedad, tratamiento y enfermedad familiar'),
-        (PLANILLA_IL02, 'Licencias administrativas (planilla IL-02): razones particulares, exámenes, duelo, matrimonio y otras'),
-        (SIN_CLASIFICAR, 'Sin clasificar (requieren revisión)'),
-    ):
-        filas = [fila for fila in desglose if fila['planilla'] == planilla]
-        grupos.append({
-            'planilla': planilla,
-            'titulo': titulo,
-            'filas': filas,
-            'total_horas': sum(fila['horas_descontadas'] for fila in filas),
-        })
-
-    # RF-12: inasistencias del registro diario (marcas I y PR), una fila por
-    # designacion. Las licencias (LIC y LT) ya estan contadas mas arriba.
-    por_designacion = {}
-    for registro in inasistencias_del_periodo(primer_dia, ultimo_dia):
-        designacion = registro.designacion
-        fila = por_designacion.get(designacion.pk)
-
-        if fila is None:
-            fila = por_designacion[designacion.pk] = {
-                'dni_docente': designacion.persona_id,
-                'docente': designacion.persona.apellido_nombre,
-                'espacio_curricular': (
-                    designacion.espacio_curricular.nombre
-                    if designacion.espacio_curricular
-                    else None
-                ),
-                'cargo': (
-                    designacion.cargo.descripcion
-                    if designacion.cargo_id
-                    else None
-                ),
-                'dias': 0,
-                'horas': 0,
-            }
-
-        fila['dias'] += 1
-        fila['horas'] += registro.horas_inasistidas
-
-    inasistencias = sorted(
-        por_designacion.values(), key=lambda fila: fila['docente'],
-    )
-    total_horas_inasistencias = sum(fila['horas'] for fila in inasistencias)
-
-    anio_anterior, mes_anterior = mes_vecino(anio, mes, -1)
-    anio_siguiente, mes_siguiente = mes_vecino(anio, mes, 1)
-
-    return render(request, 'licencias/reporte_mensual.html', {
-        'anio': anio,
-        'mes': mes,
-        'desglose': desglose,
-        'total_horas': total_horas,
-        'grupos': grupos,
-        'mes_anterior': {'anio': anio_anterior, 'mes': mes_anterior},
-        'mes_siguiente': {'anio': anio_siguiente, 'mes': mes_siguiente},
-        'inasistencias': inasistencias,
-        'total_horas_inasistencias': total_horas_inasistencias,
-    })
+    return redirect("licencias:planilla_mensual", anio, mes)
 
 
 def _marcar_y_avisar(request, licencia):
@@ -231,10 +89,26 @@ def _marcar_y_avisar(request, licencia):
             "de asistencias.",
         )
 
+def _volver_seguro(request):
+    """
+    Dirección a la que volver después de guardar (por ejemplo, la planilla
+    mensual). Solo se aceptan direcciones de este mismo sitio.
+    """
+    destino = request.POST.get("volver") or request.GET.get("volver") or ""
+    if destino and url_has_allowed_host_and_scheme(
+        destino, allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return destino
+    return ""
+
+
 @login_required 
 @permission_required("licencias.add_licenciaotorgada", raise_exception=True)
 @require_http_methods(["GET", "POST"])
 def nueva_licencia_otorgada(request):
+    volver = _volver_seguro(request)
+
     if request.method == "POST":
         form = LicenciaOtorgadaForm(request.POST)
 
@@ -245,15 +119,26 @@ def nueva_licencia_otorgada(request):
                 "La licencia se registró correctamente."
             )
             _marcar_y_avisar(request, licencia)
-            return redirect(reverse("licencias:nueva_licencia_otorgada"))
+            return redirect(volver or reverse("licencias:nueva_licencia_otorgada"))
 
     else:
-        form = LicenciaOtorgadaForm()
+        # Desde el cuadro de faltas sin formulario de la planilla mensual se
+        # llega con la designación y la fecha ya elegidas. Solo precarga los
+        # campos: el guardado es el mismo de siempre.
+        inicial = {}
+        designacion = request.GET.get("designacion", "")
+        if designacion.isdigit():
+            inicial["designacion"] = int(designacion)
+        desde = parse_date(request.GET.get("desde", "") or "")
+        if desde:
+            inicial["desde"] = desde
+            inicial["hasta"] = desde
+        form = LicenciaOtorgadaForm(initial=inicial)
 
     return render(
         request,
         "licencias/nueva_licencia_otorgada.html",
-        {"form": form}
+        {"form": form, "volver": volver}
     )
 
 LICENCIAS_POR_PAGINA = 20
@@ -373,47 +258,26 @@ MESES = [
 
 @login_required
 @permission_required("licencias.change_licenciaotorgada", raise_exception=True)
-@require_http_methods(["GET", "POST"])
 def generador_disposiciones(request):
     """
-    RF-16: pantalla del generador de disposiciones. GET muestra la vista previa
-    del mes sin guardar nada; POST emite las disposiciones del mes.
+    Las disposiciones se emiten desde la planilla mensual (un solo lugar, para
+    que una misma licencia no reciba dos números). La dirección se conserva
+    para que los enlaces guardados no den error.
     """
-    datos = request.POST if request.method == "POST" else request.GET
     hoy = fecha_de_hoy()
     try:
-        anio = int(datos.get("anio", hoy.year))
-        mes = int(datos.get("mes", hoy.month))
+        anio = int(request.GET.get("anio", hoy.year))
+        mes = int(request.GET.get("mes", hoy.month))
     except ValueError:
-        raise Http404("Año o mes inválido.")
+        anio, mes = hoy.year, hoy.month
     if not (1 <= mes <= 12 and 2000 <= anio <= 2100):
-        raise Http404("Año o mes fuera de rango.")
+        anio, mes = hoy.year, hoy.month
+    messages.info(
+        request,
+        "Las disposiciones se emiten desde la planilla mensual IL-01 / IL-02.",
+    )
+    return redirect("licencias:planilla_mensual", anio, mes)
 
-    if request.method == "POST":
-        resultado = emitir_disposiciones_mes(anio, mes)
-        emitidas = len(resultado["emitidas"])
-        omitidas = len(resultado["omitidas"])
-        if emitidas:
-            messages.success(
-                request,
-                f"Se emitieron {emitidas} disposiciones. "
-                f"Licencias omitidas por no tener N° de formulario: {omitidas}.",
-            )
-        else:
-            messages.info(request, "No había disposiciones para emitir en ese mes.")
-        return redirect(
-            f"{reverse('licencias:generador_disposiciones')}?anio={anio}&mes={mes}"
-        )
-
-    previa = previsualizar_disposiciones_mes(anio, mes)
-    return render(request, "licencias/generador_disposiciones.html", {
-        "anio": anio,
-        "mes": mes,
-        "meses": MESES,
-        "a_emitir": previa["a_emitir"],
-        "omitidas": previa["omitidas"],
-        "oficina": previa["oficina"],
-    }) 
 
 @login_required
 @permission_required("licencias.change_licenciaotorgada", raise_exception=True)
@@ -455,3 +319,172 @@ def descargar_resolucion(request, resolucion_id):
         filename=os.path.basename(resolucion.archivo.name),
         content_type="application/pdf",
     )
+
+
+# ───────────── Planilla mensual IL-01 / IL-02 desde la diaria ─────────────
+
+def _periodo_valido(anio, mes):
+    if not 1 <= mes <= 12:
+        raise Http404("Mes inválido")
+    if not 2000 <= anio <= 2100:
+        raise Http404("Año fuera de rango")
+
+
+@login_required
+@permission_required("licencias.view_licenciaotorgada", raise_exception=True)
+@require_http_methods(["GET", "POST"])
+def planilla_mensual(request, anio: int, mes: int):
+    """
+    Interfaz mensual (RF-12 a RF-16). Tres acciones, todas por POST:
+
+    - procesar: genera o actualiza los renglones desde la asistencia diaria.
+    - guardar:  imputa artículos (autocompleta código y cuadro), oficina,
+                año y resolución.
+    - emitir:   numera las disposiciones internas del mes.
+    """
+    _periodo_valido(anio, mes)
+    url = reverse("licencias:planilla_mensual", args=[anio, mes])
+
+    if request.method == "POST":
+        if not request.user.has_perm("licencias.change_licenciaotorgada"):
+            messages.error(request, "No tenés permiso para modificar la planilla mensual.")
+            return redirect(url)
+
+        accion = request.POST.get("accion")
+
+        if accion == "procesar":
+            resumen = procesar_mes(anio, mes, usuario=request.user)
+            _registrar_en_bitacora(
+                request.user, "Procesamiento de la planilla mensual",
+                {"anio": anio, "mes": mes, **resumen},
+            )
+            messages.success(
+                request,
+                f"Mes procesado: {resumen['creados']} renglones nuevos, "
+                f"{resumen['actualizados']} actualizados y "
+                f"{resumen['eliminados']} eliminados.",
+            )
+            if resumen["desactualizados"]:
+                messages.warning(
+                    request,
+                    f"{resumen['desactualizados']} renglones con disposición emitida "
+                    "ya no coinciden con la asistencia diaria: revisalos a mano.",
+                )
+
+        elif accion == "guardar":
+            datos = {}
+            for clave, valor in request.POST.items():
+                campo, _, pk = clave.rpartition("-")
+                if campo in ("articulo", "resolucion", "oficina", "anio") and pk.isdigit():
+                    datos.setdefault(int(pk), {})[campo] = valor
+            try:
+                cantidad = imputar_renglones(anio, mes, datos, usuario=request.user)
+            except ValidationError as error:
+                messages.error(request, " ".join(error.messages))
+            else:
+                messages.success(request, f"Se guardaron {cantidad} renglones.")
+
+        elif accion == "emitir":
+            emitidas = emitir_disposiciones_planilla(anio, mes, usuario=request.user)
+            if emitidas:
+                _registrar_en_bitacora(
+                    request.user, "Emisión de disposiciones de la planilla mensual",
+                    {"anio": anio, "mes": mes, "disposiciones": [n for n, _ in emitidas]},
+                )
+                messages.success(
+                    request,
+                    f"Se emitieron {len(emitidas)} disposiciones "
+                    f"(N° {emitidas[0][0]} a {emitidas[-1][0]}).",
+                )
+            else:
+                messages.info(request, "No había disposiciones para emitir en este mes.")
+
+        return redirect(url)
+
+    cuadros = cuadros_del_mes(anio, mes)
+    articulos = list(LicenciaArticulo.objects.order_by("articulo", "sit_rev"))
+    for cuadro in cuadros:
+        for renglon in cuadro["filas"]:
+            renglon.articulos = articulos_para_renglon(renglon, articulos)
+
+    anio_anterior, mes_anterior = mes_vecino(anio, mes, -1)
+    anio_siguiente, mes_siguiente = mes_vecino(anio, mes, 1)
+    hay_renglones = any(cuadro["filas"] for cuadro in cuadros)
+
+    return render(request, "licencias/planilla_mensual.html", {
+        "anio": anio,
+        "mes": mes,
+        "nombre_mes": dict(MESES)[mes],
+        "cuadros": cuadros,
+        "hay_renglones": hay_renglones,
+        "por_emitir": previsualizar_disposiciones_planilla(anio, mes),
+        "emitidas": disposiciones_emitidas_del_mes(anio, mes),
+        "sin_formulario": faltas_sin_formulario(anio, mes),
+        "puede_modificar": request.user.has_perm("licencias.change_licenciaotorgada"),
+        "mes_anterior": {"anio": anio_anterior, "mes": mes_anterior},
+        "mes_siguiente": {"anio": anio_siguiente, "mes": mes_siguiente},
+    })
+
+
+def _registrar_en_bitacora(usuario, motivo, datos):
+    """RF-20: el procesamiento y la emisión quedan en la bitácora única."""
+    # Import local: reportes importa licencias, no al revés.
+    from reportes.auditoria import AccionesReportes, registrar_evento
+    registrar_evento(usuario, AccionesReportes.PLANILLA_MENSUAL, motivo=motivo, despues=datos)
+
+
+ENCABEZADO_PLANILLA = [
+    "Cuadro", "N° disposición", "Año disp.", "Resolución", "Oficina", "Año",
+    "DNI", "Apellido y nombre", "Materia / cargo", "Sit. de revista", "Marca",
+    "Artículo", "Cód. licencia", "Desde", "Hasta", "Días", "Horas",
+]
+
+
+def _texto_seguro(valor):
+    """Evita que una planilla de cálculo interprete el texto como fórmula."""
+    valor = "" if valor is None else str(valor)
+    return "'" + valor if valor.startswith(("=", "+", "-", "@", "\t", "\r")) else valor
+
+
+@login_required
+@permission_required("licencias.view_licenciaotorgada", raise_exception=True)
+def planilla_mensual_csv(request, anio: int, mes: int):
+    """Exportación básica de los cuadros del mes (INC-01: datos básicos)."""
+    _periodo_valido(anio, mes)
+
+    respuesta = HttpResponse(content_type="text/csv; charset=utf-8")
+    respuesta["Content-Disposition"] = (
+        f'attachment; filename="planilla_mensual_{anio}_{mes:02d}.csv"'
+    )
+    respuesta.write("\ufeff")
+    escritor = csv.writer(respuesta, delimiter=";")
+    escritor.writerow(ENCABEZADO_PLANILLA)
+
+    for cuadro in cuadros_del_mes(anio, mes):
+        for r in cuadro["filas"]:
+            designacion = r.designacion
+            materia = (
+                designacion.espacio_curricular.nombre
+                if designacion.espacio_curricular else designacion.cargo.descripcion
+            )
+            escritor.writerow([
+                cuadro["planilla"],
+                r.disp_numero,
+                r.disp_anio or "",
+                _texto_seguro(r.resolucion),
+                _texto_seguro(r.oficina),
+                r.anio_planilla,
+                _texto_seguro(designacion.persona.dni),
+                _texto_seguro(designacion.persona.apellido_nombre),
+                _texto_seguro(materia),
+                designacion.situacion_revista,
+                r.marca,
+                _texto_seguro(r.articulo.articulo if r.articulo else ""),
+                _texto_seguro(r.cod_licencia),
+                r.desde.strftime("%d/%m/%Y"),
+                r.hasta.strftime("%d/%m/%Y"),
+                r.dias,
+                r.horas,
+            ])
+
+    return respuesta

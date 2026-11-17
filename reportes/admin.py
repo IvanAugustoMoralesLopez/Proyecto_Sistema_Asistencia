@@ -6,7 +6,12 @@ from asistencias.models import EventoAsistencia
 from .auditoria import registrar_evento
 from .models import ParametroSistema
 
-CAMPOS_AUDITADOS = ("codigo_oficina", "nombre_oficina", "ciclo_lectivo")
+CAMPOS_AUDITADOS = (
+    "codigo_oficina",
+    "nombre_oficina",
+    "ciclo_lectivo",
+    "limite_inasistencias_anual",
+)
 
 
 @admin.register(ParametroSistema)

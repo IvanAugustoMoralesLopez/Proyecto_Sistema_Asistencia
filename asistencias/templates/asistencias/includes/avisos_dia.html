@@ -3,6 +3,13 @@
   Sirve para la pantalla diaria y para la de carga: la primera manda las
   variables sueltas y la segunda, `bloqueo` ya resuelto.
 {% endcomment %}
+{% if aviso_calendario %}
+    {# RF-10: indicador visual del calendario escolar. No bloquea la carga. #}
+    <div class="alert asis-dia-calendario d-flex align-items-center gap-2" role="status">
+        <span class="badge text-bg-danger">Calendario escolar</span>
+        <span>{{ aviso_calendario }}. Es solo un aviso: la asistencia se carga y se computa igual.</span>
+    </div>
+{% endif %}
 {% if bloqueo %}
     <div class="alert alert-warning d-flex flex-wrap align-items-center gap-3">
         <span class="flex-grow-1">{{ bloqueo }}</span>

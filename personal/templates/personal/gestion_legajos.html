@@ -156,6 +156,8 @@
             <div class="row g-3 mb-3">
                 <div class="col-md-3">{{ designacion_form.desde.label_tag }}{{ designacion_form.desde }}</div>
                 <div class="col-md-3">{{ designacion_form.hasta.label_tag }}{{ designacion_form.hasta }}</div>
+                <datalist id="opciones-sin-inicio"><option value="SIN INICIO"></datalist>
+                <datalist id="opciones-sin-termino"><option value="SIN TERMINO"></datalist>
                 <div class="col-md-3">{{ designacion_form.pof.label_tag }}{{ designacion_form.pof }}</div>
                 <div class="col-md-3">{{ designacion_form.anio_pof.label_tag }}{{ designacion_form.anio_pof }}</div>
             </div>
@@ -224,7 +226,7 @@
                                 {{ designacion.hs_catedra|default:"—" }}
                             {% endfor %}
                         </td>
-                        <td>{{ designacion.desde|date:"d/m/Y" }} – {{ designacion.hasta|date:"d/m/Y"|default:"Sin término" }}</td>
+                        <td>{{ designacion.desde_texto }} – {{ designacion.hasta_texto }}</td>
                         <td>
                             {% if designacion.activo %}
                                 <span class="badge text-bg-success">Activa</span>
@@ -286,7 +288,7 @@
                         <td>{{ resultado.cargo.descripcion }}</td>
                         <td>{{ resultado.espacio_curricular|default:"—" }}</td>
                         <td>{{ resultado.get_situacion_revista_display|default:"—" }}</td>
-                        <td>{{ resultado.desde|date:"d/m/Y" }} – {{ resultado.hasta|date:"d/m/Y"|default:"Sin término" }}</td>
+                        <td>{{ resultado.desde_texto }} – {{ resultado.hasta_texto }}</td>
                         <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'personal:gestion_legajos' %}?dni={{ resultado.persona.dni|urlencode }}">Ver legajo</a></td>
                     </tr>
                 {% empty %}
@@ -304,9 +306,45 @@
     <div class="card-body">
         <p class="text-secondary">
             Codificación UTF-8. Columnas admitidas:
-            <code>dni,apellido,nombres,apellido_nombre,sexo,telefono,email,localidad,domicilio_calle,cargo_codigo,espacio_curricular,situacion_revista,desde,hasta,norma_tipo,norma_numero,organismo_emisor,es_suplencia,plazo_indeterminado,reemplaza_id</code>.
-            Para importar sólo datos personales, deje vacía la columna de cargo. Las designaciones requieren una fecha <code>desde</code> en formato AAAA-MM-DD y un cargo ya registrado. Las suplencias deben incluir <code>hasta</code> o indicar plazo indeterminado; <code>reemplaza_id</code> es opcional.
+            <code>dni,apellido,nombres,apellido_nombre,sexo,telefono,email,localidad,domicilio_calle,cargo_codigo,espacio_curricular,carrera,situacion_revista,desde,hasta,horas_lun,horas_mar,horas_mie,horas_jue,horas_vie,observaciones,norma_tipo,norma_numero,organismo_emisor,es_suplencia,plazo_indeterminado,reemplaza_id</code>.
+            Para importar sólo datos personales, deje vacía la columna de cargo. Las designaciones requieren un cargo ya registrado y la columna <code>desde</code> con una fecha (AAAA-MM-DD o dd/mm/aaaa) o <code>SIN INICIO</code>; <code>hasta</code> admite una fecha, <code>SIN TERMINO</code> o quedar vacía. Las columnas <code>horas_lun</code> a <code>horas_vie</code> cargan las horas cátedra de cada día. Las suplencias deben incluir <code>hasta</code> o indicar plazo indeterminado; <code>reemplaza_id</code> es opcional.
         </p>
+        {% if csv_pendiente %}
+            {# RF-06: vista previa. Todavía no se guardó nada. #}
+            <div class="alert alert-warning" id="csv-vista-previa">
+                <h3 class="h6">Revise antes de confirmar: {{ csv_pendiente.nombre }}</h3>
+                <p class="mb-2">
+                    El archivo tiene <strong>{{ csv_pendiente.total }}</strong> filas:
+                    <strong>{{ csv_pendiente.validas }}</strong> se pueden importar y
+                    <strong>{{ csv_pendiente.rechazos|length }}</strong> se rechazarían por
+                    duplicados o inconsistencias. <strong>Todavía no se guardó nada.</strong>
+                </p>
+                {% if csv_pendiente.rechazos %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered bg-white">
+                            <thead><tr><th>Fila</th><th>DNI</th><th>Motivo del rechazo</th></tr></thead>
+                            <tbody>
+                                {% for rechazo in csv_pendiente.rechazos %}
+                                    <tr><td>{{ rechazo.fila }}</td><td>{{ rechazo.dni }}</td><td>{{ rechazo.motivo }}</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+                <form method="post" action="{% url 'personal:gestion_legajos' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="accion" value="confirmar_csv">
+                    <button type="submit" class="btn btn-primary" {% if not csv_pendiente.validas %}disabled{% endif %}>
+                        Confirmar e importar {{ csv_pendiente.validas }} fila{{ csv_pendiente.validas|pluralize }}
+                    </button>
+                </form>
+                <form method="post" action="{% url 'personal:gestion_legajos' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="accion" value="cancelar_csv">
+                    <button type="submit" class="btn btn-outline-secondary">Cancelar</button>
+                </form>
+            </div>
+        {% endif %}
         {% if puede_importar_csv %}
         <form method="post" action="{% url 'personal:gestion_legajos' %}" enctype="multipart/form-data" class="row g-3 align-items-end">
             {% csrf_token %}
@@ -316,7 +354,7 @@
                 <input id="archivoCsv" class="form-control" type="file" name="archivo" accept=".csv,text/csv" required>
             </div>
             <div class="col-md-4">
-                <button type="submit" class="btn btn-primary">Procesar archivo</button>
+                <button type="submit" class="btn btn-primary">Validar archivo</button>
             </div>
         </form>
         {% endif %}

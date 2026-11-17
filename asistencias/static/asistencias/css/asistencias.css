@@ -314,6 +314,18 @@
     .asis-accion-destacada .btn { width: 100%; }
 }
 
+
+/* RF-10: día marcado en el calendario escolar (feriado, asueto, inhábil).
+   Es solo visual: fondo e indicador, la carga no se bloquea. */
+.asis-dia-calendario {
+    background: #fff4e5;
+    border: 1px solid #f0c36d;
+    color: #6b4a00;
+}
+.asis-con-calendario {
+    background-image: linear-gradient(#fffaf0, #fffaf0);
+    border-radius: .5rem;
+    padding: .25rem;
 /* ───────── Pie de listas paginadas: tamaño de página + paginación ───────── */
 .asis-paginado {
     display: flex;
@@ -341,4 +353,5 @@
 
 @media (max-width: 860px) {
     .asis-paginado { flex-direction: column; align-items: flex-start; }
+}
 }

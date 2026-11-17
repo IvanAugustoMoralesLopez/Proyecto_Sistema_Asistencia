@@ -57,6 +57,9 @@ _BEDELIA = [
     ("personal", "change_carrera"),
     ("personal", "add_espaciocurricular"),
     ("personal", "change_espaciocurricular"),
+    # Catálogo de tipos de instrumento legal (RF-05).
+    ("personal", "add_tipoinstrumentolegal"),
+    ("personal", "change_tipoinstrumentolegal"),
     ("licencias", "add_licenciaarticulo"),
     ("licencias", "change_licenciaarticulo"),
 

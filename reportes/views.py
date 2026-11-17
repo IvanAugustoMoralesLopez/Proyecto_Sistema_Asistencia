@@ -19,6 +19,7 @@ from .forms import (
     FiltroBitacoraForm,
     FiltroConsultaForm,
     FiltroDesignacionesForm,
+    FiltroInasistenciasForm,
     FiltroLicenciasVencimientoForm,
     ParametroSistemaForm,
     UsuarioForm,
@@ -32,6 +33,7 @@ from .selectors import (
     UMBRAL_POR_DEFECTO,
     buscar_eventos,
     calcular_alertas,
+    calcular_acumulado_inasistencias,
     buscar_consulta,
     describir_objetivo,
     resumir_cambios,
@@ -74,7 +76,12 @@ def bitacora(request):
 @login_required
 @permission_required("reportes.gestionar_parametros", raise_exception=True)
 def parametros(request):
-    campos = ("codigo_oficina", "nombre_oficina", "ciclo_lectivo")
+    campos = (
+        "codigo_oficina",
+        "nombre_oficina",
+        "ciclo_lectivo",
+        "limite_inasistencias_anual",
+    )
     instancia = ParametroSistema.obtener()
     # Foto previa: is_valid() ya modifica la instancia en memoria.
     antes = {c: getattr(instancia, c) for c in campos}
@@ -229,6 +236,41 @@ def alertas(request):
         lista = calcular_alertas(form.cleaned_data["anio"], form.cleaned_data["umbral"])
 
     return render(request, "reportes/alertas.html", {"form": form, "alertas": lista})
+
+
+# ───────────── Contador de inasistencias por agente (RF-18) ─────────────
+
+@login_required
+@permission_required("reportes.consultar_licencias", raise_exception=True)
+def alertas_inasistencias(request):
+    """
+    RF-18: total acumulado de inasistencias y permisos de cada agente en el
+    ciclo lectivo, con alerta visual antes de que se agote el límite anual.
+    """
+    parametros = ParametroSistema.obtener()
+    datos = request.GET or {
+        "anio": parametros.ciclo_lectivo,
+        "umbral": UMBRAL_POR_DEFECTO,
+    }
+    form = FiltroInasistenciasForm(datos)
+    lista = []
+    if form.is_valid():
+        lista = calcular_acumulado_inasistencias(
+            form.cleaned_data["anio"],
+            form.cleaned_data["umbral"],
+            solo_alertas=form.cleaned_data["solo_alertas"],
+        )
+
+    return render(
+        request,
+        "reportes/alertas_inasistencias.html",
+        {
+            "form": form,
+            "agentes": lista,
+            "limite": parametros.limite_inasistencias_anual,
+            "cant_alertas": sum(1 for a in lista if a["estado"] != "normal"),
+        },
+    )
 
 
 # ───────────── Alertas de vencimiento de designaciones ─────────────

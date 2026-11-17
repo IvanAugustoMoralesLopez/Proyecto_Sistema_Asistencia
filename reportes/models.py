@@ -31,6 +31,16 @@ class ParametroSistema(models.Model):
         default=anio_actual,
         validators=[MinValueValidator(2000), MaxValueValidator(2100)],
     )
+    # RF-18: límite anual reglamentario de inasistencias y permisos por
+    # agente. El Documento de Requerimientos no fija el número: el valor por
+    # defecto es provisorio y lo define el área administrativa desde la
+    # pantalla de parámetros.
+    limite_inasistencias_anual = models.PositiveSmallIntegerField(
+        "Límite anual de inasistencias y permisos (días por agente)",
+        default=6,
+        db_default=6,
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
+    )
     actualizado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

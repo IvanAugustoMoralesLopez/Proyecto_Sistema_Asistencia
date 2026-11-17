@@ -1,5 +1,6 @@
 from datetime import date
 
+from django.conf import settings
 from django.core.exceptions import ValidationError 
 from django.core.validators import FileExtensionValidator
 from django.db import models
@@ -245,3 +246,109 @@ class ResolucionAdjunta(models.Model):
 
     def __str__(self):
         return self.descripcion
+
+
+class RenglonMensual(models.Model):
+    """
+    Renglón de la planilla mensual (cuadros IL-01 / IL-02), generado desde la
+    asistencia diaria por `licencias.planilla_mensual.procesar_mes`.
+
+    - RF-12 / RN-10: hay un renglón por cada materia o cargo que el agente
+      tenía en los días del bloque, sin excepciones.
+    - RF-13: `horas` son las horas cátedra de esa designación en los días
+      afectados, tomadas de su horario semanal.
+    - RF-14: `desde` y `hasta` son el inicio y el fin del período continuo
+      cargado en la diaria (iguales si fue una sola jornada).
+    - RF-15: al elegir el `articulo` se completan `cod_licencia` y `planilla`.
+    - RF-16 / RN-11: todas las materias del bloque comparten `disp_numero`.
+    - RN-07 / RN-08: `oficina` y `anio_planilla` nacen precargados.
+    - RF-20: guarda quién lo generó o modificó y cuándo.
+    """
+
+    PLANILLA_CHOICES = [('IL-01', 'IL-01'), ('IL-02', 'IL-02')]
+
+    anio = models.PositiveSmallIntegerField()
+    mes = models.PositiveSmallIntegerField()
+    designacion = models.ForeignKey(
+        'personal.Designacion', on_delete=models.PROTECT,
+        related_name='renglones_mensuales',
+    )
+    # Marca de la diaria que originó el renglón: LIC, LT, P o I.
+    marca = models.CharField(max_length=12)
+    desde = models.DateField()
+    hasta = models.DateField()
+    dias = models.PositiveSmallIntegerField(default=0)
+    horas = models.DecimalField(max_digits=7, decimal_places=2, default=0)
+
+    articulo = models.ForeignKey(
+        LicenciaArticulo, on_delete=models.RESTRICT, null=True, blank=True,
+        related_name='renglones_mensuales',
+    )
+    cod_licencia = models.CharField(max_length=12, blank=True)
+    planilla = models.CharField(max_length=10, blank=True, choices=PLANILLA_CHOICES)
+
+    oficina = models.CharField(max_length=10, default='1452')
+    anio_planilla = models.PositiveSmallIntegerField()
+
+    disp_tipo = models.CharField(max_length=30, blank=True)
+    disp_numero = models.CharField(max_length=20, blank=True)
+    disp_anio = models.SmallIntegerField(null=True, blank=True)
+    # Resolución del M.E.C.C.yT.: dato externo (RF-16).
+    resolucion = models.CharField(max_length=100, blank=True)
+
+    nro_formulario = models.CharField(max_length=30, blank=True)
+    licencia = models.ForeignKey(
+        LicenciaOtorgada, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='renglones_mensuales',
+    )
+    # La diaria cambió después de emitida la disposición: se conserva el
+    # renglón y se avisa para corregirlo a mano (INC-02).
+    desactualizado = models.BooleanField(default=False)
+
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
+        related_name='renglones_mensuales_creados',
+    )
+    actualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
+        related_name='renglones_mensuales_actualizados',
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'licencia_renglon_mensual'
+        verbose_name = 'Renglón de planilla mensual'
+        verbose_name_plural = 'Renglones de planilla mensual'
+        ordering = ['designacion__persona__apellido_nombre', 'desde', 'designacion_id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['anio', 'mes', 'designacion', 'marca', 'desde', 'hasta'],
+                name='uq_renglon_mensual_bloque',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['anio', 'mes'], name='ix_renglon_periodo'),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.anio}-{self.mes:02d} · designación {self.designacion_id} · "
+            f"{self.marca} {self.desde:%d/%m} al {self.hasta:%d/%m}"
+        )
+
+    @property
+    def clave_de_bloque(self):
+        """Renglones del mismo agente y período: comparten la disposición (RN-11)."""
+        return (self.designacion.persona_id, self.desde, self.hasta)
+
+    def imputar(self, articulo):
+        """
+        RF-15: al elegir el artículo se autocompleta el código de licencia y
+        el renglón se deriva al cuadro que corresponde.
+        """
+        from .planilla_mensual import planilla_del_renglon
+
+        self.articulo = articulo
+        self.cod_licencia = articulo.cod_licencia if articulo else ''
+        self.planilla = planilla_del_renglon(self.marca, articulo)

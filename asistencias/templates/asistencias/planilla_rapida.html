@@ -110,150 +110,121 @@
     {% endif %}
 
     <div class="planilla">
+        {# RF-07: una fila por agente y jornada; las materias son solo informativas. #}
         <table class="table table-hover align-middle asis-planilla asis-tarjetas">
             <thead>
                 <tr>
                     <th>Docente</th>
-                    <th>Cargo y materia</th>
-                    <th>Horario de hoy</th>
+                    <th>Materias y cargos de hoy</th>
                     <th>¿Asistió?</th>
                     <th>Horas sin cubrir</th>
-                    <th>Licencia</th>
                     <th>Nota</th>
                 </tr>
             </thead>
             <tbody>
-                {% for fila in filas %}
-                    <tr class="{% if fila.error %}table-danger{% elif fila.valores.origen %}asis-propuesto{% endif %}">
+                {% for agente in agentes %}
+                    <tr class="{% if agente.error %}table-danger{% elif agente.valores.origen %}asis-propuesto{% endif %}">
                         <td data-rotulo="Docente">
-                            {% if fila.primera_del_docente %}
-                                <div class="asis-principal">{{ fila.designacion.persona.apellido_nombre }}</div>
-                                <div class="asis-apoyo">DNI {{ fila.designacion.persona.dni }}</div>
-                            {% else %}
-                                <div class="asis-apoyo">↳ mismo docente, otro cargo</div>
+                            <div class="asis-principal">{{ agente.persona.apellido_nombre }}</div>
+                            <div class="asis-apoyo">DNI {{ agente.persona.dni }}</div>
+                            {% if agente.alerta %}
+                                {# RF-18: alerta visual de agotamiento del límite anual. #}
+                                <span class="badge {% if agente.alerta.estado == 'agotado' %}text-bg-danger{% else %}text-bg-warning{% endif %}"
+                                      title="Inasistencias y permisos acumulados en el año">
+                                    {% if agente.alerta.estado == "agotado" %}Límite agotado{% else %}Próximo al límite{% endif %}:
+                                    {{ agente.alerta.total }} de {{ agente.alerta.limite }}
+                                </span>
                             {% endif %}
                         </td>
 
-                        <td data-rotulo="Cargo y materia">
-                            {{ fila.designacion.cargo.descripcion }}
-                            {% if fila.designacion.espacio_curricular %}
-                                <div class="asis-apoyo">{{ fila.designacion.espacio_curricular.nombre }}</div>
-                            {% endif %}
+                        <td data-rotulo="Materias y cargos de hoy">
+                            {% for fila in agente.materias %}
+                                <div>
+                                    {% if fila.designacion.espacio_curricular %}{{ fila.designacion.espacio_curricular.nombre }}{% else %}{{ fila.designacion.cargo.descripcion }}{% endif %}
+                                    <span class="asis-apoyo">
+                                        {% if fila.horario %}
+                                            · {{ fila.horas_dia|floatformat:"-2" }} hs{% if fila.horario.hora_inicio and fila.horario.hora_fin %} ({{ fila.horario.hora_inicio|time:"H:i" }}–{{ fila.horario.hora_fin|time:"H:i" }}){% endif %}
+                                        {% else %}
+                                            · hoy no da clase{% if fila.dias_con_clase %} (da {{ fila.dias_con_clase|join:" " }}){% endif %}
+                                        {% endif %}
+                                    </span>
+                                    {% if fila.registro %}
+                                        <span class="badge text-bg-success">{{ fila.registro.marca.etiqueta }}</span>
+                                        <a class="asis-apoyo" href="{% url 'asistencia:detalle_asistencia' fila.registro.pk %}">Ver</a>
+                                        {% if perms.asistencias.change_registroasistencia %}
+                                            <a class="asis-apoyo" href="{% url 'asistencia:editar_asistencia' fila.registro.pk %}?volver={{ request.get_full_path|urlencode }}">Corregir</a>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
                         </td>
 
-                        <td data-rotulo="Horario de hoy" class="text-nowrap">
-                            {% if fila.horario %}
-                                <span class="asis-principal">{{ fila.horas_dia|floatformat:"-2" }} hs</span>
-                                {% if fila.horario.hora_inicio and fila.horario.hora_fin %}
-                                    <div class="asis-apoyo">{{ fila.horario.hora_inicio|time:"H:i" }}–{{ fila.horario.hora_fin|time:"H:i" }}{% if fila.designacion.turno %} · {{ fila.designacion.turno }}{% endif %}</div>
-                                {% endif %}
-                            {% else %}
-                                <span class="asis-apoyo">Hoy no da clase{% if fila.dias_con_clase %} · da {{ fila.dias_con_clase|join:" " }}{% endif %}</span>
-                            {% endif %}
-                        </td>
-
-                        {% if fila.registro %}
-                            
-                            <td data-rotulo="¿Asistió?">
+                        {% if agente.cargado %}
+                            <td data-rotulo="¿Asistió?" colspan="3">
                                 <span class="badge text-bg-success">Ya cargado</span>
-                                <span class="asis-principal ms-1">{{ fila.registro.marca.etiqueta }}</span>
-                            </td>
-
-                            <td data-rotulo="Horas sin cubrir">
-                                {% if fila.registro.horas_inasistidas %}
-                                    {{ fila.registro.horas_inasistidas|floatformat:"-2" }} hs
-                                {% else %}
-                                    <span class="asis-apoyo">—</span>
-                                {% endif %}
-                            </td>
-
-                            <td data-rotulo="Licencia">
-                                {% if fila.registro.licencia %}
-                                    {{ fila.registro.licencia.articulo.articulo }}
-                                {% else %}
-                                    <span class="asis-apoyo">—</span>
-                                {% endif %}
-                            </td>
-
-                            <td data-rotulo="Nota" class="text-nowrap">
-                                <a class="btn btn-sm btn-outline-primary"
-                                   href="{% url 'asistencia:detalle_asistencia' fila.registro.pk %}">Ver</a>
-                                {% if perms.asistencias.change_registroasistencia %}
-                                    <a class="btn btn-sm btn-outline-secondary"
-                                       href="{% url 'asistencia:editar_asistencia' fila.registro.pk %}?volver={{ request.get_full_path|urlencode }}">Corregir</a>
-                                {% endif %}
+                                <span class="asis-apoyo ms-1">Para cambiarlo usá «Corregir».</span>
                             </td>
                         {% else %}
                             <td data-rotulo="¿Asistió?">
                                 <select class="form-select"
-                                        name="marca-{{ fila.designacion.pk }}"
-                                        data-persona="{{ fila.designacion.persona_id }}"
-                                        aria-label="Asistencia de {{ fila.designacion.persona.apellido_nombre }}"
+                                        name="agente-marca-{{ agente.persona.dni }}"
+                                        aria-label="Asistencia de {{ agente.persona.apellido_nombre }}"
                                         {% if bloqueo %}disabled{% endif %}>
                                     <option value="">— elegí —</option>
                                     {% for marca in marcas %}
                                         <option value="{{ marca.pk }}"
                                                 data-horas="{{ marca.requiere_horas|yesno:'1,0' }}"
-                                                data-licencia="{{ marca.requiere_licencia|yesno:'1,0' }}"
-                                                {% if fila.valores.marca == marca.pk|stringformat:"s" %}selected{% endif %}>
+                                                {% if agente.valores.marca == marca.pk|stringformat:"s" %}selected{% endif %}>
                                             {{ marca.etiqueta }} ({{ marca.codigo }})
                                         </option>
                                     {% endfor %}
                                 </select>
-                                {% if fila.valores.origen == "licencia" %}
+                                {% if agente.parcial %}
+                                    <div class="asis-apoyo">Vale para las materias que faltan cargar</div>
+                                {% elif agente.valores.origen == "licencia" %}
                                     <div class="asis-apoyo text-primary">Tiene licencia este día</div>
-                                {% elif fila.valores.origen == "copia" %}
+                                {% elif agente.valores.origen == "copia" %}
                                     <div class="asis-apoyo text-primary">Traído del día anterior</div>
-                                {% elif fila.valores.origen == "presente" %}
+                                {% elif agente.valores.origen == "presente" %}
                                     <div class="asis-apoyo">Propuesto por el sistema</div>
                                 {% endif %}
                             </td>
 
-                            <td data-rotulo="Horas sin cubrir" style="width: 8rem;">
+                            <td data-rotulo="Horas sin cubrir" style="width: 9rem;">
                                 <input class="form-control" type="number" min="0" step="0.5"
-                                       name="horas-{{ fila.designacion.pk }}"
-                                       value="{{ fila.valores.horas }}"
-                                       data-horas-dia="{{ fila.horas_dia|stringformat:'s' }}"
-                                       aria-label="Horas sin cubrir de {{ fila.designacion.persona.apellido_nombre }}"
+                                       name="agente-horas-{{ agente.persona.dni }}"
+                                       value="{{ agente.valores.horas }}"
+                                       data-horas-dia="{{ agente.horas_dia|stringformat:'s' }}"
+                                       placeholder="{% if agente.horas_dia %}{{ agente.horas_dia|floatformat:'-2' }} según horario{% else %}Escribí las horas{% endif %}"
+                                       aria-label="Horas sin cubrir de {{ agente.persona.apellido_nombre }}"
                                        {% if bloqueo %}disabled{% endif %}>
-                            </td>
-
-                            <td data-rotulo="Licencia">
-                                <select class="form-select"
-                                        name="licencia-{{ fila.designacion.pk }}"
-                                        aria-label="Licencia de {{ fila.designacion.persona.apellido_nombre }}"
-                                        {% if bloqueo or not fila.licencias %}disabled{% endif %}>
-                                    <option value="">{% if fila.licencias %}—{% else %}No tiene{% endif %}</option>
-                                    {% for licencia in fila.licencias %}
-                                        <option value="{{ licencia.pk }}"
-                                                {% if fila.valores.licencia == licencia.pk|stringformat:"s" %}selected{% endif %}>
-                                            {{ licencia.articulo.articulo }} · desde el {{ licencia.desde|date:"d/m/Y" }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
                             </td>
 
                             <td data-rotulo="Nota">
                                 <input class="form-control" type="text" maxlength="200"
-                                       name="obs-{{ fila.designacion.pk }}"
-                                       value="{{ fila.valores.obs }}" placeholder="Opcional"
-                                       aria-label="Nota sobre {{ fila.designacion.persona.apellido_nombre }}"
+                                       name="agente-obs-{{ agente.persona.dni }}"
+                                       value="{{ agente.valores.obs }}" placeholder="Opcional"
+                                       aria-label="Nota sobre {{ agente.persona.apellido_nombre }}"
                                        {% if bloqueo %}disabled{% endif %}>
-                                {% if fila.error %}
-                                    <div class="text-danger fw-semibold asis-apoyo">{{ fila.error }}</div>
+                                {% if agente.error %}
+                                    <div class="text-danger fw-semibold asis-apoyo">{{ agente.error }}</div>
                                 {% endif %}
                             </td>
                         {% endif %}
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center py-5 text-secondary">
+                        <td colspan="5" class="text-center py-5 text-secondary">
                             No hay docentes para mostrar en este día.
                         </td>
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
+        <p class="asis-apoyo">
+            Se carga una sola vez por docente: el sistema reparte la novedad entre
+            sus materias del día con las horas de cada horario.
+        </p>
     </div>
 
     {% if not bloqueo and pendientes %}
@@ -290,35 +261,21 @@
 <script>
 (function () {
     var presente = "{{ marca_presente.pk|default:'' }}";
-    var selects = document.querySelectorAll("select[name^='marca-']");
+    /* RF-07: un selector por agente (no por materia). */
+    var selects = document.querySelectorAll("select[name^='agente-marca-']");
     var contador = document.getElementById("contador-pendientes");
 
-    /* Habilita horas y licencia solo cuando la opcion elegida las pide, y
-       completa las horas con las del horario del docente. */
+    /* El campo de horas solo se habilita si la opción elegida las pide. Va
+       vacío a propósito: las horas salen del horario de cada materia. */
     function sincronizar(select) {
         var opcion = select.options[select.selectedIndex];
         var fila = select.closest("tr");
-        var horas = fila.querySelector("input[name^='horas-']");
-        var licencia = fila.querySelector("select[name^='licencia-']");
+        var horas = fila.querySelector("input[name^='agente-horas-']");
         var usaHoras = opcion && opcion.dataset.horas === "1";
-        var usaLicencia = opcion && opcion.dataset.licencia === "1";
 
         if (horas) {
             horas.readOnly = !usaHoras;
-            if (!usaHoras) {
-                horas.value = "";
-            } else if (!horas.value) {
-                var delDia = parseFloat(horas.dataset.horasDia || "0");
-                if (delDia > 0) { horas.value = String(delDia); }
-            }
-        }
-        if (licencia && licencia.options.length > 1) {
-            licencia.disabled = !usaLicencia;
-            if (!usaLicencia) {
-                licencia.value = "";
-            } else if (!licencia.value) {
-                licencia.selectedIndex = 1;
-            }
+            if (!usaHoras) { horas.value = ""; }
         }
     }
 
@@ -332,18 +289,8 @@
 
     selects.forEach(function (select) {
         sincronizar(select);
-
         select.addEventListener("change", function () {
             sincronizar(select);
-
-            /* Si el docente tiene varios cargos, lo que pasa vale para todos. */
-            selects.forEach(function (otro) {
-                if (otro !== select && !otro.value &&
-                    otro.dataset.persona === select.dataset.persona) {
-                    otro.value = select.value;
-                    sincronizar(otro);
-                }
-            });
             actualizarContador();
         });
     });
