@@ -11,12 +11,12 @@
             <h1 class="encabezado-planilla__titulo">Buscar asistencias cargadas</h1>
             <p class="encabezado-planilla__subtitulo">
                 {{ pagina.paginator.count }} resultado{{ pagina.paginator.count|pluralize:"s" }}
-                {% if querystring %}con los filtros elegidos{% else %}en total{% endif %}.
+                {% if hay_filtros %}con los filtros elegidos{% else %}en total{% endif %}.
             </p>
         </div>
 
         <div class="encabezado-planilla__acciones">
-            <a class="btn btn-filtro" href="{% url 'asistencia:registro_diario' %}">
+            <a class="btn btn-filtro" href="{% url 'asistencia:registro_diario' %}{% if fecha_unica %}?fecha={{ fecha_unica|date:'Y-m-d' }}{% endif %}">
                 Asistencia del día
             </a>
             {% if perms.asistencias.view_registroasistencia %}
@@ -29,12 +29,14 @@
     </div>
 </div>
 
-<details class="asis-filtros mb-3"{% if querystring %} open{% endif %}>
+<details class="asis-filtros mb-3"{% if hay_filtros %} open{% endif %}>
     <summary class="btn btn-filtro px-0">
-        Filtros de búsqueda{% if querystring %} (activos){% endif %}
+        Filtros de búsqueda{% if hay_filtros %} (activos){% endif %}
     </summary>
 
     <form method="get" class="card card-body mt-2">
+        {# Buscar o limpiar no cambia cuántos se muestran por página. #}
+        <input type="hidden" name="por_pagina" value="{{ pagina.paginator.per_page }}">
         <div class="row g-3">
             {% for field in form %}
                 <div class="col-md-4">
@@ -51,7 +53,7 @@
 
         <div class="mt-3 d-flex gap-2">
             <button class="btn btn-primario" type="submit" data-sin-espera="1">Buscar</button>
-            <a class="btn btn-filtro" href="{% url 'asistencia:historial' %}">Limpiar</a>
+            <a class="btn btn-filtro" href="{% url 'asistencia:historial' %}?por_pagina={{ pagina.paginator.per_page }}">Limpiar</a>
         </div>
     </form>
 </details>
@@ -70,7 +72,8 @@
                 {% if perms.asistencias.validar_registro %}
                     <th style="width: 2.5rem;">
                         <input type="checkbox" id="seleccionar-todos" class="form-check-input"
-                               title="Seleccionar todos los que faltan revisar">
+                               title="Seleccionar los de esta página que faltan revisar"
+                               aria-label="Seleccionar los de esta página que faltan revisar">
                     </th>
                 {% endif %}
                 <th>Fecha</th>
@@ -165,9 +168,7 @@
 </form>
 {% endif %}
 
-<div class="mt-3">
-    {% include "asistencias/includes/paginacion.html" %}
-</div>
+{% include "asistencias/includes/paginado_con_tamano.html" with etiqueta="Páginas del historial" %}
 {% endblock %}
 
 {% block extra_js %}

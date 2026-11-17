@@ -186,8 +186,26 @@ def _aplicar_filtros(registros, datos):
     return registros
 
 
+TAMANOS_PAGINA = (5, 10, 25, 50, 100)
+TAMANO_PAGINA_POR_DEFECTO = 25
+
+
+def _tamano_pagina(request):
+    """
+    Cuántos registros mostrar por página según `?por_pagina=`. Solo se
+    aceptan los tamaños ofrecidos: un valor inventado a mano en la URL
+    (0, negativo, 100000) vuelve al tamaño por defecto.
+    """
+    valor = request.GET.get("por_pagina", "")
+
+    if valor.isdecimal() and int(valor) in TAMANOS_PAGINA:
+        return int(valor)
+
+    return TAMANO_PAGINA_POR_DEFECTO
+
+
 def _paginar(request, registros):
-    paginador = Paginator(registros, 25)
+    paginador = Paginator(registros, _tamano_pagina(request))
     pagina = paginador.get_page(request.GET.get("page"))
 
     parametros = request.GET.copy()
