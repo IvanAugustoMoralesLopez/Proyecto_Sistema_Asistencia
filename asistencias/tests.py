@@ -3660,3 +3660,72 @@ class PaginadoYRevisionDelDiaTests(BaseAsistenciaTests):
         self.client.force_login(crear_usuario("bedel", PERMISOS_CARGA))
         respuesta = self.dia()
         self.assertNotContains(respuesta, "btn-revisar-dia")
+
+
+class DocenteSueltoDesdeCargarAsistenciaTests(BaseAsistenciaTests):
+    """«Cargar un docente suelto» vive en Cargar Asistencia, no en el día."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.usuario)
+        self.url_planilla = (
+            f"{reverse('asistencia:planilla_rapida')}?fecha={LUNES.isoformat()}"
+        )
+
+    def alta(self, volver):
+        return self.client.post(
+            f"{reverse('asistencia:crear_asistencia')}?volver={volver}",
+            {
+                "designacion": self.designacion.pk,
+                "fecha": LUNES.isoformat(),
+                "marca": self.marca_p.pk,
+                "horas_inasistidas": "0",
+                "observaciones": "",
+            },
+        )
+
+    def test_asistencia_del_dia_ya_no_ofrece_cargar_un_docente_suelto(self):
+        respuesta = self.client.get(
+            reverse("asistencia:registro_diario"), {"fecha": LUNES.isoformat()}
+        )
+        self.assertNotContains(respuesta, "btn-nueva-asistencia")
+        self.assertNotContains(respuesta, "Cargar un docente suelto")
+
+    def test_cargar_asistencia_ofrece_cargar_un_docente_suelto(self):
+        respuesta = self.client.get(self.url_planilla)
+        self.assertContains(respuesta, "Cargar un docente suelto")
+        self.assertContains(
+            respuesta,
+            f'{reverse("asistencia:crear_asistencia")}?fecha=2026-09-14'
+            "&amp;volver=/asistencia/planilla/%3Ffecha%3D2026-09-14",
+        )
+
+    def test_en_un_dia_que_no_se_puede_cargar_no_se_ofrece(self):
+        futuro = timezone.localdate() + timedelta(days=7)
+        respuesta = self.client.get(
+            reverse("asistencia:planilla_rapida"), {"fecha": futuro.isoformat()}
+        )
+        self.assertNotContains(respuesta, "btn-nueva-asistencia")
+
+    def test_al_guardar_vuelve_a_cargar_asistencia(self):
+        respuesta = self.alta(self.url_planilla.replace("?", "%3F").replace("=", "%3D"))
+        self.assertRedirects(respuesta, self.url_planilla)
+        self.assertTrue(
+            RegistroAsistencia.objects.filter(
+                designacion=self.designacion, fecha=LUNES
+            ).exists()
+        )
+
+    def test_cancelar_vuelve_a_cargar_asistencia(self):
+        respuesta = self.client.get(
+            reverse("asistencia:crear_asistencia"),
+            {"fecha": LUNES.isoformat(), "volver": self.url_planilla},
+        )
+        self.assertContains(respuesta, f'href="{self.url_planilla}"')
+
+    def test_sin_volver_o_con_un_sitio_externo_sigue_yendo_al_dia(self):
+        respuesta = self.alta("https://otro-sitio.example/robar")
+        self.assertRedirects(
+            respuesta,
+            f"{reverse('asistencia:registro_diario')}?fecha={LUNES.isoformat()}",
+        )

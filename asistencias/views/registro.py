@@ -160,6 +160,10 @@ def registro_diario(request):
 @vista_protegida("asistencias.add_registroasistencia", methods=["GET", "POST"])
 def crear_asistencia(request):
     fecha_inicial = request.GET.get("fecha")
+    # Abierto desde «Cargar Asistencia», al guardar o cancelar vuelve ahí.
+    volver = _url_segura(
+        request.GET.get("volver", request.POST.get("volver", ""))
+    )
 
     if request.method == "POST":
         form = RegistroAsistenciaForm(request.POST)
@@ -180,6 +184,8 @@ def crear_asistencia(request):
                     request,
                     "La asistencia se guardó correctamente.",
                 )
+                if volver:
+                    return redirect(volver)
                 return redirect(
                     f"{reverse('asistencia:registro_diario')}"
                     f"?fecha={registro.fecha.isoformat()}"
@@ -196,7 +202,8 @@ def crear_asistencia(request):
         {
             "form": form,
             "titulo": "Registrar asistencia",
-            "url_cancelar": reverse("asistencia:historial"),
+            "volver": volver,
+            "url_cancelar": volver or reverse("asistencia:historial"),
         },
     )
 
