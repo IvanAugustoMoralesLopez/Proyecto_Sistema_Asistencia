@@ -257,6 +257,22 @@ def _validar_marca_requisitos(marca, horas_inasistidas, licencia):
     return horas_inasistidas
 
 
+def _validar_horas_maximas(designacion, fecha, horas_inasistidas):
+    from .agenda import horas_del_dia
+
+    if horas_inasistidas <= Decimal("0"):
+        return
+
+    horas_dia = horas_del_dia(designacion, fecha)
+
+    if horas_dia > Decimal("0") and horas_inasistidas > horas_dia:
+        raise ValidationError(
+            f"Las horas inasistidas ({horas_inasistidas}) superan las "
+            f"{horas_dia} hs cátedra que el docente tiene este día. "
+            "Para modificar las horas, revisá la designación en Personal."
+        )
+
+
 def _validar_licencia(registro):
     if not registro.licencia_id:
         return

@@ -11,7 +11,7 @@ urlpatterns = [
         name="registro_diario",
     ),
     path(
-        "crear/",
+        "crearr/",
         views.crear_asistencia,
         name="crear_asistencia",
     ),

@@ -221,6 +221,7 @@
                                        name="horas-{{ fila.designacion.pk }}"
                                        value="{{ fila.valores.horas }}"
                                        data-horas-dia="{{ fila.horas_dia|stringformat:'s' }}"
+                                       {% if fila.horas_dia %}max="{{ fila.horas_dia|stringformat:'s' }}"{% endif %}
                                        aria-label="Horas sin cubrir de {{ fila.designacion.persona.apellido_nombre }}"
                                        {% if bloqueo %}disabled{% endif %}>
                             </td>
