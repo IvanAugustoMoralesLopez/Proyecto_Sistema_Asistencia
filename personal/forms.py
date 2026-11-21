@@ -194,8 +194,6 @@ class PersonaForm(forms.ModelForm):
         model = Persona
         fields = [
             "dni",
-            "apellido",
-            "nombres",
             "apellido_nombre",
             "sexo",
             "fecha_nacimiento",
@@ -220,8 +218,6 @@ class PersonaForm(forms.ModelForm):
                     "maxlength": "10",
                 }
             ),
-            "apellido": forms.TextInput(attrs={"class": "form-control"}),
-            "nombres": forms.TextInput(attrs={"class": "form-control"}),
             "apellido_nombre": forms.TextInput(attrs={"class": "form-control"}),
             "sexo": forms.Select(attrs={"class": "form-select"}),
             "fecha_nacimiento": forms.DateInput(
@@ -240,6 +236,7 @@ class PersonaForm(forms.ModelForm):
             "email": forms.EmailInput(attrs={"class": "form-control"}),
             "activa": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
+        labels = {"apellido_nombre": "Nombre y Apellido"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -250,41 +247,23 @@ class PersonaForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        apellido = (cleaned_data.get("apellido") or "").strip()
-        nombres = (cleaned_data.get("nombres") or "").strip()
-        nombre_completo = cleaned_data.get("apellido_nombre", "").strip()
-
-        if self.instance and self.instance.pk:
-            cambios_componentes = (
-                apellido != self.instance.apellido or nombres != self.instance.nombres
-            )
-            cambio_nombre_completo = (
-                nombre_completo != self.instance.apellido_nombre
-            )
-        else:
-            cambios_componentes = bool(apellido or nombres)
-            cambio_nombre_completo = bool(nombre_completo)
-
-        if cambios_componentes:
-            nombre_completo = ", ".join(
-                parte for parte in (apellido, nombres) if parte
-            )
-            cleaned_data["apellido_nombre"] = nombre_completo
-        elif cambio_nombre_completo and nombre_completo:
-            if "," in nombre_completo:
-                apellido, nombres = (
-                    parte.strip() for parte in nombre_completo.split(",", 1)
-                )
-            else:
-                apellido, nombres = nombre_completo, ""
-            cleaned_data["apellido"] = apellido
-            cleaned_data["nombres"] = nombres
-
+        nombre_completo = (cleaned_data.get("apellido_nombre") or "").strip()
+        cleaned_data["apellido_nombre"] = nombre_completo
         if not nombre_completo:
             self.add_error(
                 "apellido_nombre",
-                "Ingrese el apellido y nombre del agente.",
+                "Ingrese el nombre y apellido del agente.",
             )
+            return cleaned_data
+
+        if "," in nombre_completo:
+            apellido, nombres = (
+                parte.strip() for parte in nombre_completo.split(",", 1)
+            )
+        else:
+            apellido, nombres = nombre_completo, ""
+        self.instance.apellido = apellido
+        self.instance.nombres = nombres
         return cleaned_data
 
 

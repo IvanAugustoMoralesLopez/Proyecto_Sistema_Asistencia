@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError, RestrictedError
 from django.db.models import Q
@@ -12,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 
 from reportes.auditoria import AccionesReportes, registrar_evento
 
@@ -34,16 +35,67 @@ from .models import (
     Cargo,
     Carrera,
     Designacion,
+    Especialidad,
     EspacioCurricular,
     Horario,
     ImportacionPersonalError,
     Persona,
     TipoInstrumentoLegal,
+    UnidadEducativa,
 )
 from licencias.models import LicenciaArticulo, LicenciaOtorgada
 from licencias.forms import LicenciaArticuloForm
 
 MAX_CSV_BYTES = 5 * 1024 * 1024
+MAX_FILAS_VISTA_PREVIA = 100
+COLUMNAS_CSV_PERSONAL = (
+    "dni",
+    "nombre_apellido",
+    "sexo",
+    "fecha_nacimiento",
+    "estado_civil",
+    "nacionalidad",
+    "nro_dgi",
+    "nro_dgr",
+    "telefono",
+    "email",
+    "domicilio_calle",
+    "barrio",
+    "localidad",
+    "codigo_postal",
+    "provincia",
+    "activa",
+    "cargo_codigo",
+    "espacio_curricular",
+    "carrera",
+    "unidad_educativa_id",
+    "especialidad",
+    "situacion_revista",
+    "anio_curso",
+    "division_seccion",
+    "turno",
+    "hs_catedra",
+    "desde",
+    "hasta",
+    "horas_lun",
+    "horas_mar",
+    "horas_mie",
+    "horas_jue",
+    "horas_vie",
+    "observaciones",
+    "disp_alta_nro",
+    "sello_regional_as",
+    "norma_tipo",
+    "norma_numero",
+    "norma_anio",
+    "organismo_emisor",
+    "pof",
+    "anio_pof",
+    "novedad",
+    "es_suplencia",
+    "plazo_indeterminado",
+    "reemplaza_id",
+)
 
 # Clave de sesión donde queda el CSV ya validado a la espera de la
 # confirmación de la persona administradora (RF-06).
@@ -57,6 +109,61 @@ COLUMNAS_HORAS = {
     "horas_jue": Horario.Dia.JUEVES,
     "horas_vie": Horario.Dia.VIERNES,
 }
+COLUMNAS_DESIGNACION = {
+    "espacio_curricular",
+    "carrera",
+    "unidad_educativa_id",
+    "especialidad",
+    "situacion_revista",
+    "anio_curso",
+    "division_seccion",
+    "turno",
+    "hs_catedra",
+    "desde",
+    "hasta",
+    "observaciones",
+    "disp_alta_nro",
+    "sello_regional_as",
+    "norma_tipo",
+    "norma_numero",
+    "norma_anio",
+    "organismo_emisor",
+    "pof",
+    "anio_pof",
+    "novedad",
+    "es_suplencia",
+    "plazo_indeterminado",
+    "reemplaza_id",
+    *COLUMNAS_HORAS,
+}
+ALIAS_COLUMNAS_CSV = {
+    "nombre_y_apellido",
+    "apellido_nombre",
+    "apellido",
+    "nombres",
+}
+
+
+def _entero_csv(fila, columna, *, maximo=None):
+    valor = (fila.get(columna) or "").strip()
+    if not valor:
+        return None
+    if not valor.isdigit() or (maximo is not None and int(valor) > maximo):
+        raise ValidationError(
+            f"La columna '{columna}' debe ser un número entero válido."
+        )
+    return int(valor)
+
+
+def _booleano_csv(valor, columna):
+    valor = (valor or "").strip().lower()
+    if valor in {"1", "si", "sí", "true", "verdadero"}:
+        return True
+    if valor in {"0", "no", "false", "falso"}:
+        return False
+    raise ValidationError(
+        f"La columna '{columna}' debe indicar sí/no o true/false."
+    )
 
 
 def _fecha_de_vigencia_csv(texto, columna, especial):
@@ -144,7 +251,12 @@ def _importar_fila_personal(fila, usuario=None):
         raise ValidationError("Falta el DNI.")
 
     persona = Persona.objects.filter(pk=dni).first()
-    apellido_nombre = (fila.get("apellido_nombre") or "").strip()
+    apellido_nombre = (
+        fila.get("nombre_apellido")
+        or fila.get("nombre_y_apellido")
+        or fila.get("apellido_nombre")
+        or ""
+    ).strip()
     apellido = (fila.get("apellido") or "").strip()
     nombres = (fila.get("nombres") or "").strip()
     if not apellido_nombre and not (apellido or nombres):
@@ -163,48 +275,73 @@ def _importar_fila_personal(fila, usuario=None):
                 f"No tiene permiso para registrar el legajo con DNI {dni}."
             )
         persona = persona or Persona(dni=dni)
-        apellido_actual = (
-            (fila.get("apellido") or "").strip()
-            if "apellido" in fila
-            else persona.apellido
-        )
-        nombres_actuales = (
-            (fila.get("nombres") or "").strip()
-            if "nombres" in fila
-            else persona.nombres
-        )
+        apellido_actual = (fila.get("apellido") or "").strip() or persona.apellido
+        nombres_actuales = (fila.get("nombres") or "").strip() or persona.nombres
         if apellido_nombre:
             persona.apellido_nombre = apellido_nombre
-            if "apellido" not in fila and "nombres" not in fila:
-                if "," in apellido_nombre:
-                    apellido_actual, nombres_actuales = (
-                        parte.strip() for parte in apellido_nombre.split(",", 1)
-                    )
-                else:
-                    apellido_actual, nombres_actuales = apellido_nombre, ""
-                persona.apellido = apellido_actual
-                persona.nombres = nombres_actuales
+            if "," in apellido_nombre:
+                apellido_actual, nombres_actuales = (
+                    parte.strip() for parte in apellido_nombre.split(",", 1)
+                )
+            else:
+                apellido_actual, nombres_actuales = apellido_nombre, ""
+            persona.apellido = apellido_actual
+            persona.nombres = nombres_actuales
         elif "apellido" in fila or "nombres" in fila:
             persona.apellido_nombre = ", ".join(
                 parte for parte in (apellido_actual, nombres_actuales) if parte
             )
+            persona.apellido = apellido_actual
+            persona.nombres = nombres_actuales
         for campo in (
-            "apellido",
-            "nombres",
             "sexo",
+            "estado_civil",
+            "nacionalidad",
+            "nro_dgi",
+            "nro_dgr",
             "telefono",
             "email",
             "localidad",
             "domicilio_calle",
+            "barrio",
+            "codigo_postal",
+            "provincia",
         ):
             if campo in fila:
                 setattr(persona, campo, (fila.get(campo) or "").strip())
+        fecha_nacimiento = (fila.get("fecha_nacimiento") or "").strip()
+        if fecha_nacimiento:
+            try:
+                persona.fecha_nacimiento = date.fromisoformat(fecha_nacimiento)
+            except ValueError as exc:
+                raise ValidationError(
+                    "La columna 'fecha_nacimiento' debe tener formato AAAA-MM-DD."
+                ) from exc
+        elif "fecha_nacimiento" in fila:
+            persona.fecha_nacimiento = None
+        if (fila.get("activa") or "").strip():
+            persona.activa = _booleano_csv(fila["activa"], "activa")
         persona.full_clean()
         persona.save()
 
     codigo_cargo = (fila.get("cargo_codigo") or "").strip()
     if not codigo_cargo:
-        return
+        columnas_designacion_con_valor = [
+            columna
+            for columna in COLUMNAS_DESIGNACION
+            if (fila.get(columna) or "").strip()
+        ]
+        if columnas_designacion_con_valor:
+            raise ValidationError(
+                "La fila contiene datos de designación pero no tiene 'cargo_codigo'."
+            )
+        return {
+            "dni": persona.dni,
+            "nombre": persona.apellido_nombre,
+            "cargo": "",
+            "espacio": "",
+            "resultado": "Solo legajo",
+        }
 
     if usuario and not usuario.has_perm("personal.add_designacion"):
         raise ValidationError(
@@ -235,6 +372,32 @@ def _importar_fila_personal(fila, usuario=None):
             raise ValidationError(
                 f"No existe el espacio curricular '{espacio_nombre}'"
                 + (f" en la carrera '{carrera_nombre}'." if carrera_nombre else ".")
+            )
+
+    unidad_educativa = None
+    unidad_educativa_id = (fila.get("unidad_educativa_id") or "").strip()
+    if unidad_educativa_id:
+        if not unidad_educativa_id.isdigit():
+            raise ValidationError(
+                "La columna 'unidad_educativa_id' debe ser un identificador numérico."
+            )
+        unidad_educativa = UnidadEducativa.objects.filter(
+            pk=unidad_educativa_id, activa=True
+        ).first()
+        if unidad_educativa is None:
+            raise ValidationError(
+                f"No existe la unidad educativa '{unidad_educativa_id}'."
+            )
+
+    especialidad = None
+    especialidad_nombre = (fila.get("especialidad") or "").strip()
+    if especialidad_nombre:
+        especialidad = Especialidad.objects.filter(
+            titulo__iexact=especialidad_nombre, activa=True
+        ).first()
+        if especialidad is None:
+            raise ValidationError(
+                f"No existe la especialidad '{especialidad_nombre}'."
             )
 
     # RN-09: 'desde' admite una fecha o SIN INICIO.
@@ -285,20 +448,36 @@ def _importar_fila_personal(fila, usuario=None):
         persona=persona,
         cargo=cargo,
         espacio_curricular=espacio,
+        unidad_educativa=unidad_educativa,
+        especialidad=especialidad,
         reemplaza=reemplaza,
         situacion_revista=situacion,
         norma_tipo=norma_tipo,
         norma_numero=(fila.get("norma_numero") or "").strip(),
+        norma_anio=_entero_csv(fila, "norma_anio", maximo=2200),
         organismo_emisor=(fila.get("organismo_emisor") or "").strip(),
         observaciones=(fila.get("observaciones") or "").strip(),
+        anio_curso=(fila.get("anio_curso") or "").strip(),
+        division_seccion=(fila.get("division_seccion") or "").strip(),
+        turno=(fila.get("turno") or "").strip(),
+        hs_catedra=_entero_csv(fila, "hs_catedra", maximo=255),
+        disp_alta_nro=(fila.get("disp_alta_nro") or "").strip(),
+        sello_regional_as=(fila.get("sello_regional_as") or "").strip(),
+        pof=(fila.get("pof") or "").strip(),
+        anio_pof=_entero_csv(fila, "anio_pof", maximo=2200),
+        novedad=(fila.get("novedad") or "").strip(),
         desde=desde,
         sin_inicio=sin_inicio,
-        es_suplencia=(fila.get("es_suplencia") or "").strip().lower()
-        in {"1", "si", "sí", "true"},
-        plazo_indeterminado=(fila.get("plazo_indeterminado") or "")
-        .strip()
-        .lower()
-        in {"1", "si", "sí", "true"},
+        es_suplencia=(
+            _booleano_csv(fila["es_suplencia"], "es_suplencia")
+            if (fila.get("es_suplencia") or "").strip()
+            else False
+        ),
+        plazo_indeterminado=(
+            _booleano_csv(fila["plazo_indeterminado"], "plazo_indeterminado")
+            if (fila.get("plazo_indeterminado") or "").strip()
+            else False
+        ),
     )
     # RN-09: 'hasta' admite una fecha o SIN TERMINO (o quedar vacío).
     hasta = _fecha_de_vigencia_csv(
@@ -329,6 +508,13 @@ def _importar_fila_personal(fila, usuario=None):
         Horario.objects.create(
             designacion=designacion, dia=dia, horas_catedra=horas
         )
+    return {
+        "dni": persona.dni,
+        "nombre": persona.apellido_nombre,
+        "cargo": cargo.descripcion,
+        "espacio": espacio.nombre if espacio else "",
+        "resultado": "Legajo y designación",
+    }
 
 
 class _DeshacerSimulacion(Exception):
@@ -350,7 +536,14 @@ def _leer_archivo_csv(archivo):
     return archivo.name[:255], contenido
 
 
-def _importar_contenido(nombre, contenido, usuario=None, *, simular=False):
+def _importar_contenido(
+    nombre,
+    contenido,
+    usuario=None,
+    *,
+    simular=False,
+    filas_previas=None,
+):
     """
     Recorre el CSV fila por fila. Devuelve (total, rechazos), donde cada
     rechazo es {"fila", "dni", "motivo"}.
@@ -359,12 +552,28 @@ def _importar_contenido(nombre, contenido, usuario=None, *, simular=False):
     inconsistencias) pero no deja nada guardado: es la vista previa que la
     persona administradora confirma antes de importar (RF-06).
     """
-    lector = csv.DictReader(io.StringIO(contenido))
+    try:
+        dialecto = csv.Sniffer().sniff(
+            contenido[:4096], delimiters=",;\t"
+        )
+    except csv.Error:
+        dialecto = csv.excel
+    lector = csv.DictReader(io.StringIO(contenido), dialect=dialecto)
     if not lector.fieldnames:
         raise ValidationError("El CSV debe incluir una fila de encabezados.")
     lector.fieldnames = [campo.strip().lower() for campo in lector.fieldnames]
     if "dni" not in lector.fieldnames:
         raise ValidationError("El CSV debe incluir una columna 'dni'.")
+    if len(set(lector.fieldnames)) != len(lector.fieldnames):
+        raise ValidationError("El CSV no puede repetir nombres de columnas.")
+    columnas_admitidas = set(COLUMNAS_CSV_PERSONAL) | ALIAS_COLUMNAS_CSV
+    columnas_desconocidas = set(lector.fieldnames) - columnas_admitidas
+    if columnas_desconocidas:
+        raise ValidationError(
+            "Columnas no reconocidas: "
+            + ", ".join(sorted(columnas_desconocidas))
+            + ". Descargue la plantilla CSV para ver los nombres admitidos."
+        )
 
     total = 0
     rechazos = []
@@ -374,8 +583,22 @@ def _importar_contenido(nombre, contenido, usuario=None, *, simular=False):
             for numero_fila, fila in enumerate(lector, start=2):
                 total += 1
                 try:
+                    if None in fila or any(valor is None for valor in fila.values()):
+                        raise ValidationError(
+                            "La fila no tiene la misma cantidad de columnas que el encabezado."
+                        )
                     with transaction.atomic():
-                        _importar_fila_personal(fila, usuario=usuario)
+                        detalle = _importar_fila_personal(
+                            fila, usuario=usuario
+                        )
+                    if simular and filas_previas is not None:
+                        if len(filas_previas) < MAX_FILAS_VISTA_PREVIA:
+                            filas_previas.append(
+                                {
+                                    "fila": numero_fila,
+                                    **detalle,
+                                }
+                            )
                 except (ValidationError, IntegrityError, ValueError) as exc:
                     rechazos.append(
                         {
@@ -430,8 +653,13 @@ def gestion_legajos(request):
                 return redirect(reverse("personal:gestion_legajos"))
             try:
                 nombre, contenido = _leer_archivo_csv(archivo)
+                filas_previas = []
                 total, rechazos = _importar_contenido(
-                    nombre, contenido, usuario=request.user, simular=True
+                    nombre,
+                    contenido,
+                    usuario=request.user,
+                    simular=True,
+                    filas_previas=filas_previas,
                 )
             except ValidationError as exc:
                 messages.error(request, _mensaje_errores(exc))
@@ -450,6 +678,9 @@ def gestion_legajos(request):
                         "nombre": nombre,
                         "total": total,
                         "validas": total - len(rechazos),
+                        "filas": filas_previas,
+                        "filas_mostradas": len(filas_previas),
+                        "limite_filas": MAX_FILAS_VISTA_PREVIA,
                         "rechazos": [
                             {k: r[k] for k in ("fila", "dni", "motivo")}
                             for r in rechazos
@@ -638,6 +869,9 @@ def _contexto_pantalla(
     ).order_by("persona__apellido_nombre", "desde")
     if not persona:
         resultados = resultados.filter(activo=True)
+    dni_filtro = None
+    cargo = None
+    espacio = None
     if filtro.is_valid():
         dni_filtro = filtro.cleaned_data.get("dni")
         cargo = filtro.cleaned_data.get("cargo")
@@ -651,6 +885,22 @@ def _contexto_pantalla(
             resultados = resultados.filter(cargo=cargo)
         if espacio:
             resultados = resultados.filter(espacio_curricular=espacio)
+
+    agentes = Persona.objects.all().order_by("apellido_nombre", "dni")
+    if filtro.is_valid():
+        if dni_filtro:
+            agentes = agentes.filter(
+                Q(dni__icontains=dni_filtro)
+                | Q(apellido_nombre__icontains=dni_filtro)
+            )
+        filtros_designacion = {}
+        if cargo:
+            filtros_designacion["designaciones__cargo"] = cargo
+        if espacio:
+            filtros_designacion["designaciones__espacio_curricular"] = espacio
+        if filtros_designacion:
+            filtros_designacion["designaciones__activo"] = True
+            agentes = agentes.filter(**filtros_designacion).distinct()
 
     if persona:
         designaciones = persona.designaciones.select_related(
@@ -677,6 +927,9 @@ def _contexto_pantalla(
         "designacion_seleccionada": designacion_seleccionada,
         "designaciones": designaciones,
         "resultados": resultados,
+        "agentes": Paginator(agentes, 25).get_page(
+            request.GET.get("pagina")
+        ),
         "cargos": Cargo.objects.filter(activo=True).order_by("descripcion"),
         "espacios": EspacioCurricular.objects.filter(activo=True)
         .select_related("carrera")
@@ -941,6 +1194,8 @@ def editar_designacion(request, designacion_id):
 
 @login_required
 def autocompletar_legajos(request):
+    if not _puede_consultar_legajos(request.user):
+        raise PermissionDenied
     termino = request.GET.get("q", "").strip()
     legajos = Persona.objects.filter(activa=True)
     if termino:
@@ -956,6 +1211,20 @@ def autocompletar_legajos(request):
             ]
         }
     )
+
+
+@login_required
+def plantilla_importacion_csv(request):
+    if not _puede_importar_csv(request.user):
+        raise PermissionDenied
+    respuesta = HttpResponse(content_type="text/csv; charset=utf-8")
+    respuesta["Content-Disposition"] = (
+        'attachment; filename="plantilla_personal.csv"'
+    )
+    respuesta.write("\ufeff")
+    escritor = csv.writer(respuesta)
+    escritor.writerow(COLUMNAS_CSV_PERSONAL)
+    return respuesta
 
 
 @login_required
