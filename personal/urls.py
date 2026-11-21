@@ -7,6 +7,7 @@ from .views import (
     gestion_legajos,
     nueva_designacion,
     editar_designacion,
+    plantilla_importacion_csv,
 )
 
 app_name = "personal"
@@ -25,6 +26,11 @@ urlpatterns = [
     ),
     path("catalogos/", catalogos_personal, name="catalogos"),
     path("legajos/autocompletar/", autocompletar_legajos, name="legajos_autocompletar"),
+    path(
+        "legajos/plantilla-csv/",
+        plantilla_importacion_csv,
+        name="plantilla_importacion_csv",
+    ),
     path(
         "designaciones/autocompletar/",
         autocompletar_designaciones,

@@ -277,16 +277,16 @@ class DesignacionTests(TestCase):
     def test_formulario_mantiene_el_dni_inmutable_al_editar(self):
         form = PersonaForm(
             data={
-                "apellido": "Apellido actualizado",
-                "nombres": "Docente",
+                "apellido_nombre": "Apellido actualizado, Docente",
                 "sexo": "F",
                 "activa": "on",
             },
             instance=self.persona,
         )
 
-        self.assertIn("apellido", form.fields)
-        self.assertIn("nombres", form.fields)
+        self.assertNotIn("apellido", form.fields)
+        self.assertNotIn("nombres", form.fields)
+        self.assertEqual(form.fields["apellido_nombre"].label, "Nombre y Apellido")
         self.assertTrue(form.is_valid(), form.errors)
         persona = form.save()
         self.assertEqual(persona.pk, "30123456")
@@ -1011,6 +1011,213 @@ class RequerimientosV2PersonalTests(TestCase):
         self.assertFalse(Persona.objects.filter(pk="31000001").exists())
         self.assertFalse(Persona.objects.filter(pk="31000002").exists())
         self.assertEqual(ImportacionPersonalError.objects.count(), 0)
+
+    def test_vista_previa_muestra_y_confirma_un_legajo_sin_designacion(self):
+        respuesta = self.cliente.post(
+            self.url,
+            {
+                "accion": "importar_csv",
+                "archivo": self.csv(
+                    "dni,nombre_apellido,sexo,email\n"
+                    '31000003,"GOMEZ, ANA",F,ana@example.com\n'
+                ),
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Solo legajo")
+        self.assertContains(respuesta, "31000003")
+        self.assertFalse(Persona.objects.filter(pk="31000003").exists())
+
+        confirmacion = self.cliente.post(
+            self.url, {"accion": "confirmar_csv"}, follow=True
+        )
+        self.assertContains(confirmacion, "1 filas importadas")
+        persona = Persona.objects.get(pk="31000003")
+        self.assertEqual(persona.apellido_nombre, "GOMEZ, ANA")
+        self.assertFalse(Designacion.objects.filter(persona=persona).exists())
+
+    def test_importa_legajo_y_designacion_desde_la_misma_fila_csv(self):
+        respuesta = self.cliente.post(
+            self.url,
+            {
+                "accion": "importar_csv",
+                "archivo": self.csv(
+                    "dni,nombre_apellido,cargo_codigo,situacion_revista,desde,hasta,"
+                    "horas_lun\n"
+                    '31000004,"LOPEZ, MARIA",PROF,TIT,2026-03-01,2026-12-31,3\n'
+                ),
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Legajo y designación")
+        self.assertFalse(Persona.objects.filter(pk="31000004").exists())
+        self.cliente.post(self.url, {"accion": "confirmar_csv"})
+
+        persona = Persona.objects.get(pk="31000004")
+        designacion = Designacion.objects.get(persona=persona)
+        self.assertEqual(persona.apellido_nombre, "LOPEZ, MARIA")
+        self.assertEqual(designacion.cargo, self.cargo)
+        self.assertEqual(
+            designacion.horarios.get(dia=Horario.Dia.LUNES).horas_catedra,
+            3,
+        )
+
+    def test_importa_filas_personales_y_de_designacion_independientemente(self):
+        self.cliente.post(
+            self.url,
+            {
+                "accion": "importar_csv",
+                "archivo": self.csv(
+                    "dni,nombre_apellido,cargo_codigo,situacion_revista,desde\n"
+                    "31000005,SOLO UNO,,,\n"
+                    "31000006,CON CARGO,PROF,TIT,2026-03-01\n"
+                ),
+            },
+        )
+        respuesta = self.cliente.post(
+            self.url, {"accion": "confirmar_csv"}, follow=True
+        )
+
+        self.assertContains(respuesta, "2 filas importadas")
+        self.assertTrue(Persona.objects.filter(pk="31000005").exists())
+        self.assertFalse(
+            Designacion.objects.filter(persona_id="31000005").exists()
+        )
+        self.assertEqual(
+            Designacion.objects.filter(persona_id="31000006").count(),
+            1,
+        )
+
+    def test_csv_excel_con_separador_punto_y_coma(self):
+        respuesta = self.cliente.post(
+            self.url,
+            {
+                "accion": "importar_csv",
+                "archivo": self.csv(
+                    "dni;nombre_apellido;email\n"
+                    "31000007;AGENTE CSV;agente@example.com\n"
+                ),
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.context["csv_pendiente"]["validas"], 1)
+        self.cliente.post(self.url, {"accion": "confirmar_csv"})
+        self.assertTrue(Persona.objects.filter(pk="31000007").exists())
+
+    def test_csv_carga_campos_personales_y_de_designacion_documentados(self):
+        archivo = self.csv(
+            "dni,nombre_apellido,fecha_nacimiento,estado_civil,nacionalidad,"
+            "telefono,email,domicilio_calle,barrio,localidad,codigo_postal,"
+            "provincia,cargo_codigo,situacion_revista,anio_curso,division_seccion,"
+            "turno,hs_catedra,desde,hasta,norma_tipo,norma_numero,norma_anio,"
+            "organismo_emisor,pof,anio_pof,novedad,disp_alta_nro,sello_regional_as,"
+            "observaciones,horas_lun\n"
+            "31000010,\"PEREZ, ANA\",1990-04-15,Soltera,Argentina,123,"
+            "ana@example.com,Calle 1,Centro,Ciudad,1000,Provincia,PROF,TIT,"
+            "1,A,M,4,2026-03-01,2026-12-31,Resolución,123,2026,Ministerio,"
+            "POF 1,2026,Alta,88,Regional,Observación,2\n"
+        )
+
+        total, rechazadas = _procesar_csv(archivo)
+
+        self.assertEqual((total, rechazadas), (1, 0))
+        persona = Persona.objects.get(pk="31000010")
+        self.assertEqual(persona.fecha_nacimiento, date(1990, 4, 15))
+        self.assertEqual(persona.email, "ana@example.com")
+        designacion = Designacion.objects.get(persona=persona)
+        self.assertEqual(designacion.turno, "M")
+        self.assertEqual(designacion.hs_catedra, 4)
+        self.assertEqual(designacion.norma_numero, "123")
+        self.assertEqual(designacion.norma_anio, 2026)
+        self.assertEqual(designacion.pof, "POF 1")
+        self.assertEqual(
+            designacion.horarios.get(dia=Horario.Dia.LUNES).horas_catedra,
+            2,
+        )
+
+    def test_columnas_desconocidas_se_informan_antes_de_importar(self):
+        respuesta = self.cliente.post(
+            self.url,
+            {
+                "accion": "importar_csv",
+                "archivo": self.csv("dni,nombre_completo\n31000008,AGENTE\n"),
+            },
+            follow=True,
+        )
+
+        self.assertContains(respuesta, "Columnas no reconocidas: nombre_completo")
+        self.assertFalse(Persona.objects.filter(pk="31000008").exists())
+
+    def test_descargar_plantilla_csv_requiere_permiso_de_importacion(self):
+        respuesta = self.cliente.get(
+            reverse("personal:plantilla_importacion_csv")
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn("text/csv", respuesta["Content-Type"])
+        self.assertIn("nombre_apellido", respuesta.content.decode("utf-8-sig"))
+
+    def test_autocompletar_legajos_requiere_permiso_de_personal(self):
+        usuario = get_user_model().objects.create_user(
+            username="autocomplete-no-permission",
+            password="x",
+        )
+        cliente = Client()
+        cliente.force_login(usuario)
+
+        respuesta = cliente.get(
+            reverse("personal:legajos_autocompletar"), {"q": "PEREZ"}
+        )
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_autocompletado_permite_buscar_a_usuarios_con_permiso_de_designacion(self):
+        usuario = get_user_model().objects.create_user(
+            username="autocomplete-designacion-permission",
+            password="x",
+        )
+        usuario.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="personal",
+                codename="add_designacion",
+            )
+        )
+        cliente = Client()
+        cliente.force_login(usuario)
+
+        respuesta = cliente.get(
+            reverse("personal:legajos_autocompletar"),
+            {"q": self.persona.dni},
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["resultados"][0]["dni"], self.persona.dni)
+
+    def test_listado_incluye_agentes_sin_designaciones(self):
+        Persona.objects.create(
+            dni="31000009",
+            apellido_nombre="Agente sin cargos",
+        )
+
+        respuesta = self.cliente.get(self.url)
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Listado de agentes")
+        self.assertContains(respuesta, "31000009")
+        self.assertContains(respuesta, "Agente sin cargos")
+
+    def test_formulario_persona_expone_un_solo_campo_de_nombre(self):
+        form = PersonaForm()
+
+        campos_nombre = {
+            "apellido",
+            "nombres",
+            "apellido_nombre",
+        }.intersection(form.fields)
+        self.assertEqual(campos_nombre, {"apellido_nombre"})
 
     def test_cancelar_descarta_la_importacion(self):
         self.cliente.post(
