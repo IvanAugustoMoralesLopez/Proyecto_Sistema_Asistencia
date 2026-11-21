@@ -631,14 +631,17 @@ class RecepcionFormulariosTests(BaseAsistenciaTests):
         )
         self.assertEqual(actualizado.fecha_recepcion, timezone.localdate())
 
-    def test_sin_numero_de_formulario_se_rechaza(self):
+    def test_sin_numero_de_formulario_igual_se_recibe(self):
+        # El número es opcional: recibir el papel alcanza para justificar.
         registro = self.inasistencia()
-        for estado in (
-            self.Justificacion.EN_TRAMITE,
-            self.Justificacion.JUSTIFICADA,
-        ):
-            with self.assertRaises(ValidationError):
-                self.recepcionar(registro, estado, nro_formulario="  ")
+        actualizado = self.recepcionar(
+            registro, self.Justificacion.JUSTIFICADA, nro_formulario="  "
+        )
+        self.assertEqual(
+            actualizado.estado_justificacion, self.Justificacion.JUSTIFICADA
+        )
+        self.assertEqual(actualizado.nro_formulario, "")
+        self.assertIsNotNone(actualizado.fecha_recepcion)
 
     def test_la_fecha_de_recepcion_no_puede_ser_futura(self):
         registro = self.inasistencia()
@@ -725,7 +728,22 @@ class RecepcionFormulariosTests(BaseAsistenciaTests):
             self.recepcionar(registro, "INVENTADO", nro_formulario="F-1")
 
     def test_un_periodo_cerrado_impide_recepcionar(self):
+        from asistencias.services import pendientes, resolver_pendiente
+
         registro = self.inasistencia()
+        validar_asistencia(
+            usuario=self.usuario, token=self.token, registro_id=registro.pk
+        )
+        # La falta sin formulario venció: no deja cerrar hasta responderla.
+        with self.assertRaises(ValidationError):
+            cerrar_mes(usuario=self.usuario, token=self.token, anio=2026, mes=9)
+        pendiente = pendientes()[0]
+        resolver_pendiente(
+            usuario=self.usuario,
+            token=self.token,
+            clave=pendiente["clave"],
+            respuesta="no_llego",
+        )
         validar_asistencia(
             usuario=self.usuario, token=self.token, registro_id=registro.pk
         )
@@ -801,13 +819,18 @@ class RecepcionFormulariosTests(BaseAsistenciaTests):
             actualizado.estado_justificacion, self.Justificacion.INJUSTIFICADA
         )
 
-    def test_la_base_exige_el_formulario_en_tramite_y_justificada(self):
+    def test_el_numero_de_formulario_es_opcional_en_la_base(self):
+        # RF-09 pide recibir el papel, no registrar su número: la base ya no
+        # exige el número para dejar la falta en trámite o justificada.
         registro = self.inasistencia()
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            RegistroAsistencia.objects.filter(pk=registro.pk).update(
-                estado_justificacion=self.Justificacion.EN_TRAMITE,
-                nro_formulario="",
-            )
+        RegistroAsistencia.objects.filter(pk=registro.pk).update(
+            estado_justificacion=self.Justificacion.EN_TRAMITE,
+            nro_formulario="",
+        )
+        registro.refresh_from_db()
+        self.assertEqual(
+            registro.estado_justificacion, self.Justificacion.EN_TRAMITE
+        )
 
     def test_la_migracion_de_datos_marca_las_inasistencias_existentes(self):
         modulo = importlib.import_module(
@@ -964,15 +987,14 @@ class RecepcionFormulariosVistasTests(BaseAsistenciaTests):
                 nueva_marca="PR",
             )
 
-    def test_la_pantalla_pide_el_numero_de_formulario(self):
+    def test_la_pantalla_acepta_el_formulario_sin_numero(self):
         respuesta = self.client.post(
             reverse("asistencia:recepcionar_formulario", args=[self.inasistencia.pk]),
             {"estado_justificacion": "EN_TRAMITE", "nro_formulario": ""},
         )
-        self.assertEqual(respuesta.status_code, 200)
-        self.assertIn("nro_formulario", respuesta.context["form"].errors)
+        self.assertEqual(respuesta.status_code, 302)
         self.inasistencia.refresh_from_db()
-        self.assertEqual(self.inasistencia.estado_justificacion, "INJUSTIFICADA")
+        self.assertEqual(self.inasistencia.estado_justificacion, "EN_TRAMITE")
 
     def test_una_justificada_ya_no_admite_cambios_en_la_pantalla(self):
         recepcionar_formulario(

@@ -96,8 +96,13 @@
                 {# ── Licencias (Pantalla 3) ── #}
                 {% if perms.licencias.add_licenciaotorgada or perms.licencias.view_licenciaotorgada %}
                 <p class="sidebar__titulo">Licencias</p>
+                {% if perms.licencias.view_licenciaotorgada %}
+                <a class="sidebar__link" href="{% url 'licencias:pendientes' %}">
+                    <i class="bi bi-inbox"></i><span>Pendientes</span>
+                </a>
+                {% endif %}
                 {% if perms.licencias.add_licenciaotorgada %}
-                <a class="sidebar__link" href="{% url 'licencias:nueva_licencia_otorgada' %}">
+                <a class="sidebar__link" href="{% url 'licencias:nueva_licencia' %}">
                     <i class="bi bi-file-earmark-plus"></i><span>Nueva licencia</span>
                 </a>
                 {% endif %}

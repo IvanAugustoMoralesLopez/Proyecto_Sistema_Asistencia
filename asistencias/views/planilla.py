@@ -191,6 +191,9 @@ def _armar_filas(fecha, texto, valores, errores, *, solo_con_clase, marcas):
 CAMPO_MARCA_AGENTE = "agente-marca-"
 CAMPO_HORAS_AGENTE = "agente-horas-"
 CAMPO_OBS_AGENTE = "agente-obs-"
+# Apartado de inasistencia: ¿se recibió el formulario? (si / no) y su número.
+CAMPO_FORMULARIO_AGENTE = "agente-form-"
+CAMPO_NRO_FORMULARIO_AGENTE = "agente-nroform-"
 
 
 def _agrupar_por_agente(filas, valores_agente, errores_agente):
@@ -274,10 +277,14 @@ def _leer_agentes(post, fecha, marcas_por_pk, *, solo_con_clase, ya_leidas):
 
         horas_texto = post.get(f"{CAMPO_HORAS_AGENTE}{dni}", "").strip()
         observaciones = post.get(f"{CAMPO_OBS_AGENTE}{dni}", "").strip()
+        formulario = post.get(f"{CAMPO_FORMULARIO_AGENTE}{dni}", "")
+        nro_formulario = post.get(f"{CAMPO_NRO_FORMULARIO_AGENTE}{dni}", "").strip()[:30]
         valores[dni] = {
             "marca": post[clave],
             "horas": horas_texto,
             "obs": observaciones,
+            "formulario": formulario,
+            "nro_formulario": nro_formulario,
         }
 
         marca = marcas_por_pk.get(_id_pedido(post[clave]))
@@ -365,6 +372,9 @@ def _leer_agentes(post, fecha, marcas_por_pk, *, solo_con_clase, ya_leidas):
                     "horas_inasistidas": horas,
                     "licencia": licencia,
                     "observaciones": observaciones,
+                    # Falta con el papel ya recibido: nace justificada.
+                    "formulario_recibido": formulario == "si",
+                    "nro_formulario": nro_formulario,
                 }
             )
 
@@ -754,6 +764,18 @@ def planilla_rapida(request):
         agente["alerta"] = en_alerta.get(agente["persona"].pk)
     marcadas = sum(1 for agente in agentes if agente["cargado"])
 
+    # Pendientes (faltas sin resolver y licencias sin completar): aviso al día
+    # hábil siguiente, obligatorio al segundo. Se calculan respecto de hoy.
+    from ..services import ESTADO_VENCIDO, avisos_del_dia
+
+    lista_pendientes = avisos_del_dia(hoy)
+
+    # Fechas del aviso «LIC pendiente»: aviso al día hábil siguiente y
+    # vencimiento al segundo, contados desde el día que se está cargando.
+    from ..services.pendientes import plazos
+
+    plazo_aviso, plazo_vence = plazos(fecha)
+
     # Punto 6: si el día no es hábil o es futuro, ofrecer el día en el que sí
     # corresponde cargar, para que el aviso tenga una salida.
     dia_habil_sugerido = (
@@ -791,6 +813,14 @@ def planilla_rapida(request):
             ),
             "dia_habil_sugerido": dia_habil_sugerido,
             "es_hoy": fecha == hoy,
+            "lista_pendientes": lista_pendientes,
+            "hay_vencidos": any(
+                p["estado"] == ESTADO_VENCIDO for p in lista_pendientes
+            ),
+            "volver": request.get_full_path(),
+            "codigo_inasistencia": "I",
+            "plazo_aviso": plazo_aviso,
+            "plazo_vence": plazo_vence,
             **contexto_sesion(request),
         },
     )

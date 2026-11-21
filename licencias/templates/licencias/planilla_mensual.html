@@ -86,12 +86,11 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% for r in falta.renglones %}
-                                    <a class="btn btn-sm btn-outline-secondary mb-1"
-                                       href="{% url 'licencias:nueva_licencia_otorgada' %}?designacion={{ r.designacion_id }}&amp;desde={{ falta.fecha|date:'Y-m-d' }}&amp;volver={{ request.get_full_path|urlencode }}">
-                                        Cargar licencia{% if falta.renglones|length > 1 %} · {% if r.designacion.espacio_curricular %}{{ r.designacion.espacio_curricular.nombre }}{% else %}{{ r.designacion.cargo.descripcion }}{% endif %}{% endif %}
-                                    </a>
-                                {% endfor %}
+                                {# La licencia es del docente: un solo botón, el sistema busca sus materias. #}
+                                <a class="btn btn-sm btn-outline-secondary mb-1"
+                                   href="{% url 'licencias:nueva_licencia' %}?persona={{ falta.docente.pk }}&amp;desde={{ falta.fecha|date:'Y-m-d' }}&amp;volver={{ request.get_full_path|urlencode }}">
+                                    Cargar licencia
+                                </a>
                             </td>
                         </tr>
                     {% endfor %}
@@ -218,12 +217,13 @@
 
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-header bg-dark text-white">
-        <h2 class="h5 mb-0">Disposiciones internas a emitir</h2>
+        <h2 class="h5 mb-0">Disposiciones de faltas y permisos a emitir</h2>
     </div>
     <div class="card-body">
         <p class="text-secondary">
-            Una sola disposición por docente y período, numeradas en forma correlativa
-            y en orden alfabético por apellido.
+            Las licencias ya traen su disposición desde que se cargan. Acá quedan las
+            faltas con formulario y los permisos: una sola disposición por docente y
+            período, numeradas en forma correlativa y en orden alfabético por apellido.
         </p>
         {% if por_emitir %}
             <ul class="mb-3">
@@ -250,46 +250,78 @@
     </div>
 </div>
 
-{# RN-11: disposiciones ya emitidas, agrupadas por número. #}
-<div class="card shadow-sm border-0 mb-4" id="disposiciones-emitidas">
-    <div class="card-header bg-dark text-white">
+{# RN-11: disposiciones del mes, agrupadas por número. Número y oficina editables. #}
+<div class="card shadow-sm border-0 mb-4" id="disposiciones-del-mes">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h2 class="h5 mb-0">Disposiciones del mes</h2>
+        {% if puede_modificar and emitidas %}<span class="badge text-bg-warning">Editables</span>{% endif %}
     </div>
     <div class="card-body">
         {% if emitidas %}
-            <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>N°</th>
-                            <th>Docente</th>
-                            <th>Desde</th>
-                            <th>Hasta</th>
-                            <th>Materias / cargos</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for disp in emitidas %}
+            <p class="text-secondary small">
+                Las de licencias se generan al guardar cada licencia. Acá se pueden corregir el
+                número y la oficina; si un número ya existe en la oficina y el año, el sistema avisa.
+            </p>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="disposiciones">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
                             <tr>
-                                <td class="text-nowrap fw-semibold">{{ disp.numero }}{% if disp.anio %}/{{ disp.anio }}{% endif %}</td>
-                                <td>{{ disp.renglones.0.designacion.persona.apellido_nombre }}</td>
-                                <td class="text-nowrap">{{ disp.renglones.0.desde|date:"d/m/Y" }}</td>
-                                <td class="text-nowrap">{{ disp.renglones.0.hasta|date:"d/m/Y" }}</td>
-                                <td>
-                                    {% for r in disp.renglones %}
-                                        <div>
-                                            {% if r.designacion.espacio_curricular %}{{ r.designacion.espacio_curricular.nombre }}{% else %}{{ r.designacion.cargo.descripcion }}{% endif %}
-                                            <span class="text-secondary small">· {{ r.planilla|default:"pendiente" }} · {{ r.horas|floatformat:"-2" }} hs{% if r.cod_licencia %} · {{ r.cod_licencia }}{% endif %}</span>
-                                        </div>
-                                    {% endfor %}
-                                </td>
+                                <th>N°</th>
+                                <th>Oficina</th>
+                                <th>Docente</th>
+                                <th>Desde</th>
+                                <th>Hasta</th>
+                                <th>Materias / cargos</th>
                             </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            {% for disp in emitidas %}
+                                <tr>
+                                    <td class="text-nowrap">
+                                        {% if puede_modificar %}
+                                            <div class="input-group input-group-sm" style="width: 8rem;">
+                                                <input class="form-control" type="text" inputmode="numeric" maxlength="20"
+                                                       name="disp-numero-{{ disp.anio|default:0 }}-{{ disp.numero }}" value="{{ disp.numero }}"
+                                                       aria-label="Número de la disposición {{ disp.numero }}">
+                                                {% if disp.anio %}<span class="input-group-text">/{{ disp.anio }}</span>{% endif %}
+                                            </div>
+                                        {% else %}
+                                            <span class="fw-semibold">{{ disp.numero }}{% if disp.anio %}/{{ disp.anio }}{% endif %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if puede_modificar %}
+                                            <input class="form-control form-control-sm" style="width: 6rem;" type="text" maxlength="10"
+                                                   name="disp-oficina-{{ disp.anio|default:0 }}-{{ disp.numero }}" value="{{ disp.renglones.0.oficina }}"
+                                                   aria-label="Oficina de la disposición {{ disp.numero }}">
+                                        {% else %}{{ disp.renglones.0.oficina }}{% endif %}
+                                    </td>
+                                    <td>{{ disp.renglones.0.designacion.persona.apellido_nombre }}</td>
+                                    <td class="text-nowrap">{{ disp.renglones.0.desde|date:"d/m/Y" }}</td>
+                                    <td class="text-nowrap">{{ disp.renglones.0.hasta|date:"d/m/Y" }}</td>
+                                    <td>
+                                        {% for r in disp.renglones %}
+                                            <div>
+                                                {% if r.designacion.espacio_curricular %}{{ r.designacion.espacio_curricular.nombre }}{% else %}{{ r.designacion.cargo.descripcion }}{% endif %}
+                                                <span class="text-secondary small">· {{ r.planilla|default:"pendiente" }} · {{ r.horas|floatformat:"-2" }} hs{% if r.cod_licencia %} · {{ r.cod_licencia }}{% endif %}</span>
+                                                {% if r.licencia_id %}<a class="small" href="{% url 'licencias:detalle_licencia' r.licencia_id %}">Ver licencia</a>{% endif %}
+                                            </div>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if puede_modificar %}
+                    <button class="btn btn-primary mt-3" type="submit">Guardar cambios en disposiciones</button>
+                {% endif %}
+            </form>
         {% else %}
-            <p class="text-muted mb-0">Todavía no hay disposiciones emitidas en este mes.</p>
+            <p class="text-muted mb-0">Todavía no hay disposiciones en este mes.</p>
         {% endif %}
     </div>
 </div>

@@ -6,6 +6,11 @@ app_name = "asistencia"
 
 urlpatterns = [
     path(
+        "pendientes/resolver/",
+        views.resolver_pendiente_view,
+        name="resolver_pendiente",
+    ),
+    path(
         "",
         views.registro_diario,
         name="registro_diario",

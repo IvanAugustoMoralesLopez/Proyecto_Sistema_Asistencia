@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva licencia{% endblock %}
+{% block seccion %}informe-licencias{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <p class="ruta mb-1">Licencias / Nueva licencia</p>
+    <h1 class="h3 mb-1">Nueva licencia</h1>
+    <p class="text-secondary mb-0">
+        La licencia es del docente: elegí el docente y el período, y el sistema
+        busca solo sus materias y cargos afectados.
+    </p>
+</div>
+
+{% if volver %}
+    <div class="alert alert-primary d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span>Al guardar volvés a la pantalla desde la que llegaste.</span>
+        <a href="{{ volver }}">← Volver sin guardar</a>
+    </div>
+{% endif %}
+
+{% if form.non_field_errors %}
+    <div class="alert alert-danger">
+        {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+    </div>
+{% endif %}
+
+<form method="post" id="form-licencia">
+    {% csrf_token %}
+    {% if volver %}<input type="hidden" name="volver" value="{{ volver }}">{% endif %}
+
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    {{ form.persona.label_tag }} {{ form.persona }}
+                    {% for error in form.persona.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-6">
+                    {{ form.articulo.label_tag }} {{ form.articulo }}
+                    {% for error in form.articulo.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                    <div class="form-text">Se controla contra la situación de revista de cada materia.</div>
+                </div>
+                <div class="col-md-3">
+                    {{ form.desde.label_tag }} {{ form.desde }}
+                    {% for error in form.desde.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-3">
+                    {{ form.hasta.label_tag }} {{ form.hasta }}
+                    {% for error in form.hasta.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                    <div class="form-text">{{ form.hasta.help_text }}</div>
+                </div>
+                <div class="col-md-3">
+                    {{ form.nro_formulario.label_tag }} {{ form.nro_formulario }}
+                </div>
+                <div class="col-md-3">
+                    {{ form.justifica.label_tag }} {{ form.justifica }}
+                </div>
+            </div>
+            <div class="mt-3">
+                <button class="btn btn-outline-primary" type="submit" name="accion" value="calcular" formnovalidate>
+                    Ver materias afectadas
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h2 class="h6 mb-0">Materias y cargos afectados</h2>
+            <span class="badge text-bg-primary">Calculado por el sistema</span>
+        </div>
+        <div class="card-body">
+            {% if not persona or not desde %}
+                <p class="text-secondary mb-0">Elegí el docente y la fecha Desde, y tocá «Ver materias afectadas».</p>
+            {% elif not materias %}
+                <p class="text-danger mb-0">{{ persona.apellido_nombre }} no tiene designaciones vigentes en ese período.</p>
+            {% else %}
+                <p class="text-secondary small">
+                    Designaciones vigentes de {{ persona.apellido_nombre }} con clase entre el
+                    {{ desde|date:"d/m/Y" }} y el {% if hasta %}{{ hasta|date:"d/m/Y" }}{% else %}…(licencia abierta, se calcula el primer día){% endif %}, según su horario.
+                    Destildá las que no correspondan.
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr><th>Incluir</th><th>Materia o cargo</th><th>Sit. rev.</th><th>Días con clase</th><th class="text-end">Días</th><th class="text-end">Horas</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for m in materias %}
+                                <tr>
+                                    <td>
+                                        <input class="form-check-input" type="checkbox" name="designaciones"
+                                               value="{{ m.designacion.pk }}" id="materia-{{ m.designacion.pk }}"
+                                               {% if m.designacion.pk|stringformat:"s" in form.designaciones.value %}checked{% endif %}>
+                                    </td>
+                                    <td><label for="materia-{{ m.designacion.pk }}">{{ m.materia }}</label></td>
+                                    <td>{{ m.situacion|default:"—" }}</td>
+                                    <td class="small">{% for dia in m.dias %}{{ dia|date:"D d/m" }}{% if not forloop.last %} · {% endif %}{% empty %}<span class="text-secondary">no da clase en el período</span>{% endfor %}</td>
+                                    <td class="text-end">{{ m.dias|length }}</td>
+                                    <td class="text-end">{{ m.horas|floatformat:"-2" }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="fw-semibold"><td></td><td>Total del docente</td><td></td><td></td><td class="text-end">{{ total_dias }}</td><td class="text-end">{{ total_horas|floatformat:"-2" }}</td></tr>
+                        </tfoot>
+                    </table>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-success mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h2 class="h6 mb-0">Disposición interna</h2>
+            <span class="badge text-bg-success">Una sola para todas las materias</span>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">{{ form.disp_tipo.label_tag }} {{ form.disp_tipo }}</div>
+                <div class="col-md-3">{{ form.disp_oficina.label_tag }} {{ form.disp_oficina }}</div>
+                <div class="col-md-3">
+                    {{ form.disp_numero.label_tag }} {{ form.disp_numero }}
+                    {% for error in form.disp_numero.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="col-md-3">
+                    {{ form.disp_anio.label_tag }} {{ form.disp_anio }}
+                    {% for error in form.disp_anio.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+            </div>
+            <p class="small text-secondary mt-2 mb-0">
+                Se propone el próximo número libre de la oficina en el año. Se puede cambiar:
+                si el número ya existe, el sistema avisa y no guarda.
+            </p>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body row g-3">
+            <div class="col-md-6">{{ form.resolucion_excepcion.label_tag }} {{ form.resolucion_excepcion }}</div>
+            <div class="col-md-6">{{ form.observaciones.label_tag }} {{ form.observaciones }}</div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2">
+        {% if volver %}<a class="btn btn-outline-secondary" href="{{ volver }}">Cancelar</a>{% endif %}
+        <button class="btn btn-primary" type="submit" name="accion" value="guardar">
+            Guardar licencia{% if volver %} y volver{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+(function () {
+    /* Al cambiar el docente o las fechas, se recalculan las materias. */
+    var form = document.getElementById("form-licencia");
+    ["id_persona", "id_desde", "id_hasta"].forEach(function (id) {
+        var campo = document.getElementById(id);
+        if (!campo) { return; }
+        campo.addEventListener("change", function () {
+            var accion = document.createElement("input");
+            accion.type = "hidden"; accion.name = "accion"; accion.value = "calcular";
+            form.appendChild(accion);
+            form.noValidate = true;
+            form.submit();
+        });
+    });
+})();
+</script>
+{% endblock %}

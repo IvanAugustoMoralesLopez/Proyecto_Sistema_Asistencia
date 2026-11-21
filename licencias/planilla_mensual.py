@@ -51,6 +51,10 @@ DISPOSICION_TIPO = 'Disposición'
 PENDIENTE = ''
 
 
+# Formulario en papel recibido sin número anotado (el número es opcional).
+FORMULARIO_SIN_NUMERO = 's/n'
+
+
 def planilla_del_renglon(marca, articulo):
     """
     Cuadro al que va el renglón (RF-15, RN-04, RN-05).
@@ -248,6 +252,12 @@ def calcular_renglones(anio, mes):
                         if registro is not None:
                             licencia = licencia or registro.licencia
                             formulario = formulario or registro.nro_formulario
+                            # El número es opcional: un papel recibido sin
+                            # número se asienta como «s/n» (sin número).
+                            if not formulario and registro.estado_justificacion in (
+                                'EN_TRAMITE', 'JUSTIFICADA',
+                            ):
+                                formulario = FORMULARIO_SIN_NUMERO
 
                     if dias:
                         renglones.append({
@@ -344,6 +354,15 @@ def procesar_mes(anio, mes, usuario=None):
         renglon.dias = datos['dias']
         renglon.horas = datos['horas']
         renglon.licencia = datos['licencia']
+        # La disposición se numera al cargar la licencia (y se puede corregir
+        # en Disposiciones del mes): el renglón toma siempre la de su licencia.
+        licencia = datos['licencia']
+        if licencia is not None and licencia.disp_numero:
+            renglon.disp_tipo = licencia.disp_tipo or ''
+            renglon.disp_numero = licencia.disp_numero
+            renglon.disp_anio = licencia.disp_anio
+            if licencia.disp_oficina:
+                renglon.oficina = licencia.disp_oficina
         renglon.nro_formulario = datos['nro_formulario']
         renglon.desactualizado = False
         renglon.actualizado_por = usuario
@@ -668,3 +687,74 @@ def cuadros_del_mes(anio, mes):
             'total_horas': sum((r.horas for r in filas), Decimal('0')),
         })
     return cuadros
+
+
+@transaction.atomic
+def corregir_disposiciones(anio, mes, cambios, usuario=None):
+    """
+    Disposiciones del mes editables: corrige el número y la oficina de una
+    disposición ya asignada. `cambios`: {"<año>-<número actual>": {"numero":
+    ..., "oficina": ...}}. Cambia los renglones del mes y las licencias que
+    comparten esa disposición. No deja repetir un número de otra disposición
+    en la misma oficina y año. Devuelve cuántas se corrigieron.
+    """
+    actuales = {
+        f"{disp['anio'] or 0}-{disp['numero']}": disp
+        for disp in disposiciones_emitidas_del_mes(anio, mes)
+    }
+    corregidas = 0
+
+    for clave, nuevo in cambios.items():
+        disp = actuales.get(clave)
+        if disp is None:
+            continue
+
+        renglones = disp['renglones']
+        numero = (nuevo.get('numero') or '').strip()
+        oficina = (nuevo.get('oficina') or '').strip() or renglones[0].oficina
+        anio_disp = disp['anio']
+
+        if numero == disp['numero'] and oficina == renglones[0].oficina:
+            continue
+        if not numero.isdigit():
+            raise ValidationError(
+                f"El número de la disposición {disp['numero']} tiene que ser solo números."
+            )
+
+        licencias = {r.licencia_id for r in renglones if r.licencia_id}
+        grupos = set(
+            LicenciaOtorgada.objects.filter(pk__in=licencias, grupo__isnull=False)
+            .values_list('grupo', flat=True)
+        )
+        propias = LicenciaOtorgada.objects.filter(
+            Q(pk__in=licencias) | Q(grupo__in=grupos)
+        )
+
+        otra_licencia = (
+            LicenciaOtorgada.objects.filter(
+                disp_oficina=oficina, disp_numero=numero, disp_anio=anio_disp
+            )
+            .exclude(pk__in=propias.values('pk'))
+            .exists()
+        )
+        otro_renglon = (
+            RenglonMensual.objects.filter(
+                oficina=oficina, disp_numero=numero, disp_anio=anio_disp
+            )
+            .exclude(pk__in=[r.pk for r in renglones])
+            .exclude(licencia__in=propias)
+            .exists()
+        )
+        if otra_licencia or otro_renglon:
+            raise ValidationError(
+                f"La disposición N° {numero}/{anio_disp} de la oficina {oficina} "
+                "ya existe: elegí otro número."
+            )
+
+        RenglonMensual.objects.filter(pk__in=[r.pk for r in renglones]).update(
+            disp_numero=numero, oficina=oficina, actualizado_por=usuario
+        )
+        propias.update(disp_numero=numero, disp_oficina=oficina)
+        corregidas += 1
+
+    return corregidas

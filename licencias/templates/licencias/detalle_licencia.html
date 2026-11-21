@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Licencia de {{ licencia.designacion.persona.apellido_nombre }}{% endblock %}
+{% block seccion %}informe-licencias{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+    <div>
+        <p class="ruta mb-1">Licencias / Licencias otorgadas / Detalle</p>
+        <h1 class="h3 mb-1">
+            Licencia de {{ licencia.designacion.persona.apellido_nombre }}
+            {% if vigente %}<span class="badge text-bg-success align-middle">Vigente</span>{% else %}<span class="badge text-bg-secondary align-middle">Terminada</span>{% endif %}
+        </h1>
+        <p class="text-secondary mb-0">Art. {{ licencia.articulo.articulo }} · {{ licencia.articulo.tipo_licencia }}{% if licencia.articulo.cod_licencia %} · código {{ licencia.articulo.cod_licencia }}{% endif %}</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'licencias:listado_licencias_otorgadas' %}">Volver al listado</a>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 h-100"><div class="card-body">
+            <div class="small text-secondary">Período</div>
+            <div class="fs-5 fw-semibold">{{ licencia.desde|date:"d/m/Y" }} → {% if licencia.hasta %}{{ licencia.hasta|date:"d/m/Y" }}{% else %}sin fecha de fin{% endif %}</div>
+            <div class="small text-secondary">{{ total_dias }} día{{ total_dias|pluralize }} marcado{{ total_dias|pluralize }} · {{ total_horas|floatformat:"-2" }} hs</div>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 h-100"><div class="card-body">
+            <div class="small text-secondary">Disposición interna</div>
+            {% if licencia.disp_numero %}
+                <div class="fs-5 fw-semibold">N° {{ licencia.disp_numero }}/{{ licencia.disp_anio }} · Oficina {{ licencia.disp_oficina }}</div>
+                <a class="small" href="{% url 'licencias:planilla_mensual' licencia.desde.year licencia.desde.month %}#disposiciones-del-mes">Ver en las disposiciones del mes</a>
+            {% else %}
+                <div class="fs-6 text-secondary">Sin número todavía</div>
+            {% endif %}
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 h-100"><div class="card-body">
+            <div class="small text-secondary">Formulario</div>
+            <div class="fs-5 fw-semibold">{{ licencia.nro_formulario|default:"Sin número" }}</div>
+            {% if licencia.observaciones %}<div class="small text-secondary">{{ licencia.observaciones }}</div>{% endif %}
+        </div></div>
+    </div>
+</div>
+
+{% if tope %}
+<div class="card shadow-sm border-0 mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <h2 class="h6 mb-2">Tope anual del artículo {{ licencia.articulo.articulo }}</h2>
+        <span>Usó <strong>{{ tope.usados }} de {{ tope.tope }} días</strong> en {{ tope.anio }} · le quedan <strong>{{ tope.quedan }}</strong></span>
+    </div>
+    <div class="progress" role="progressbar" aria-label="{{ tope.usados }} de {{ tope.tope }} días usados" aria-valuenow="{{ tope.usados }}" aria-valuemin="0" aria-valuemax="{{ tope.tope }}">
+        <div class="progress-bar" style="width: {% widthratio tope.usados tope.tope 100 %}%"></div>
+    </div>
+</div></div>
+{% endif %}
+
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-header"><h2 class="h6 mb-0">Materias y cargos afectados</h2></div>
+    <div class="card-body table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Materia o cargo</th><th>Sit. rev.</th><th>Período</th><th>Días marcados en la diaria</th><th class="text-end">Horas</th><th></th></tr></thead>
+            <tbody>
+                {% for parte in partes %}
+                    <tr>
+                        <td>{{ parte.materia }}</td>
+                        <td>{{ parte.situacion }}</td>
+                        <td>{{ parte.licencia.desde|date:"d/m" }} → {% if parte.licencia.hasta %}{{ parte.licencia.hasta|date:"d/m" }}{% else %}…{% endif %}</td>
+                        <td class="small">{% for dia in parte.dias %}{{ dia|date:"D d/m" }}{% if not forloop.last %} · {% endif %}{% empty %}<span class="text-secondary">ninguno</span>{% endfor %}</td>
+                        <td class="text-end">{{ parte.horas|floatformat:"-2" }}</td>
+                        <td class="text-end">
+                            {% if perms.licencias.change_licenciaotorgada %}<a class="small" href="{% url 'licencias:editar_licencia_otorgada' parte.licencia.pk %}">Editar</a>{% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if perms.licencias.change_licenciaotorgada %}
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <form method="post" class="card shadow-sm border-primary h-100">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="prorrogar">
+            <div class="card-body">
+                <h2 class="h6">Prorrogar</h2>
+                <p class="small text-secondary">Se marcan en la diaria los días nuevos con clase. Se mantiene la disposición.</p>
+                <label class="form-label" for="nuevo_hasta">Nuevo Hasta</label>
+                <input class="form-control mb-2" type="date" id="nuevo_hasta" name="nuevo_hasta" required>
+                <button class="btn btn-primary" type="submit">Guardar prórroga</button>
+            </div>
+        </form>
+    </div>
+    <div class="col-md-6">
+        <form method="post" class="card shadow-sm border-warning h-100">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="cortar">
+            <div class="card-body">
+                <h2 class="h6">Cortar antes</h2>
+                <p class="small text-secondary">Los días marcados desde que volvió pasan a Presente (en borrador) para revisarlos en la diaria.</p>
+                <label class="form-label" for="volvio_el">Volvió a trabajar el</label>
+                <input class="form-control mb-2" type="date" id="volvio_el" name="volvio_el" required>
+                <button class="btn btn-warning" type="submit">Guardar corte</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0">Resoluciones</h2>
+        {% if perms.licencias.change_licenciaotorgada %}<a class="btn btn-sm btn-outline-primary" href="{% url 'licencias:resoluciones_licencia' licencia.pk %}">Adjuntar PDF</a>{% endif %}
+    </div>
+    <div class="card-body">
+        {% for resolucion in resoluciones %}
+            <div><a href="{% url 'licencias:descargar_resolucion' resolucion.pk %}">{{ resolucion.descripcion|default:"Resolución" }}</a></div>
+        {% empty %}
+            <p class="text-secondary mb-0">Todavía no hay resoluciones adjuntas.</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

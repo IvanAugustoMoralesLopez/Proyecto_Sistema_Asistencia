@@ -2,6 +2,20 @@
 
 {% block title %}Cargar asistencia{% endblock %}
 
+{% block extra_css %}
+{{ block.super }}
+<style>
+/* Sí / No del formulario: casillas cuadradas grandes. */
+.casilla-form { min-width: 6.5rem; min-height: 44px; display: inline-flex; align-items: center; gap: .5rem; font-weight: 600; }
+.casilla-form .bi-check-square-fill { display: none; }
+.btn-check:checked + .casilla-form .bi-square { display: none; }
+.btn-check:checked + .casilla-form .bi-check-square-fill { display: inline; }
+/* Fechas del aviso de LIC pendiente. */
+.plazo-dia { width: 4.5rem; flex-shrink: 0; text-align: center; padding: .35rem 0; border-radius: .4rem; font-weight: 700; font-size: .85rem; line-height: 1.2; }
+.plazo-dia small { font-weight: 400; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="asis-cabecera">
     <div class="encabezado-planilla">
@@ -62,6 +76,9 @@
 </div>
 
 {% include "asistencias/includes/avisos_dia.html" %}
+
+{# Faltas sin resolver y licencias sin completar de días anteriores. #}
+{% include "asistencias/includes/pendientes.html" %}
 
 {% if cantidad_errores %}
     <div class="alert alert-danger">
@@ -173,6 +190,7 @@
                                     <option value="">— elegí —</option>
                                     {% for marca in marcas %}
                                         <option value="{{ marca.pk }}"
+                                                data-codigo="{{ marca.codigo }}"
                                                 data-horas="{{ marca.requiere_horas|yesno:'1,0' }}"
                                                 {% if agente.valores.marca == marca.pk|stringformat:"s" %}selected{% endif %}>
                                             {{ marca.etiqueta }} ({{ marca.codigo }})
@@ -187,6 +205,51 @@
                                     <div class="asis-apoyo text-primary">Traído del día anterior</div>
                                 {% elif agente.valores.origen == "presente" %}
                                     <div class="asis-apoyo">Propuesto por el sistema</div>
+                                {% endif %}
+
+                                {% if not bloqueo %}
+                                    {# Apartado de inasistencia: ¿llegó el formulario? #}
+                                    <div class="mt-2 p-2 border border-warning rounded d-none" data-panel="falta">
+                                        <div class="small fw-semibold">¿Se recibió el formulario?</div>
+                                        {# Sí / No como casillas cuadradas grandes (radios con estilo de botón). #}
+                                        <div class="d-flex gap-2 mt-1">
+                                            <input class="btn-check" type="radio" id="form-si-{{ agente.persona.dni }}" name="agente-form-{{ agente.persona.dni }}" value="si" data-form-si {% if agente.valores.formulario == "si" %}checked{% endif %}>
+                                            <label class="btn btn-outline-primary casilla-form" for="form-si-{{ agente.persona.dni }}">
+                                                <i class="bi bi-square" aria-hidden="true"></i><i class="bi bi-check-square-fill" aria-hidden="true"></i> Sí
+                                            </label>
+                                            <input class="btn-check" type="radio" id="form-no-{{ agente.persona.dni }}" name="agente-form-{{ agente.persona.dni }}" value="no" {% if agente.valores.formulario == "no" %}checked{% endif %}>
+                                            <label class="btn btn-outline-primary casilla-form" for="form-no-{{ agente.persona.dni }}">
+                                                <i class="bi bi-square" aria-hidden="true"></i><i class="bi bi-check-square-fill" aria-hidden="true"></i> No
+                                            </label>
+                                        </div>
+                                        <input class="form-control form-control-sm mt-1 d-none" type="text" maxlength="30"
+                                               name="agente-nroform-{{ agente.persona.dni }}" value="{{ agente.valores.nro_formulario|default:'' }}"
+                                               placeholder="N° de formulario (opcional)" data-nro
+                                               aria-label="Número de formulario de {{ agente.persona.apellido_nombre }}">
+                                        <div class="asis-apoyo">Si no llegó, queda como falta sin resolver: el día hábil siguiente aparece el aviso y vence al segundo.</div>
+                                    </div>
+
+                                    {% if not agente.tiene_licencia %}
+                                        {# Licencia avisada pero sin cargar: cargarla ahora o dejarla pendiente. #}
+                                        <div class="mt-2 p-2 border border-warning rounded d-none" data-panel="licencia">
+                                            <div class="small fw-semibold">{{ agente.persona.apellido_nombre }} no tiene una licencia cargada para este día.</div>
+                                            <div class="d-flex flex-wrap gap-2 mt-1" data-opciones-licencia>
+                                                <a class="btn btn-primary" data-cargar-licencia
+                                                   href="{% url 'licencias:nueva_licencia' %}?persona={{ agente.persona.dni }}&amp;desde={{ fecha_texto }}&amp;volver={{ volver|urlencode }}">
+                                                    Cargar licencia ahora →
+                                                </a>
+                                                <button class="btn btn-outline-secondary" type="button"
+                                                        data-continuar-sin-cargar data-nombre="{{ agente.persona.apellido_nombre }}">
+                                                    Continuar sin cargar
+                                                </button>
+                                            </div>
+                                            <div class="asis-apoyo mt-1" data-opciones-licencia>Guardá la lista antes de ir a cargar la licencia, así no se pierde lo marcado.</div>
+                                            {# Después de «Entendido, continuar» en el aviso. #}
+                                            <span class="badge text-bg-warning fs-6 d-none" data-lic-pendiente>
+                                                LIC pendiente · vence {{ plazo_vence|date:"D d/m" }}
+                                            </span>
+                                        </div>
+                                    {% endif %}
                                 {% endif %}
                             </td>
 
@@ -253,6 +316,39 @@
         </div>
     {% endif %}
 </form>
+{# Aviso al tocar «Continuar sin cargar»: la LIC queda pendiente 2 días hábiles. #}
+<div class="modal fade" id="modal-lic-pendiente" tabindex="-1" aria-labelledby="titulo-lic-pendiente" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content overflow-hidden">
+            <div class="modal-header bg-warning-subtle">
+                <i class="bi bi-clock-history fs-3 text-warning-emphasis me-2" aria-hidden="true"></i>
+                <div>
+                    <h2 class="modal-title h5 mb-0" id="titulo-lic-pendiente">La licencia queda pendiente</h2>
+                    <div class="small text-warning-emphasis"><span data-modal-nombre></span> · LIC · {{ fecha|date:"l d/m" }}</div>
+                </div>
+            </div>
+            <div class="modal-body">
+                <p>Se guarda la asistencia con la marca <strong>LIC</strong>, pero sin artículo ni código. Hay <strong>2 días hábiles</strong> para completar la licencia:</p>
+                <div class="d-flex gap-3 mb-2">
+                    <span class="plazo-dia bg-body-secondary">Hoy<br><small>{{ fecha|date:"D d/m" }}</small></span>
+                    <div>Queda en <strong>Licencias › Pendientes</strong>, en plazo.</div>
+                </div>
+                <div class="d-flex gap-3 mb-2">
+                    <span class="plazo-dia bg-warning-subtle text-warning-emphasis">Aviso<br><small>{{ plazo_aviso|date:"D d/m" }}</small></span>
+                    <div>Aparece el cartel naranja en la carga diaria. Se puede pasar a mañana <strong>una sola vez</strong>.</div>
+                </div>
+                <div class="d-flex gap-3">
+                    <span class="plazo-dia bg-danger-subtle text-danger-emphasis">Vence<br><small>{{ plazo_vence|date:"D d/m" }}</small></span>
+                    <div>Obligatorio: completar la licencia o pasarla a inasistencia. Mientras no se resuelva, <strong>no se puede cerrar la jornada ni el mes</strong>.</div>
+                </div>
+            </div>
+            <div class="modal-footer bg-body-tertiary">
+                <button class="btn btn-outline-primary" type="button" data-modal-cargar>← Mejor la cargo ahora</button>
+                <button class="btn btn-dark" type="button" data-modal-continuar>Entendido, continuar</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -272,12 +368,33 @@
         var fila = select.closest("tr");
         var horas = fila.querySelector("input[name^='agente-horas-']");
         var usaHoras = opcion && opcion.dataset.horas === "1";
+        var codigo = (opcion && opcion.dataset.codigo) || "";
 
         if (horas) {
             horas.readOnly = !usaHoras;
             if (!usaHoras) { horas.value = ""; }
         }
+
+        /* Apartados: inasistencia (¿llegó el formulario?) y licencia sin cargar. */
+        var falta = fila.querySelector("[data-panel='falta']");
+        var licencia = fila.querySelector("[data-panel='licencia']");
+        if (falta) { falta.classList.toggle("d-none", codigo !== "I"); }
+        if (licencia) { licencia.classList.toggle("d-none", codigo !== "LIC" && codigo !== "LT"); }
+        sincronizarFormulario(fila);
     }
+
+    /* El número de formulario se pide solo si llegó el papel. */
+    function sincronizarFormulario(fila) {
+        var si = fila.querySelector("[data-form-si]");
+        var nro = fila.querySelector("[data-nro]");
+        if (si && nro) { nro.classList.toggle("d-none", !si.checked); }
+    }
+
+    document.querySelectorAll("input[name^='agente-form-']").forEach(function (radio) {
+        radio.addEventListener("change", function () {
+            sincronizarFormulario(radio.closest("tr"));
+        });
+    });
 
     /* Cuantos quedan sin elegir: se actualiza mientras se carga. */
     function actualizarContador() {
@@ -322,6 +439,38 @@
             document.getElementById("planilla").dispatchEvent(
                 new Event("change", { bubbles: true })
             );
+        });
+    }
+
+    /* «Continuar sin cargar»: abre el aviso de los 2 días hábiles. Con
+       «Entendido» la fila muestra «LIC pendiente»; con «Mejor la cargo
+       ahora» va a cargar la licencia. */
+    var modalLic = document.getElementById("modal-lic-pendiente");
+    var panelActual = null;
+    if (modalLic && window.bootstrap) {
+        var dialogo = bootstrap.Modal.getOrCreateInstance(modalLic);
+
+        document.querySelectorAll("[data-continuar-sin-cargar]").forEach(function (boton) {
+            boton.addEventListener("click", function () {
+                panelActual = boton.closest("[data-panel='licencia']");
+                modalLic.querySelector("[data-modal-nombre]").textContent = boton.dataset.nombre;
+                dialogo.show();
+            });
+        });
+
+        modalLic.querySelector("[data-modal-continuar]").addEventListener("click", function () {
+            if (panelActual) {
+                panelActual.querySelectorAll("[data-opciones-licencia]").forEach(function (el) {
+                    el.classList.add("d-none");
+                });
+                panelActual.querySelector("[data-lic-pendiente]").classList.remove("d-none");
+            }
+            dialogo.hide();
+        });
+
+        modalLic.querySelector("[data-modal-cargar]").addEventListener("click", function () {
+            var enlace = panelActual && panelActual.querySelector("[data-cargar-licencia]");
+            if (enlace) { window.location.href = enlace.href; }
         });
     }
 

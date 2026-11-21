@@ -8,16 +8,26 @@ from .clasificacion import (
     PLANILLA_IL02,
     planilla_para_categoria,
 )
-from .dias import contar_dias_habiles, fecha_de_hoy, obtener_feriados, rango_en_anio
+from .dias import contar_dias_habiles, fecha_de_hoy, listar_dias_habiles, obtener_feriados, rango_en_anio
 from .models import LicenciaArticulo, LicenciaOtorgada
 
-def dias_usados_en_anio(dni: str, articulo: str, anio: int, excluir_id: int = None) -> int:
+def dias_usados_en_anio(
+    dni: str,
+    articulo: str,
+    anio: int,
+    excluir_id: int = None,
+    excluir_grupo=None,
+) -> int:
     """
     Días hábiles consumidos por el docente en `anio` para el artículo dado.
 
     `excluir_id`: id de una licencia que NO debe contarse. Se usa al editar,
-    para que la licencia no se cuente contra sí misma. Por defecto no excluye
-    nada, así que las llamadas existentes (reportes, etc.) siguen igual.
+    para que la licencia no se cuente contra sí misma. `excluir_grupo`: el
+    pedido que se está cargando o editando, que tampoco se cuenta.
+
+    Se cuentan DÍAS DEL DOCENTE, no licencias: una licencia por docente se
+    guarda como una LicenciaOtorgada por materia, y el mismo día en dos
+    materias es un solo día consumido.
     """
     licencias = LicenciaOtorgada.objects.filter(
         designacion__persona__dni=dni,
@@ -29,20 +39,22 @@ def dias_usados_en_anio(dni: str, articulo: str, anio: int, excluir_id: int = No
 
     if excluir_id is not None:
         licencias = licencias.exclude(pk=excluir_id)
+    if excluir_grupo is not None:
+        licencias = licencias.exclude(grupo=excluir_grupo)
 
     # Una sola consulta de feriados para todo el año (antes era una por licencia).
     feriados = obtener_feriados(date(anio, 1, 1), date(anio, 12, 31))
     hoy = fecha_de_hoy()
 
-    total_dias = 0
+    dias = set()
     for lic in licencias:
         rango = rango_en_anio(lic.desde, lic.hasta, anio, hoy)
         if rango is None:
             continue
         inicio, fin = rango
-        total_dias += contar_dias_habiles(inicio, fin, feriados)
+        dias.update(listar_dias_habiles(inicio, fin, feriados))
 
-    return total_dias
+    return len(dias)
 
 
 def clasificar_planilla_licencia(licencia: LicenciaOtorgada) -> str:

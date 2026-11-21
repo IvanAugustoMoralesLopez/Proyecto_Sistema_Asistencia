@@ -59,6 +59,19 @@ from .recepcion import (
     validar_asistencia,
     validar_multiples,
 )
+from .pendientes import (
+    ESTADO_AVISO,
+    ESTADO_EN_PLAZO,
+    ESTADO_VENCIDO,
+    TIPO_FALTA,
+    TIPO_LICENCIA,
+    avisos_del_dia,
+    iniciar_seguimiento,
+    pendientes,
+    posponer as posponer_pendiente,
+    resolver as resolver_pendiente,
+    validar_sin_vencidos,
+)
 from .registro import (
     PlanillaConErrores,
     aplicar_al_agente,

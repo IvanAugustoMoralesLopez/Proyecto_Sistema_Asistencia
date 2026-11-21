@@ -413,11 +413,8 @@ class RecepcionFormularioForm(forms.Form):
                     "Indicá el motivo del rechazo "
                     f"(al menos {MOTIVO_MINIMO} caracteres).",
                 )
-        elif not cleaned.get("nro_formulario", "").strip():
-            self.add_error(
-                "nro_formulario",
-                "Indicá el número del formulario recepcionado.",
-            )
+        # Al justificar, el número del formulario es opcional (RF-09 pide
+        # recibir el papel, no registrar su número).
 
         return cleaned
 

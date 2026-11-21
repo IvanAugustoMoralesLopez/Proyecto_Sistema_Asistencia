@@ -26,6 +26,7 @@ from .calendario import (
     lista_calendario,
 )
 from .cierres import cerrar_jornada, confirmar_cierre, lista_cierres, reapertura_mensual
+from .pendientes import resolver_pendiente_view
 from .planilla import planilla_rapida
 from .recepcion import recepcion_formularios, recepcionar_formulario_view
 from .registro import (
@@ -50,6 +51,7 @@ __all__ = [
     "detalle_asistencia",
     "validar_registro",
     "planilla_rapida",
+    "resolver_pendiente_view",
     "cerrar_jornada",
     "lista_cierres",
     "confirmar_cierre",

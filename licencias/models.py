@@ -87,6 +87,11 @@ class LicenciaOtorgada(models.Model):
     hasta = models.DateField(null=True, blank=True)
     observaciones = models.TextField(null=True, blank=True)
 
+    # La licencia es del docente: se carga una vez y el sistema crea una
+    # LicenciaOtorgada por cada materia o cargo afectado. Todas las de un
+    # mismo pedido comparten el grupo (y la disposición).
+    grupo = models.UUIDField(null=True, blank=True, db_index=True, editable=False)
+
     class Meta:
         db_table = 'licencia_otorgada'
         verbose_name = 'Licencia Otorgada'
@@ -179,6 +184,7 @@ class LicenciaOtorgada(models.Model):
                 self.articulo.articulo,
                 anio,
                 excluir_id=self.pk,
+                excluir_grupo=self.grupo,
             )
 
             if dias_ya_usados + dias_pedidos > tope:

@@ -135,11 +135,8 @@ def recepcionar_formulario(
         nro_formulario = ""
         fecha_recepcion = None
     else:
-        if not nro_formulario:
-            raise ValidationError(
-                "Indicá el número del formulario recepcionado."
-            )
-
+        # El número del formulario es opcional: lo que justifica es haber
+        # recibido el papel (RF-09). Si se anota, sirve para rastrearlo.
         fecha_recepcion = fecha_recepcion or timezone.localdate()
 
         if fecha_recepcion > timezone.localdate():
@@ -179,6 +176,8 @@ def recepcionar_formulario(
             if marca_nueva.requiere_observacion and not afectado.observaciones.strip():
                 afectado.observaciones = (
                     f"{marca_nueva.descripcion} - formulario N° {nro_formulario}"
+                    if nro_formulario
+                    else f"{marca_nueva.descripcion} - formulario recibido"
                 )
 
         afectado.actualizado_por = usuario

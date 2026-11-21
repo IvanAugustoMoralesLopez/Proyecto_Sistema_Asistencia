@@ -3,7 +3,7 @@ import os
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.dateparse import parse_date
 from django.core.paginator import Paginator
@@ -14,16 +14,37 @@ from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
 from asistencias.services import (
+    ESTADO_AVISO,
+    ESTADO_EN_PLAZO,
+    ESTADO_VENCIDO,
+    TIPO_FALTA,
+    TIPO_LICENCIA,
     marcar_licencia,
+    pendientes as listar_pendientes,
     motivo_dia_no_laborable,
     registros_huerfanos_de_licencia,
 )
 
 from .dias import fecha_de_hoy, mes_vecino
-from .forms import FiltroLicenciasForm, LicenciaOtorgadaForm, ResolucionAdjuntaForm
+from .forms import (
+    FiltroLicenciasForm,
+    LicenciaDocenteForm,
+    LicenciaOtorgadaForm,
+    ResolucionAdjuntaForm,
+)
+from .licencia_docente import (
+    crear_licencia_docente,
+    cortar,
+    dias_del_tope,
+    licencias_del_grupo,
+    materias_afectadas,
+    prorrogar,
+    proximo_numero,
+)
 from .models import LicenciaArticulo, LicenciaOtorgada, ResolucionAdjunta
 from .planilla_mensual import (
     articulos_para_renglon,
+    corregir_disposiciones,
     cuadros_del_mes,
     emitir_disposiciones_planilla,
     disposiciones_emitidas_del_mes,
@@ -384,6 +405,27 @@ def planilla_mensual(request, anio: int, mes: int):
             else:
                 messages.success(request, f"Se guardaron {cantidad} renglones.")
 
+        elif accion == "disposiciones":
+            cambios = {}
+            for clave, valor in request.POST.items():
+                if clave.startswith("disp-"):
+                    _, campo, codigo = clave.split("-", 2)
+                    if campo in ("numero", "oficina"):
+                        cambios.setdefault(codigo, {})[campo] = valor
+            try:
+                cantidad = corregir_disposiciones(anio, mes, cambios, usuario=request.user)
+            except ValidationError as error:
+                messages.error(request, " ".join(error.messages))
+            else:
+                if cantidad:
+                    _registrar_en_bitacora(
+                        request.user, "Corrección de disposiciones del mes",
+                        {"anio": anio, "mes": mes, "corregidas": cantidad},
+                    )
+                    messages.success(request, f"Se corrigieron {cantidad} disposiciones.")
+                else:
+                    messages.info(request, "No había cambios en las disposiciones.")
+
         elif accion == "emitir":
             emitidas = emitir_disposiciones_planilla(anio, mes, usuario=request.user)
             if emitidas:
@@ -488,3 +530,267 @@ def planilla_mensual_csv(request, anio: int, mes: int):
             ])
 
     return respuesta
+
+
+
+# ───────────── Licencia por docente ─────────────
+
+def _docente_pedido(datos):
+    """Docente de la URL o del formulario: ?persona=<dni> o ?designacion=<id>."""
+    from personal.models import Designacion, Persona
+
+    dni = (datos.get("persona") or "").strip()
+    if dni.isdigit():
+        persona = Persona.objects.filter(pk=dni).first()
+        if persona is not None:
+            return persona
+
+    designacion = (datos.get("designacion") or "").strip()
+    if designacion.isdigit() and len(designacion) < 10:
+        encontrada = Designacion.objects.select_related("persona").filter(
+            pk=int(designacion)
+        ).first()
+        if encontrada is not None:
+            return encontrada.persona
+
+    return None
+
+
+@login_required
+@permission_required("licencias.add_licenciaotorgada", raise_exception=True)
+@require_http_methods(["GET", "POST"])
+def nueva_licencia(request):
+    """
+    Licencia por docente: se elige el docente y el período; el sistema muestra
+    sus materias afectadas (se pueden destildar) y propone el número de
+    disposición, editable. Al guardar crea una licencia por materia, todas
+    con la misma disposición, y marca la asistencia diaria.
+
+    Se llega desde el menú (licencias anticipadas o largas), desde la carga
+    diaria o desde los pendientes, con ?persona=&desde=&volver=.
+    """
+    from reportes.models import ParametroSistema
+
+    from .planilla_mensual import DISPOSICION_TIPO
+
+    volver = _volver_seguro(request)
+    datos = request.POST if request.method == "POST" else request.GET
+    persona = _docente_pedido(datos)
+    desde = parse_date(datos.get("desde", "") or "")
+    hasta = parse_date(datos.get("hasta", "") or "")
+    if request.method == "GET" and desde and not hasta:
+        hasta = desde
+    materias = materias_afectadas(persona, desde, hasta) if (persona and desde) else []
+    con_clase = [str(m["designacion"].pk) for m in materias if m["dias"]] or [
+        str(m["designacion"].pk) for m in materias
+    ]
+    oficina = ParametroSistema.obtener().codigo_oficina
+
+    if request.method == "POST":
+        accion = request.POST.get("accion", "guardar")
+        datos_form = request.POST.copy()
+        if accion == "calcular":
+            # Recalcular con el docente y las fechas nuevas: se tildan las
+            # materias con clase en el período.
+            datos_form.setlist("designaciones", con_clase)
+        form = LicenciaDocenteForm(datos_form, materias=materias)
+
+        if accion == "guardar" and form.is_valid():
+            elegidas = [
+                m["designacion"]
+                for m in materias
+                if str(m["designacion"].pk) in form.cleaned_data["designaciones"]
+            ]
+            try:
+                creadas = crear_licencia_docente(
+                    persona=form.cleaned_data["persona"],
+                    articulo=form.cleaned_data["articulo"],
+                    desde=form.cleaned_data["desde"],
+                    hasta=form.cleaned_data["hasta"],
+                    designaciones=elegidas,
+                    datos=form.cleaned_data,
+                    disposicion={
+                        "tipo": form.cleaned_data["disp_tipo"],
+                        "oficina": form.cleaned_data["disp_oficina"],
+                        "numero": form.cleaned_data["disp_numero"],
+                        "anio": form.cleaned_data["disp_anio"],
+                    },
+                )
+            except ValidationError as exc:
+                for mensaje in exc.messages:
+                    form.add_error(None, mensaje)
+            else:
+                materias_texto = "materia" if len(creadas) == 1 else "materias"
+                numero = creadas[0].disp_numero
+                messages.success(
+                    request,
+                    f"La licencia se registró en {len(creadas)} {materias_texto}"
+                    + (f" con la Disposición N° {numero}/{creadas[0].disp_anio}." if numero else "."),
+                )
+                for licencia in creadas:
+                    _marcar_y_avisar(request, licencia)
+                return redirect(
+                    volver or reverse("licencias:detalle_licencia", args=[creadas[0].pk])
+                )
+    else:
+        anio = (desde or fecha_de_hoy()).year
+        inicial = {
+            "persona": persona.pk if persona else None,
+            "desde": desde,
+            "hasta": hasta,
+            "designaciones": con_clase,
+            "disp_oficina": oficina,
+            "disp_anio": anio,
+            "disp_numero": str(proximo_numero(oficina, anio)),
+            "disp_tipo": DISPOSICION_TIPO,
+        }
+        form = LicenciaDocenteForm(initial=inicial, materias=materias)
+
+    total_dias = len({fecha for m in materias for fecha in m["dias"]})
+    total_horas = sum((m["horas"] for m in materias), 0)
+
+    return render(
+        request,
+        "licencias/nueva_licencia.html",
+        {
+            "form": form,
+            "volver": volver,
+            "persona": persona,
+            "materias": materias,
+            "total_dias": total_dias,
+            "total_horas": total_horas,
+            "desde": desde,
+            "hasta": hasta,
+        },
+    )
+
+
+@login_required
+@permission_required("licencias.view_licenciaotorgada", raise_exception=True)
+@require_http_methods(["GET", "POST"])
+def detalle_licencia(request, licencia_id):
+    """
+    Detalle de un pedido de licencia (todas sus materias): período,
+    disposición, formulario, tope anual del artículo y resoluciones. Permite
+    prorrogarla o cortarla si el docente volvió antes.
+    """
+    licencia = get_object_or_404(
+        LicenciaOtorgada.objects.select_related(
+            "designacion__persona", "articulo"
+        ),
+        pk=licencia_id,
+    )
+    grupo = licencias_del_grupo(licencia)
+
+    if request.method == "POST":
+        if not request.user.has_perm("licencias.change_licenciaotorgada"):
+            raise PermissionDenied
+        accion = request.POST.get("accion")
+        try:
+            if accion == "prorrogar":
+                nuevo_hasta = parse_date(request.POST.get("nuevo_hasta", "") or "")
+                if nuevo_hasta is None:
+                    raise ValidationError("Indicá hasta cuándo se prorroga.")
+                prorrogar(grupo, nuevo_hasta)
+                messages.success(
+                    request, f"La licencia se prorrogó hasta el {nuevo_hasta:%d/%m/%Y}."
+                )
+                for parte in grupo:
+                    _marcar_y_avisar(request, parte)
+            elif accion == "cortar":
+                volvio = parse_date(request.POST.get("volvio_el", "") or "")
+                if volvio is None:
+                    raise ValidationError("Indicá el día en que volvió a trabajar.")
+                liberados, avisos = cortar(grupo, volvio, request.user)
+                messages.success(
+                    request,
+                    f"La licencia se cortó: termina el {grupo[0].hasta:%d/%m/%Y}.",
+                )
+                if liberados:
+                    messages.info(
+                        request,
+                        "Pasaron a Presente (para revisar en la diaria): "
+                        + ", ".join(f"{fecha:%d/%m/%Y}" for fecha in liberados)
+                        + ".",
+                    )
+                for aviso in avisos:
+                    messages.warning(request, aviso)
+            else:
+                raise ValidationError("Acción no válida.")
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+        return redirect("licencias:detalle_licencia", licencia_id=licencia.pk)
+
+    from .licencia_docente import _materia
+
+    partes = []
+    for parte in grupo:
+        dias = parte.asistencias_relacionadas.order_by("fecha")
+        partes.append(
+            {
+                "licencia": parte,
+                "materia": _materia(parte.designacion),
+                "situacion": parte.sit_rev,
+                "dias": [registro.fecha for registro in dias],
+                "horas": sum((registro.horas_inasistidas for registro in dias), 0),
+            }
+        )
+
+    resoluciones = ResolucionAdjunta.objects.filter(
+        licencia__in=[parte.pk for parte in grupo]
+    ).order_by("-pk")
+
+    return render(
+        request,
+        "licencias/detalle_licencia.html",
+        {
+            "licencia": licencia,
+            "grupo": grupo,
+            "partes": partes,
+            "tope": dias_del_tope(licencia),
+            "resoluciones": resoluciones,
+            "vigente": licencia.hasta is None or licencia.hasta >= fecha_de_hoy(),
+            "total_dias": len({f for parte in partes for f in parte["dias"]}),
+            "total_horas": sum((parte["horas"] for parte in partes), 0),
+        },
+    )
+
+
+@login_required
+@permission_required("licencias.view_licenciaotorgada", raise_exception=True)
+def pendientes_licencias(request):
+    """
+    Bandeja de Licencias: todo lo que Bedelía cargó en la diaria y todavía no
+    se cerró (faltas sin formulario y licencias sin completar). Se responde
+    con los mismos botones que en la diaria.
+    """
+    tipo = request.GET.get("tipo", "")
+    estado = request.GET.get("estado", "")
+    docente = (request.GET.get("docente") or "").strip().lower()
+
+    todos = listar_pendientes(tipo=tipo if tipo in (TIPO_FALTA, TIPO_LICENCIA) else None)
+    contadores = {
+        "total": len(todos),
+        "vencidos": sum(1 for p in todos if p["estado"] == ESTADO_VENCIDO),
+        "avisos": sum(1 for p in todos if p["estado"] == ESTADO_AVISO),
+        "en_plazo": sum(1 for p in todos if p["estado"] == ESTADO_EN_PLAZO),
+    }
+
+    lista = todos
+    if estado in (ESTADO_VENCIDO, ESTADO_AVISO, ESTADO_EN_PLAZO):
+        lista = [p for p in lista if p["estado"] == estado]
+    if docente:
+        lista = [
+            p for p in lista
+            if docente in p["persona"].apellido_nombre.lower() or docente in str(p["persona"].pk)
+        ]
+
+    return render(request, "licencias/pendientes.html", {
+        "lista_pendientes": lista,
+        "hay_vencidos": False,   # en la bandeja no se muestra el cartel de bloqueo de la diaria
+        "contadores": contadores,
+        "filtro_tipo": tipo,
+        "filtro_estado": estado,
+        "filtro_docente": request.GET.get("docente", ""),
+        "volver": request.get_full_path(),
+    })

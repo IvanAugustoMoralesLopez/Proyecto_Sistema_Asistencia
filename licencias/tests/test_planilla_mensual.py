@@ -500,7 +500,7 @@ class PantallaTests(BasePlanillaMensual):
         self.client.post(self.url, {"accion": "procesar"})
         respuesta = self.client.get(self.url)
         self.assertEqual(respuesta.context["emitidas"], [])
-        self.assertContains(respuesta, "Todavía no hay disposiciones emitidas")
+        self.assertContains(respuesta, "Todavía no hay disposiciones en este mes")
 
     def test_las_faltas_sin_formulario_aparecen_en_el_cuadro_rojo(self):
         # ZARATE falta el jueves 22 en sus dos materias, sin papel.
@@ -517,8 +517,10 @@ class PantallaTests(BasePlanillaMensual):
             respuesta,
             reverse("asistencia:recepcionar_formulario", args=[falta["registro"].pk]),
         )
-        self.assertContains(respuesta, f"?designacion={self.m1.pk}&amp;desde=2026-10-22")
-        self.assertContains(respuesta, f"?designacion={self.m2.pk}&amp;desde=2026-10-22")
+        # La licencia es del docente: un solo botón con el docente y el día.
+        self.assertContains(
+            respuesta, f"?persona={self.zarate.pk}&amp;desde=2026-10-22", count=1
+        )
 
     def test_recibir_el_formulario_desde_el_cuadro_rojo_vuelve_a_la_planilla(self):
         from asistencias.services import adquirir_sesion_edicion  # noqa: F401
