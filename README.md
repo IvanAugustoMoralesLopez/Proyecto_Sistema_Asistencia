@@ -101,15 +101,14 @@ Ejecutalo completo como script SQL sobre la base `asistencia` (por ejemplo con "
 
 ### 7. Uso mensual (cuadros IL-01 / IL-02)
 
-1. Todos los días se carga la asistencia en la **planilla rápida**, una sola vez por docente: el sistema reparte la marca entre sus materias con las horas de cada horario.
-2. Al recibir el formulario en papel, en **Recepción de formularios** se cambia la I por LIC, LT o P.
-3. A fin de mes, en **Planilla mensual IL-01 / IL-02** se toca *Procesar el mes*: se genera un renglón por cada materia afectada, con Desde/Hasta del período y las horas de su horario.
-4. Se elige el artículo de cada renglón (el código de licencia se completa solo y el renglón pasa a IL-01 o IL-02), se revisan Oficina (1452), Año y Resolución, y se tocan *Guardar* y *Emitir disposiciones*.
+1. Todos los días se carga la asistencia en la **planilla rápida**, ...
+2. Al recibir el formulario en papel, ...
+3. A fin de mes, ...
+4. Se elige el artículo de cada renglón ...
 
 El detalle de qué cambió para cumplir cada requerimiento está en `CAMBIOS_REQUERIMIENTOS_v2.md`.
 
 ### 8. Levantar el servidor
-
 ```
 python manage.py runserver
 ```
