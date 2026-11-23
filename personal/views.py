@@ -46,7 +46,6 @@ from .models import (
 from licencias.models import LicenciaArticulo, LicenciaOtorgada
 from licencias.forms import LicenciaArticuloForm
 
-MAX_CSV_BYTES = 5 * 1024 * 1024
 MAX_FILAS_VISTA_PREVIA = 100
 COLUMNAS_CSV_PERSONAL = (
     "dni",
@@ -522,9 +521,7 @@ class _DeshacerSimulacion(Exception):
 
 
 def _leer_archivo_csv(archivo):
-    """Valida tamaño, extensión y codificación. Devuelve (nombre, contenido)."""
-    if archivo.size > MAX_CSV_BYTES:
-        raise ValidationError("El archivo CSV supera el máximo de 5 MB.")
+    """Valida extensión y codificación. Devuelve (nombre, contenido)."""
     if not archivo.name.lower().endswith(".csv"):
         raise ValidationError("El archivo seleccionado debe tener extensión .csv.")
 

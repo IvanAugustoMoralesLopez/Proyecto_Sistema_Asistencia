@@ -15,7 +15,9 @@ from reportes.auditoria import AccionesReportes
 from .models import (
     Persona,
     Cargo,
+    Carrera,
     Designacion,
+    EspacioCurricular,
     HistorialDesignacion,
     Horario,
     ImportacionPersonalError,
@@ -1088,6 +1090,85 @@ class RequerimientosV2PersonalTests(TestCase):
         self.assertEqual(
             Designacion.objects.filter(persona_id="31000006").count(),
             1,
+        )
+
+    def test_importa_csv_mayor_a_cinco_megabytes(self):
+        contenido = (
+            "dni,nombre_apellido\n31000008,AGENTE\n"
+            + "\n" * (5 * 1024 * 1024 + 1)
+        )
+        archivo = self.csv(contenido)
+
+        self.assertGreater(archivo.size, 5 * 1024 * 1024)
+        self.assertEqual(_procesar_csv(archivo), (1, 0))
+        self.assertEqual(
+            Persona.objects.get(pk="31000008").apellido_nombre,
+            "AGENTE",
+        )
+
+    def test_materia_repetida_en_carreras_distintas_se_incluye_en_licencia(self):
+        from licencias.licencia_docente import materias_afectadas
+
+        carrera_a = Carrera.objects.create(nombre="Carrera A")
+        carrera_b = Carrera.objects.create(nombre="Carrera B")
+        url_catalogo = reverse("personal:catalogos") + "?seccion=espacios"
+        for carrera in (carrera_a, carrera_b):
+            respuesta = self.cliente.post(
+                url_catalogo,
+                {
+                    "accion": "guardar",
+                    "nombre": "Matemática",
+                    "carrera": carrera.pk,
+                    "activo": "on",
+                },
+            )
+            self.assertRedirects(respuesta, url_catalogo)
+        materias = {
+            espacio.carrera_id: espacio
+            for espacio in EspacioCurricular.objects.filter(
+                nombre="Matemática"
+            )
+        }
+        materia_a = materias[carrera_a.pk]
+        materia_b = materias[carrera_b.pk]
+        titular = Designacion.objects.create(
+            persona=self.persona,
+            cargo=self.cargo,
+            espacio_curricular=materia_a,
+            situacion_revista=Designacion.Situacion.TITULAR,
+            desde=date(2026, 3, 1),
+        )
+        suplente = Designacion.objects.create(
+            persona=self.persona,
+            cargo=self.cargo,
+            espacio_curricular=materia_b,
+            situacion_revista=Designacion.Situacion.SUPLENTE,
+            desde=date(2026, 3, 1),
+        )
+        for designacion in (titular, suplente):
+            Horario.objects.create(
+                designacion=designacion,
+                dia=Horario.Dia.LUNES,
+                horas_catedra=2,
+            )
+
+        afectadas = materias_afectadas(
+            self.persona, date(2026, 3, 9), date(2026, 3, 9)
+        )
+
+        self.assertEqual(len(afectadas), 2)
+        self.assertEqual(
+            {
+                (
+                    item["designacion"].espacio_curricular.carrera.nombre,
+                    item["situacion"],
+                )
+                for item in afectadas
+            },
+            {("Carrera A", "Titular"), ("Carrera B", "Suplente")},
+        )
+        self.assertTrue(
+            all(item["dias"] == [date(2026, 3, 9)] for item in afectadas)
         )
 
     def test_csv_excel_con_separador_punto_y_coma(self):
