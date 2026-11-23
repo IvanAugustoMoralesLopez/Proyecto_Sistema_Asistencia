@@ -70,6 +70,7 @@ from .pendientes import (
     pendientes,
     posponer as posponer_pendiente,
     resolver as resolver_pendiente,
+    confirmar_injustificadas,
     validar_sin_vencidos,
 )
 from .registro import (

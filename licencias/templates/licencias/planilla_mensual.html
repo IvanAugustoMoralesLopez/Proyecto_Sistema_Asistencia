@@ -153,20 +153,34 @@
                                 <td>{{ r.marca }}</td>
                                 <td>
                                     {# RF-15: selector de artículos; al elegir se autocompleta el código. #}
-                                    <select class="form-select form-select-sm js-articulo"
-                                            name="articulo-{{ r.pk }}"
-                                            aria-label="Artículo de {{ r.designacion.persona.apellido_nombre }}"
-                                            {% if not puede_modificar %}disabled{% elif r.marca == "I" and not r.nro_formulario and not r.articulo_id %}disabled title="Falta el formulario: usá el cuadro rojo de arriba"{% endif %}>
-                                        <option value="" data-cod="" data-articulo="">— elegí el artículo —</option>
-                                        {% for a in r.articulos %}
-                                            <option value="{{ a.pk }}" data-cod="{{ a.cod_licencia }}" data-articulo="{{ a.articulo }}"
-                                                    {% if a.pk == r.articulo_id %}selected{% endif %}>
-                                                {{ a.articulo }} - {{ a.tipo_licencia }}
-                                            </option>
-                                        {% endfor %}
-                                    </select>
                                     {% if r.marca == "I" and not r.nro_formulario %}
-                                        <div class="small text-danger">Sin formulario (ver cuadro rojo)</div>
+                                        {# I sin papel: no se encuadra en un artículo. O espera el formulario o es injustificada. #}
+                                        <select class="form-select form-select-sm js-articulo"
+                                                name="articulo-{{ r.pk }}"
+                                                aria-label="Artículo de {{ r.designacion.persona.apellido_nombre }}"
+                                                {% if not puede_modificar %}disabled{% endif %}>
+                                            <option value="" data-cod="" data-articulo="" {% if not r.injustificada %}selected{% endif %}>— esperando el formulario —</option>
+                                            <option value="injustificada" data-cod="" data-articulo="" {% if r.injustificada %}selected{% endif %}>No corresponde (injustificada)</option>
+                                        </select>
+                                        {% if r.injustificada %}
+                                            <div class="small text-secondary">Sin artículo ni disposición: solo para el descuento</div>
+                                        {% else %}
+                                            <div class="small text-danger">Sin formulario (ver cuadro rojo)</div>
+                                        {% endif %}
+                                    {% else %}
+                                        {# RF-15: selector de artículos; al elegir se autocompleta el código. #}
+                                        <select class="form-select form-select-sm js-articulo"
+                                                name="articulo-{{ r.pk }}"
+                                                aria-label="Artículo de {{ r.designacion.persona.apellido_nombre }}"
+                                                {% if not puede_modificar %}disabled{% endif %}>
+                                            <option value="" data-cod="" data-articulo="">— elegí el artículo —</option>
+                                            {% for a in r.articulos %}
+                                                <option value="{{ a.pk }}" data-cod="{{ a.cod_licencia }}" data-articulo="{{ a.articulo }}"
+                                                        {% if a.pk == r.articulo_id %}selected{% endif %}>
+                                                    {{ a.articulo }} - {{ a.tipo_licencia }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
                                     {% endif %}
                                 </td>
                                 <td><output class="fw-semibold js-cod">{{ r.cod_licencia|default:"—" }}</output></td>

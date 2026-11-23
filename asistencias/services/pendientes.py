@@ -434,3 +434,45 @@ def resolver(
         _registrar(registro, usuario, antes, texto)
 
     return pendiente
+
+
+
+@transaction.atomic
+def confirmar_injustificadas(registros, usuario, confirmar=True):
+    """
+    Desde la planilla mensual (Licencias): «No corresponde (injustificada)»
+    equivale a responder «No llegó» el pendiente de esas faltas. Con
+    confirmar=False se deshace: la falta vuelve a esperar el papel.
+
+    Solo toca inasistencias (I) sin justificar. Devuelve cuántas cambió.
+    """
+    _exigir(usuario, "asistencias.change_registroasistencia")
+    Justificacion = RegistroAsistencia.EstadoJustificacion
+    ahora = timezone.now()
+    cambiados = 0
+    for registro in registros:
+        registro = RegistroAsistencia.objects.select_for_update().select_related(
+            "marca"
+        ).get(pk=registro.pk)
+        if (
+            registro.marca.codigo != CODIGO_INASISTENCIA
+            or registro.estado_justificacion != Justificacion.INJUSTIFICADA
+        ):
+            continue
+        if confirmar == (registro.resuelto_en is not None):
+            continue
+        _validar_periodo_abierto(registro.fecha)
+        antes = _datos_registro(registro)
+        if confirmar:
+            registro.resuelto_en = ahora
+            registro.resuelto_por = usuario
+            texto = "Planilla mensual: no llegó el formulario (injustificada)"
+        else:
+            registro.resuelto_en = None
+            registro.resuelto_por = None
+            texto = "Planilla mensual: la falta vuelve a esperar el formulario"
+        registro.actualizado_por = usuario
+        registro.save()
+        _registrar(registro, usuario, antes, texto)
+        cambiados += 1
+    return cambiados

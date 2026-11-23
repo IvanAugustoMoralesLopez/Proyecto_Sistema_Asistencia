@@ -17,6 +17,7 @@ from licencias.models import LicenciaArticulo, LicenciaOtorgada, RenglonMensual
 from licencias.planilla_mensual import (
     cuadros_del_mes,
     emitir_disposiciones_planilla,
+    faltas_sin_formulario,
     imputar_renglones,
     procesar_mes,
 )
@@ -643,3 +644,87 @@ class ArticuloHeredadoTests(BasePlanillaMensual):
             imputar_renglones(
                 2026, 10, {heredado.pk: {"articulo": self.particulares.pk}},
             )
+
+
+class InasistenciasEnIL02Tests(BasePlanillaMensual):
+    """La I con papel se encuadra en Inasistencias (2-13); sin papel y confirmada, «No corresponde»."""
+
+    JUE = date(2026, 10, 22)
+
+    def setUp(self):
+        from django.contrib.auth.models import Permission
+
+        self.usuario.user_permissions.add(
+            Permission.objects.get(codename="change_registroasistencia")
+        )
+        self.usuario = type(self.usuario).objects.get(pk=self.usuario.pk)  # sin caché de permisos
+
+    def test_con_formulario_se_propone_inasistencias_de_su_situacion(self):
+        from licencias.nomenclador import cargar_nomenclador, leer_nomenclador
+
+        cargar_nomenclador(leer_nomenclador())
+        self.marcar(self.m3, self.JUE, "I", "2", estado_justificacion="JUSTIFICADA", nro_formulario="F-9")
+        procesar_mes(2026, 10, self.usuario)
+        (renglon,) = self.renglones()
+        self.assertEqual(renglon.articulo.cod_licencia, "2-13-1")  # titular, con goce
+        self.assertEqual(renglon.planilla, "IL-02")
+
+    def test_sin_formulario_resuelta_no_llego_es_injustificada(self):
+        from django.utils import timezone
+
+        self.marcar(
+            self.m3, self.JUE, "I", "2", estado_justificacion="INJUSTIFICADA",
+            seguimiento=True, resuelto_en=timezone.now(),
+        )
+        procesar_mes(2026, 10, self.usuario)
+        (renglon,) = self.renglones()
+        self.assertTrue(renglon.injustificada)
+        self.assertIsNone(renglon.articulo)
+        self.assertEqual(faltas_sin_formulario(2026, 10), [])  # sale del cuadro rojo
+        self.assertEqual(emitir_disposiciones_planilla(2026, 10, self.usuario), [])
+
+    def test_desde_la_planilla_marca_la_falta_y_cierra_el_pendiente(self):
+        registro = self.marcar(
+            self.m3, self.JUE, "I", "2", estado_justificacion="INJUSTIFICADA", seguimiento=True,
+        )
+        procesar_mes(2026, 10, self.usuario)
+        (renglon,) = self.renglones()
+        self.assertFalse(renglon.injustificada)
+
+        imputar_renglones(2026, 10, {renglon.pk: {"articulo": "injustificada"}}, self.usuario)
+        renglon.refresh_from_db()
+        registro.refresh_from_db()
+        self.assertTrue(renglon.injustificada)
+        self.assertIsNotNone(registro.resuelto_en)  # el pendiente quedó respondido
+        procesar_mes(2026, 10, self.usuario)        # y sobrevive al reprocesar
+        renglon.refresh_from_db()
+        self.assertTrue(renglon.injustificada)
+
+        # Se puede deshacer: vuelve a esperar el formulario.
+        imputar_renglones(2026, 10, {renglon.pk: {"articulo": ""}}, self.usuario)
+        renglon.refresh_from_db()
+        registro.refresh_from_db()
+        self.assertFalse(renglon.injustificada)
+        self.assertIsNone(registro.resuelto_en)
+
+    def test_injustificada_abarca_todas_las_materias_del_dia(self):
+        for materia in (self.m1, self.m2):
+            self.marcar(materia, self.JUE, "I", "2", estado_justificacion="INJUSTIFICADA")
+        procesar_mes(2026, 10, self.usuario)
+        primero = self.renglones()[0]
+        imputar_renglones(2026, 10, {primero.pk: {"articulo": "injustificada"}}, self.usuario)
+        self.assertEqual({r.injustificada for r in self.renglones()}, {True})
+
+    def test_sin_papel_no_se_puede_elegir_un_articulo(self):
+        self.marcar(self.m3, self.JUE, "I", "2", estado_justificacion="INJUSTIFICADA")
+        procesar_mes(2026, 10, self.usuario)
+        (renglon,) = self.renglones()
+        with self.assertRaises(ValidationError):
+            imputar_renglones(2026, 10, {renglon.pk: {"articulo": str(self.enfermedad.pk)}}, self.usuario)
+
+    def test_la_pantalla_ofrece_no_corresponde(self):
+        self.marcar(self.m3, self.JUE, "I", "2", estado_justificacion="INJUSTIFICADA")
+        procesar_mes(2026, 10, self.usuario)
+        self.client.force_login(self.usuario)
+        respuesta = self.client.get(reverse("licencias:planilla_mensual", args=[2026, 10]))
+        self.assertContains(respuesta, "No corresponde (injustificada)")

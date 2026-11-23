@@ -229,6 +229,9 @@ def calcular_renglones(anio, mes):
                     horas = Decimal('0')
                     licencia = None
                     formulario = ''
+                    # Falta sin papel ya confirmada («No llegó»): todos los
+                    # días del bloque injustificados y resueltos.
+                    injustificada = marca == 'I'
 
                     for fecha in del_mes:
                         registro = registro_de.get((designacion.pk, fecha))
@@ -249,6 +252,11 @@ def calcular_renglones(anio, mes):
                         horas += del_horario if del_horario > 0 else (
                             registro.horas_inasistidas if registro else Decimal('0')
                         )
+                        if registro is None or not (
+                            registro.estado_justificacion == 'INJUSTIFICADA'
+                            and registro.resuelto_en is not None
+                        ):
+                            injustificada = False
                         if registro is not None:
                             licencia = licencia or registro.licencia
                             formulario = formulario or registro.nro_formulario
@@ -271,6 +279,7 @@ def calcular_renglones(anio, mes):
                             'nro_formulario': formulario or (
                                 (licencia.nro_formulario or '') if licencia else ''
                             ),
+                            'injustificada': injustificada and not formulario,
                         })
 
     return renglones
@@ -363,6 +372,18 @@ def procesar_mes(anio, mes, usuario=None):
             if licencia.disp_oficina:
                 renglon.oficina = licencia.disp_oficina
         renglon.nro_formulario = datos['nro_formulario']
+        renglon.injustificada = datos.get('injustificada', False)
+        if renglon.injustificada and renglon.articulo_id:
+            renglon.imputar(None)
+        elif (
+            renglon.marca == 'I'
+            and renglon.nro_formulario
+            and renglon.articulo_id is None
+            and renglon.licencia is None
+        ):
+            # Llegó el papel: se propone Inasistencias (2-13) de su situación
+            # de revista. Se puede cambiar en la planilla.
+            renglon.imputar(_articulo_inasistencia(renglon.designacion))
         renglon.desactualizado = False
         renglon.actualizado_por = usuario
         renglon.save()
@@ -398,8 +419,42 @@ def falta_formulario(renglon):
     RF-09: una inasistencia (I) sin número de formulario todavía no tiene el
     papel que la justifica, así que no admite artículo de licencia. Primero
     se recibe el formulario en Recepción (que pasa la I a LIC, LT o P).
+    Una falta ya confirmada como injustificada no espera nada.
     """
-    return renglon.marca == 'I' and not renglon.nro_formulario
+    return renglon.marca == 'I' and not renglon.nro_formulario and not renglon.injustificada
+
+
+# Opción de la planilla para una I sin papel: «No corresponde (injustificada)».
+OPCION_INJUSTIFICADA = 'injustificada'
+MOTIVO_INASISTENCIAS = '2-13'
+
+
+def _articulo_inasistencia(designacion):
+    """Inasistencias (2-13) de la situación de revista, con goce. None si no está cargado."""
+    from .nomenclador import articulo_para
+
+    base = (
+        LicenciaArticulo.objects.filter(cod_licencia__startswith=f'{MOTIVO_INASISTENCIAS}-')
+        .order_by('cod_licencia')
+        .first()
+    )
+    if base is None:
+        return None
+    if not designacion.situacion_revista:
+        return base
+    return articulo_para(base, designacion.get_situacion_revista_display())
+
+
+def _registros_del_renglon(renglon):
+    from asistencias.models import RegistroAsistencia
+
+    return list(
+        RegistroAsistencia.objects.filter(
+            designacion=renglon.designacion,
+            fecha__range=(renglon.desde, renglon.hasta),
+            marca__codigo='I',
+        )
+    )
 
 
 def faltas_sin_formulario(anio, mes):
@@ -472,6 +527,50 @@ def imputar_renglones(anio, mes, datos, usuario=None):
         renglon = renglones.get(pk)
         if renglon is None:
             continue
+
+        if 'articulo' in valores and renglon.marca == 'I' and not renglon.nro_formulario:
+            # I sin papel: solo «No corresponde (injustificada)» o seguir
+            # esperando el formulario. Se aplica a todo el día o período
+            # del docente (un papel cubre todas sus materias).
+            quiere = str(valores['articulo'] or '').strip() == OPCION_INJUSTIFICADA
+            texto = str(valores['articulo'] or '').strip()
+            if texto and not quiere:
+                raise ValidationError(
+                    f"{renglon.designacion.persona.apellido_nombre} tiene una "
+                    f"inasistencia sin formulario el {renglon.desde:%d/%m/%Y}: "
+                    "primero registrá el papel (en Recepción de formularios o "
+                    "cargando la licencia en Nueva licencia) y después elegí "
+                    "el artículo."
+                )
+            if quiere != renglon.injustificada:
+                for otro in renglones.values():
+                    if (
+                        otro.clave_de_bloque == renglon.clave_de_bloque
+                        and otro.marca == 'I'
+                        and not otro.nro_formulario
+                        and otro.injustificada != quiere
+                    ):
+                        from django.core.exceptions import PermissionDenied
+
+                        from asistencias.services import confirmar_injustificadas
+
+                        try:
+                            confirmar_injustificadas(
+                                _registros_del_renglon(otro), usuario, confirmar=quiere
+                            )
+                        except PermissionDenied:
+                            raise ValidationError(
+                                "Para marcar una falta como injustificada hace falta "
+                                "permiso para corregir la asistencia."
+                            )
+                        otro.injustificada = quiere
+                        otro.imputar(None)
+                        modificados.add(otro.pk)
+            if renglon.articulo_id is not None:
+                # Un artículo que quedó por error en una falta sin papel se quita.
+                renglon.imputar(None)
+                modificados.add(pk)
+            valores = {k: v for k, v in valores.items() if k != 'articulo'}
 
         if 'articulo' in valores:
             texto = str(valores['articulo'] or '').strip()

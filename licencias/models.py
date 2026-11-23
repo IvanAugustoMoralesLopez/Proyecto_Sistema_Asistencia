@@ -312,6 +312,9 @@ class RenglonMensual(models.Model):
     resolucion = models.CharField(max_length=100, blank=True)
 
     nro_formulario = models.CharField(max_length=30, blank=True)
+    # Inasistencia sin papel confirmada como injustificada («No llegó»): no se
+    # encuadra en ningún artículo ni lleva disposición; queda para el descuento.
+    injustificada = models.BooleanField(default=False, db_default=False)
     licencia = models.ForeignKey(
         LicenciaOtorgada, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='renglones_mensuales',
