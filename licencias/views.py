@@ -38,8 +38,10 @@ from .licencia_docente import (
     dias_del_tope,
     licencias_del_grupo,
     materias_afectadas,
+    motivos_frecuentes,
     prorrogar,
     proximo_numero,
+    ultimas_licencias,
 )
 from .models import LicenciaArticulo, LicenciaOtorgada, ResolucionAdjunta
 from .planilla_mensual import (
@@ -573,6 +575,10 @@ def nueva_licencia(request):
 
     from .planilla_mensual import DISPOSICION_TIPO
 
+    from .dias import ciclo_de
+    from .licencia_docente import designaciones_del_docente
+    from .nomenclador import motivo_de, motivos_para
+
     volver = _volver_seguro(request)
     datos = request.POST if request.method == "POST" else request.GET
     persona = _docente_pedido(datos)
@@ -580,15 +586,30 @@ def nueva_licencia(request):
     hasta = parse_date(datos.get("hasta", "") or "")
     if request.method == "GET" and desde and not hasta:
         hasta = desde
-    materias = materias_afectadas(persona, desde, hasta) if (persona and desde) else []
-    con_clase = [str(m["designacion"].pk) for m in materias if m["dias"]] or [
-        str(m["designacion"].pk) for m in materias
+
+    # El motivo elegido: desde el atajo (últimas licencias o frecuentes) o
+    # desde la lista. Es un artículo «representante»: el de cada materia lo
+    # pone el sistema según su situación de revista.
+    atajo = (datos.get("atajo") or "").strip()
+    texto_articulo = atajo or (datos.get("articulo") or "").strip()
+    articulo = (
+        LicenciaArticulo.objects.filter(pk=texto_articulo).first()
+        if texto_articulo.isdigit() else None
+    )
+
+    materias = materias_afectadas(persona, desde, hasta, articulo) if (persona and desde) else []
+    habilitadas = [m for m in materias if not m["sin_articulo"]]
+    con_clase = [str(m["designacion"].pk) for m in habilitadas if m["dias"]] or [
+        str(m["designacion"].pk) for m in habilitadas
     ]
     oficina = ParametroSistema.obtener().codigo_oficina
 
     if request.method == "POST":
         accion = request.POST.get("accion", "guardar")
         datos_form = request.POST.copy()
+        if atajo:
+            datos_form["articulo"] = atajo
+            accion = "calcular"
         if accion == "calcular":
             # Recalcular con el docente y las fechas nuevas: se tildan las
             # materias con clase en el período.
@@ -643,11 +664,27 @@ def nueva_licencia(request):
             "disp_anio": anio,
             "disp_numero": str(proximo_numero(oficina, anio)),
             "disp_tipo": DISPOSICION_TIPO,
+            "articulo": articulo.pk if articulo else None,
         }
         form = LicenciaDocenteForm(initial=inicial, materias=materias)
 
     total_dias = len({fecha for m in materias for fecha in m["dias"]})
     total_horas = sum((m["horas"] for m in materias), 0)
+
+    # Atajo: las últimas licencias del docente (o los motivos más usados del
+    # instituto si nunca pidió) y la lista completa filtrada por sus cargos.
+    ciclo = ciclo_de(desde or fecha_de_hoy())
+    if persona is not None:
+        situaciones = [m["situacion"] for m in materias] or [
+            d.get_situacion_revista_display()
+            for d in designaciones_del_docente(persona, desde or fecha_de_hoy(), hasta)
+            if d.situacion_revista
+        ]
+        ultimas = ultimas_licencias(persona, ciclo)
+    else:
+        situaciones, ultimas = [], []
+    frecuentes = motivos_frecuentes(ciclo) if (persona is not None and not ultimas) else []
+    motivo_elegido = (motivo_de(articulo.cod_licencia) or articulo.cod_licencia) if articulo else ""
 
     return render(
         request,
@@ -661,6 +698,13 @@ def nueva_licencia(request):
             "total_horas": total_horas,
             "desde": desde,
             "hasta": hasta,
+            "ciclo": ciclo,
+            "articulo_elegido": articulo,
+            "motivo_elegido": motivo_elegido,
+            "motivos": motivos_para(dict.fromkeys(situaciones)),
+            "ultimas": ultimas,
+            "frecuentes": frecuentes,
+            "situaciones": list(dict.fromkeys(situaciones)),
         },
     )
 

@@ -95,13 +95,29 @@ class LicenciaDocenteTests(BaseLicenciaDocente):
         self.assertContains(respuesta, "ya la usa")
         self.assertEqual(LicenciaOtorgada.objects.count(), 2)
 
-    def test_es_todo_o_nada_si_una_materia_no_cumple(self):
-        self.m2.situacion_revista = "SUP"
+    def test_es_todo_o_nada_si_una_materia_no_tiene_articulo(self):
+        # No hay artículo 14 para interinos: Materia 2 no se puede encuadrar.
+        self.m2.situacion_revista = "INT"
         self.m2.save()
         respuesta = self.client.post(self.url, self.datos())
         self.assertEqual(respuesta.status_code, 200)
-        self.assertContains(respuesta, "Materia 2")
+        self.assertContains(respuesta, "Materia 2: el nomenclador no tiene")
         self.assertEqual(LicenciaOtorgada.objects.count(), 0)
+
+    def test_cada_materia_lleva_el_articulo_de_su_situacion(self):
+        # Materia 2 es de suplente: lleva el S-14, con la misma disposición.
+        self.m2.situacion_revista = "SUP"
+        self.m2.save()
+        self.client.post(self.url, self.datos())
+        por_materia = {
+            l.designacion_id: l for l in LicenciaOtorgada.objects.all()
+        }
+        self.assertEqual(por_materia[self.m1.pk].articulo, self.enfermedad)
+        self.assertEqual(por_materia[self.m2.pk].articulo, self.enfermedad_sup)
+        self.assertEqual(por_materia[self.m2.pk].sit_rev, "Suplente")
+        self.assertEqual(
+            {l.disp_numero for l in por_materia.values()}, {"7"}
+        )
 
     def test_el_tope_cuenta_dias_del_docente_no_licencias(self):
         self.client.post(self.url, self.datos())
@@ -182,3 +198,45 @@ class DisposicionesEditablesTests(BaseLicenciaDocente):
             set(RenglonMensual.objects.filter(designacion=self.m3).values_list("disp_numero", flat=True)),
             {"8"},
         )
+
+
+class AtajoMotivoTests(BaseLicenciaDocente):
+    """Nueva licencia: últimas licencias del docente y motivos frecuentes."""
+
+    def test_sin_licencias_muestra_los_motivos_frecuentes(self):
+        # Abel pidió una licencia por razones particulares; Zárate nunca pidió.
+        LicenciaOtorgada.objects.create(
+            designacion=self.m3, articulo=self.particulares, sit_rev="Titular",
+            desde=date(2026, 10, 1), hasta=date(2026, 10, 1),
+        )
+        respuesta = self.client.get(self.url, {"persona": self.zarate.pk, "desde": "2026-10-21"})
+        self.assertEqual(respuesta.context["ultimas"], [])
+        self.assertEqual([f["nombre"] for f in respuesta.context["frecuentes"]], ["Razones particulares"])
+        self.assertContains(respuesta, "no tiene licencias anteriores")
+
+    def test_muestra_las_ultimas_y_el_atajo_elige_el_motivo(self):
+        self.client.post(self.url, self.datos())  # enfermedad, 21 al 23/10
+        respuesta = self.client.get(self.url, {"persona": self.zarate.pk, "desde": "2026-11-09"})
+        (ultima,) = respuesta.context["ultimas"]
+        self.assertEqual(ultima["nombre"], "Enfermedad común")
+        self.assertEqual(ultima["materias"], 2)
+        self.assertEqual(ultima["desde"], MIE_21)
+
+        respuesta = self.client.post(self.url, {
+            "atajo": self.enfermedad.pk, "persona": self.zarate.pk,
+            "desde": "2026-11-11", "hasta": "2026-11-12",
+        })
+        self.assertEqual(respuesta.context["articulo_elegido"], self.enfermedad)
+        self.assertContains(respuesta, "Usando este motivo")
+        self.assertEqual(LicenciaOtorgada.objects.count(), 2)  # el atajo no guarda
+
+    def test_la_materia_sin_articulo_queda_destildada(self):
+        self.m2.situacion_revista = "INT"
+        self.m2.save()
+        respuesta = self.client.get(self.url, {
+            "persona": self.zarate.pk, "desde": "2026-10-21", "articulo": self.enfermedad.pk,
+        })
+        por_materia = {m["materia"]: m for m in respuesta.context["materias"]}
+        self.assertTrue(por_materia["Materia 2"]["sin_articulo"])
+        self.assertEqual(por_materia["Materia 1"]["articulo"], self.enfermedad)
+        self.assertNotIn(str(self.m2.pk), respuesta.context["form"]["designaciones"].value())

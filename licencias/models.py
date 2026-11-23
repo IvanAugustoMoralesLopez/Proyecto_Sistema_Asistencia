@@ -6,7 +6,14 @@ from django.core.validators import FileExtensionValidator
 from django.db import models
 
 from .clasificacion import CATEGORIA_CHOICES
-from .dias import contar_dias_habiles, fecha_de_hoy, rango_en_anio
+from .dias import (
+    ciclo_de,
+    contar_dias_habiles,
+    fecha_de_hoy,
+    mes_inicio_ciclo,
+    rango_en_anio,
+    rango_en_ciclo,
+)
 
 
 class LicenciaArticulo(models.Model):
@@ -162,16 +169,18 @@ class LicenciaOtorgada(models.Model):
             return
 
         # Import local: services importa models, así que no puede ir arriba.
-        from .services import dias_usados_en_anio
+        from .services import dias_usados_en_ciclo
 
-        # El tope es anual: una licencia que cruza de año se reparte y cada
-        # parte se controla contra el tope de su propio año.
+        # RN-08: el tope es por ciclo lectivo (de marzo a febrero, según los
+        # parámetros del sistema): una licencia que cruza de ciclo se reparte
+        # y cada parte se controla contra el tope de su propio ciclo.
         hoy = fecha_de_hoy()
         fin_calculo = self.hasta or hoy  # licencia abierta: hasta hoy
-        anios = range(self.desde.year, fin_calculo.year + 1)
+        mes = mes_inicio_ciclo()
+        ciclos = range(ciclo_de(self.desde, mes), ciclo_de(fin_calculo, mes) + 1)
 
-        for anio in anios:
-            rango = rango_en_anio(self.desde, self.hasta, anio, hoy)
+        for ciclo in ciclos:
+            rango = rango_en_ciclo(self.desde, self.hasta, ciclo, hoy, mes)
             if rango is None:
                 continue
             inicio, fin = rango
@@ -179,10 +188,11 @@ class LicenciaOtorgada(models.Model):
 
             # Al editar (self.pk existe) se excluye esta misma licencia del
             # conteo, para que no se cuente contra sí misma. En un alta es None.
-            dias_ya_usados = dias_usados_en_anio(
+            # Se cuenta por código del nomenclador: cada código tiene su tope.
+            dias_ya_usados = dias_usados_en_ciclo(
                 self.designacion.persona.dni,
-                self.articulo.articulo,
-                anio,
+                self.articulo,
+                ciclo,
                 excluir_id=self.pk,
                 excluir_grupo=self.grupo,
             )
@@ -192,15 +202,14 @@ class LicenciaOtorgada(models.Model):
                 # de donde viene el tope (titular, interino, suplente: arts. 3xx).
                 situacion = (self.articulo.sit_rev or '').strip().lower()
                 para = f" para el personal {situacion}" if situacion else ""
-                # Solo se nombra el año cuando la licencia cruza de año.
-                en_anio = f" en {anio}" if len(anios) > 1 else ""
+                en_ciclo = f" en el ciclo lectivo {ciclo}"
                 raise ValidationError({
                     'hasta': (
                         f"Tope excedido. El límite del artículo {self.articulo.articulo} "
                         f"según el Estatuto Docente de la provincia del Chaco{para} "
-                        f"es {tope} días. "
-                        f"El docente ya usó {dias_ya_usados} días{en_anio} y ahora "
-                        f"solicita {dias_pedidos} más{en_anio}."
+                        f"es {tope} días por ciclo lectivo. "
+                        f"El docente ya usó {dias_ya_usados} días{en_ciclo} y ahora "
+                        f"solicita {dias_pedidos} más."
                     )
                 })
 

@@ -404,14 +404,20 @@ def calcular_alertas(anio, umbral=UMBRAL_POR_DEFECTO):
     Los días se calculan con licencias.services.dias_usados_en_anio, la misma
     regla de conteo del módulo de licencias. Un docente se evalúa por
     artículo, sumando todas las licencias de ese artículo en el año.
+
+    RN-08: el «año» del tope es el ciclo lectivo que empieza en `anio`
+    (de marzo a febrero, según los parámetros del sistema).
     """
+    from licencias.dias import limites_del_ciclo
+
+    inicio_ciclo, fin_ciclo = limites_del_ciclo(anio)
     licencias = (
         LicenciaOtorgada.objects.filter(
             articulo__tope_dias_anual__isnull=False,
             articulo__tope_dias_anual__gt=0,
-            desde__year__lte=anio,
+            desde__lte=fin_ciclo,
         )
-        .filter(Q(hasta__isnull=True) | Q(hasta__year__gte=anio))
+        .filter(Q(hasta__isnull=True) | Q(hasta__gte=inicio_ciclo))
         .select_related("designacion__persona", "articulo")
         .order_by("-desde", "-pk")
     )

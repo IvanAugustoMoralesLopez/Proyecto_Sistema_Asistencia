@@ -42,12 +42,17 @@ def designaciones_del_docente(persona, desde, hasta=None):
     )
 
 
-def materias_afectadas(persona, desde, hasta=None):
+def materias_afectadas(persona, desde, hasta=None, articulo=None):
     """
     Una entrada por designación del docente en el período, con los días en
     que tiene clase y las horas cátedra. Una licencia abierta (sin «hasta»)
     se calcula solo para el primer día.
+
+    Con `articulo` (el motivo elegido), cada materia trae el artículo del
+    nomenclador que le corresponde por su situación de revista, o None si el
+    nomenclador no tiene ese motivo para ella.
     """
+    from .nomenclador import articulo_para
     from asistencias.services import horas_del_dia
     from asistencias.services.reglas import DIAS_HABILES
 
@@ -69,15 +74,21 @@ def materias_afectadas(persona, desde, hasta=None):
                     horas += del_dia
             fecha += timedelta(days=1)
 
+        situacion = (
+            designacion.get_situacion_revista_display()
+            if designacion.situacion_revista
+            else ""
+        )
+        propio = articulo_para(articulo, situacion) if articulo is not None else None
         materias.append(
             {
                 "designacion": designacion,
                 "materia": _materia(designacion),
-                "situacion": designacion.get_situacion_revista_display()
-                if designacion.situacion_revista
-                else "",
+                "situacion": situacion,
                 "dias": dias,
                 "horas": horas,
+                "articulo": propio,
+                "sin_articulo": articulo is not None and propio is None,
             }
         )
 
@@ -154,6 +165,8 @@ def crear_licencia_docente(
     `datos`: nro_formulario, justifica, resolucion_excepcion, observaciones.
     `disposicion`: tipo, oficina, numero, anio.
     """
+    from .nomenclador import articulo_para
+
     if not designaciones:
         raise ValidationError("Elegí al menos una materia o cargo afectado.")
 
@@ -174,14 +187,25 @@ def crear_licencia_docente(
         if designacion.hasta and (fin is None or designacion.hasta < fin):
             fin = designacion.hasta
 
+        situacion = (
+            designacion.get_situacion_revista_display()
+            if designacion.situacion_revista
+            else ""
+        )
+        # El motivo es uno; el artículo depende de la situación de revista de
+        # cada materia (309 B 1 titular, 331-A interino...).
+        propio = articulo_para(articulo, situacion)
+        if propio is None:
+            errores.append(
+                f"{_materia(designacion)}: el nomenclador no tiene «{articulo.tipo_licencia}» "
+                f"para personal {situacion.lower()}. Destildá esa materia."
+            )
+            continue
+
         licencia = LicenciaOtorgada(
             designacion=designacion,
-            articulo=articulo,
-            sit_rev=(
-                designacion.get_situacion_revista_display()
-                if designacion.situacion_revista
-                else (articulo.sit_rev or "")
-            )[:20],
+            articulo=propio,
+            sit_rev=(situacion or (propio.sit_rev or ""))[:20],
             desde=inicio,
             hasta=fin,
             grupo=grupo,
@@ -333,15 +357,98 @@ def cortar(licencias, volvio_el, usuario):
 
 
 def dias_del_tope(licencia):
-    """(usados en el año, tope) del artículo para el docente, o None sin tope."""
-    from .services import dias_usados_en_anio
+    """(usados en el ciclo lectivo, tope) del artículo para el docente, o None sin tope."""
+    from .dias import ciclo_de
+    from .services import dias_usados_en_ciclo
 
     tope = licencia.articulo.tope_dias_anual
     if not tope:
         return None
 
-    anio = licencia.desde.year
-    usados = dias_usados_en_anio(
-        licencia.designacion.persona.dni, licencia.articulo.articulo, anio
+    ciclo = ciclo_de(licencia.desde)
+    usados = dias_usados_en_ciclo(
+        licencia.designacion.persona.dni, licencia.articulo, ciclo
     )
-    return {"usados": usados, "tope": tope, "quedan": max(tope - usados, 0), "anio": anio}
+    return {"usados": usados, "tope": tope, "quedan": max(tope - usados, 0), "anio": ciclo, "ciclo": ciclo}
+
+
+
+# ───────────── Atajo: últimas licencias y motivos frecuentes ─────────────
+
+def _uso_del_tope(dni, articulo, ciclo):
+    from .services import dias_usados_en_ciclo
+
+    tope = articulo.tope_dias_anual
+    if not tope:
+        return None
+    usados = dias_usados_en_ciclo(dni, articulo, ciclo)
+    return {
+        "usados": usados,
+        "tope": tope,
+        "quedan": max(tope - usados, 0),
+        "porcentaje": min(round(usados * 100 / tope), 100),
+        "cerca": usados >= tope * 0.8,
+    }
+
+
+def ultimas_licencias(persona, ciclo, limite=4):
+    """
+    Las últimas licencias del docente, una por motivo (la más reciente), con
+    sus fechas, cuántas materias abarcó y cuánto del tope lleva en el ciclo.
+    """
+    from .nomenclador import motivo_de
+
+    vistas, resultado = set(), []
+    licencias = (
+        LicenciaOtorgada.objects.filter(designacion__persona=persona)
+        .select_related("articulo")
+        .order_by("-desde", "-pk")
+    )
+    for licencia in licencias:
+        clave = motivo_de(licencia.articulo.cod_licencia) or licencia.articulo.cod_licencia
+        if clave in vistas:
+            continue
+        vistas.add(clave)
+        partes = licencias_del_grupo(licencia)
+        hasta = [p.hasta for p in partes if p.hasta]
+        resultado.append({
+            "licencia": licencia,
+            "articulo": licencia.articulo,
+            "motivo": clave,
+            "nombre": licencia.articulo.tipo_licencia,
+            "desde": min(p.desde for p in partes),
+            "hasta": max(hasta) if len(hasta) == len(partes) else None,
+            "materias": len(partes),
+            "tope": _uso_del_tope(persona.dni, licencia.articulo, ciclo),
+        })
+        if len(resultado) == limite:
+            break
+    return resultado
+
+
+def motivos_frecuentes(ciclo, limite=4):
+    """Los motivos con más pedidos de licencia en el ciclo lectivo."""
+    from collections import Counter
+
+    from .dias import limites_del_ciclo
+    from .nomenclador import motivo_de
+
+    primero, ultimo = limites_del_ciclo(ciclo)
+    pedidos = (
+        LicenciaOtorgada.objects.filter(desde__lte=ultimo)
+        .filter(Q(hasta__isnull=True) | Q(hasta__gte=primero))
+        .select_related("articulo")
+    )
+    contador, ejemplo, grupos = Counter(), {}, set()
+    for licencia in pedidos:
+        pedido = licencia.grupo or licencia.pk
+        if pedido in grupos:
+            continue
+        grupos.add(pedido)
+        clave = motivo_de(licencia.articulo.cod_licencia) or licencia.articulo.cod_licencia
+        contador[clave] += 1
+        ejemplo.setdefault(clave, licencia.articulo)
+    return [
+        {"motivo": clave, "nombre": ejemplo[clave].tipo_licencia, "articulo": ejemplo[clave], "pedidos": cantidad}
+        for clave, cantidad in contador.most_common(limite)
+    ]

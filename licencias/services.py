@@ -8,18 +8,31 @@ from .clasificacion import (
     PLANILLA_IL02,
     planilla_para_categoria,
 )
-from .dias import contar_dias_habiles, fecha_de_hoy, listar_dias_habiles, obtener_feriados, rango_en_anio
+from .dias import (
+    contar_dias_habiles,
+    fecha_de_hoy,
+    limites_del_ciclo,
+    listar_dias_habiles,
+    obtener_feriados,
+    rango_en_anio,
+    rango_en_ciclo,
+)
 from .models import LicenciaArticulo, LicenciaOtorgada
 
-def dias_usados_en_anio(
+def dias_usados_en_ciclo(
     dni: str,
-    articulo: str,
-    anio: int,
+    articulo,
+    ciclo: int,
     excluir_id: int = None,
     excluir_grupo=None,
 ) -> int:
     """
-    Días hábiles consumidos por el docente en `anio` para el artículo dado.
+    Días hábiles consumidos por el docente en el ciclo lectivo `ciclo` para
+    el artículo dado (RN-08). El ciclo va del día 1 del mes que fija
+    ParametroSistema.mes_inicio_ciclo hasta el día anterior un año después.
+
+    `articulo`: un LicenciaArticulo (cuenta ese código del nomenclador) o el
+    número de artículo como texto (cuenta todos los códigos con ese número).
 
     `excluir_id`: id de una licencia que NO debe contarse. Se usa al editar,
     para que la licencia no se cuente contra sí misma. `excluir_grupo`: el
@@ -29,32 +42,40 @@ def dias_usados_en_anio(
     guarda como una LicenciaOtorgada por materia, y el mismo día en dos
     materias es un solo día consumido.
     """
+    primero, ultimo = limites_del_ciclo(ciclo)
     licencias = LicenciaOtorgada.objects.filter(
         designacion__persona__dni=dni,
-        articulo__articulo=articulo,
-        desde__year__lte=anio,
+        desde__lte=ultimo,
     ).filter(
-        Q(hasta__isnull=True) | Q(hasta__year__gte=anio)
+        Q(hasta__isnull=True) | Q(hasta__gte=primero)
     )
+    if isinstance(articulo, LicenciaArticulo):
+        licencias = licencias.filter(articulo=articulo)
+    else:
+        licencias = licencias.filter(articulo__articulo=articulo)
 
     if excluir_id is not None:
         licencias = licencias.exclude(pk=excluir_id)
     if excluir_grupo is not None:
         licencias = licencias.exclude(grupo=excluir_grupo)
 
-    # Una sola consulta de feriados para todo el año (antes era una por licencia).
-    feriados = obtener_feriados(date(anio, 1, 1), date(anio, 12, 31))
+    # Una sola consulta de feriados para todo el ciclo.
+    feriados = obtener_feriados(primero, ultimo)
     hoy = fecha_de_hoy()
 
     dias = set()
     for lic in licencias:
-        rango = rango_en_anio(lic.desde, lic.hasta, anio, hoy)
+        rango = rango_en_ciclo(lic.desde, lic.hasta, ciclo, hoy)
         if rango is None:
             continue
         inicio, fin = rango
         dias.update(listar_dias_habiles(inicio, fin, feriados))
 
     return len(dias)
+
+
+# Nombre anterior: el «año» del tope ahora es el ciclo lectivo.
+dias_usados_en_anio = dias_usados_en_ciclo
 
 
 def clasificar_planilla_licencia(licencia: LicenciaOtorgada) -> str:

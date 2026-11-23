@@ -33,14 +33,9 @@
     <div class="card shadow-sm border-0 mb-3">
         <div class="card-body">
             <div class="row g-3">
-                <div class="col-md-6">
+                <div class="col-md-12">
                     {{ form.persona.label_tag }} {{ form.persona }}
                     {% for error in form.persona.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-                </div>
-                <div class="col-md-6">
-                    {{ form.articulo.label_tag }} {{ form.articulo }}
-                    {% for error in form.articulo.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-                    <div class="form-text">Se controla contra la situación de revista de cada materia.</div>
                 </div>
                 <div class="col-md-3">
                     {{ form.desde.label_tag }} {{ form.desde }}
@@ -58,22 +53,104 @@
                     {{ form.justifica.label_tag }} {{ form.justifica }}
                 </div>
             </div>
-            <div class="mt-3">
-                <button class="btn btn-outline-primary" type="submit" name="accion" value="calcular" formnovalidate>
-                    Ver materias afectadas
-                </button>
+
+        </div>
+    </div>
+
+    {% if persona %}
+        {# Atajo: las últimas licencias del docente, o los motivos frecuentes del instituto. #}
+        <div class="card shadow-sm border-primary border-2 mb-3">
+            <div class="card-body">
+                {% if ultimas %}
+                    <div class="d-flex justify-content-between align-items-baseline flex-wrap gap-2 mb-2">
+                        <h2 class="h6 mb-0">Últimas licencias de {{ persona.apellido_nombre }}</h2>
+                        <span class="small text-secondary">Tocá una para usar el mismo motivo · ciclo lectivo {{ ciclo }}</span>
+                    </div>
+                    <div class="row g-2">
+                        {% for u in ultimas %}
+                            <div class="col-md-6 col-xl-3">
+                                <div class="border rounded p-2 h-100 d-flex flex-column gap-1 {% if u.motivo == motivo_elegido %}border-primary border-2 bg-primary-subtle{% endif %}">
+                                    <div class="fw-semibold">{{ u.nombre }}</div>
+                                    <div class="small text-secondary">
+                                        Código {{ u.motivo }} · {{ u.desde|date:"d/m/Y" }}{% if u.hasta and u.hasta != u.desde %} al {{ u.hasta|date:"d/m/Y" }}{% endif %}
+                                        · {{ u.materias }} materia{{ u.materias|pluralize }}
+                                    </div>
+                                    {% if u.tope %}
+                                        <div class="small {% if u.tope.cerca %}text-warning-emphasis fw-semibold{% else %}text-secondary{% endif %}">
+                                            Usó {{ u.tope.usados }} de {{ u.tope.tope }} días{% if u.tope.cerca %}: le quedan {{ u.tope.quedan }}{% endif %}
+                                        </div>
+                                        <div class="progress" role="progressbar" aria-label="Días usados de {{ u.nombre }}" aria-valuenow="{{ u.tope.porcentaje }}" aria-valuemin="0" aria-valuemax="100" style="height: 6px;">
+                                            <div class="progress-bar {% if u.tope.cerca %}bg-warning{% endif %}" style="width: {{ u.tope.porcentaje }}%"></div>
+                                        </div>
+                                    {% endif %}
+                                    <div class="mt-auto pt-1">
+                                        {% if u.motivo == motivo_elegido %}
+                                            <span class="badge text-bg-primary">Usando este motivo</span>
+                                        {% else %}
+                                            <button class="btn btn-sm btn-outline-primary w-100" type="submit" name="atajo" value="{{ u.articulo.pk }}" formnovalidate>
+                                                Usar este motivo
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <h2 class="h6 mb-1">{{ persona.apellido_nombre }} no tiene licencias anteriores</h2>
+                    {% if frecuentes %}
+                        <p class="small text-secondary mb-2">Motivos más usados en el instituto en el ciclo lectivo {{ ciclo }}:</p>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for f in frecuentes %}
+                                <button class="btn btn-sm rounded-pill {% if f.motivo == motivo_elegido %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                                        type="submit" name="atajo" value="{{ f.articulo.pk }}" formnovalidate>
+                                    {{ f.nombre }} · {{ f.motivo }}
+                                </button>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="small text-secondary mb-0">Elegí el motivo en la lista de abajo.</p>
+                    {% endif %}
+                {% endif %}
             </div>
+        </div>
+    {% endif %}
+
+    {# La lista completa, agrupada y filtrada por los cargos del docente. #}
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-baseline flex-wrap gap-2 mb-2">
+                <h2 class="h6 mb-0">{% if persona %}¿Es otro motivo? Elegí entre todos{% else %}Motivo{% endif %}</h2>
+                {% if situaciones %}<span class="small text-secondary">Filtrados para sus cargos: {{ situaciones|join:" y " }}</span>{% endif %}
+            </div>
+            <label class="form-label small" for="buscar-motivo">Buscar por nombre o código</label>
+            <input class="form-control mb-2" type="search" id="buscar-motivo" placeholder="Ej.: duelo, 2-9, examen" autocomplete="off">
+            <label class="visually-hidden" for="id_articulo">Motivo de la licencia</label>
+            <select class="form-select" name="articulo" id="id_articulo" size="8" required>
+                {% for grupo, lista in motivos %}
+                    <optgroup label="{{ grupo }}">
+                        {% for m in lista %}
+                            <option value="{{ m.representante.pk }}" data-buscar="{{ m.nombre|lower }} {{ m.motivo }}"
+                                    {% if m.motivo == motivo_elegido %}selected{% endif %}>
+                                {{ m.nombre }} · {{ m.motivo }}
+                            </option>
+                        {% endfor %}
+                    </optgroup>
+                {% endfor %}
+            </select>
+            {% for error in form.articulo.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            <div class="form-text">Se elige el motivo una vez: el artículo de cada materia lo pone el sistema según su situación de revista.</div>
         </div>
     </div>
 
     <div class="card shadow-sm border-0 mb-3">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <h2 class="h6 mb-0">Materias y cargos afectados</h2>
+            <h2 class="h6 mb-0">Materias y cargos afectados{% if articulo_elegido %} · {{ articulo_elegido.tipo_licencia }}{% endif %}</h2>
             <span class="badge text-bg-primary">Calculado por el sistema</span>
         </div>
         <div class="card-body">
             {% if not persona or not desde %}
-                <p class="text-secondary mb-0">Elegí el docente y la fecha Desde, y tocá «Ver materias afectadas».</p>
+                 <p class="text-secondary mb-0">Elegí el docente y la fecha Desde: las materias se calculan solas.</p>
             {% elif not materias %}
                 <p class="text-danger mb-0">{{ persona.apellido_nombre }} no tiene designaciones vigentes en ese período.</p>
             {% else %}
@@ -85,7 +162,7 @@
                 <div class="table-responsive">
                     <table class="table table-sm align-middle">
                         <thead>
-                            <tr><th>Incluir</th><th>Materia o cargo</th><th>Sit. rev.</th><th>Días con clase</th><th class="text-end">Días</th><th class="text-end">Horas</th></tr>
+                            <tr><th>Incluir</th><th>Materia o cargo</th><th>Sit. rev.</th><th>Artículo</th><th>Días con clase</th><th class="text-end">Días</th><th class="text-end">Horas</th></tr>
                         </thead>
                         <tbody>
                             {% for m in materias %}
@@ -93,10 +170,20 @@
                                     <td>
                                         <input class="form-check-input" type="checkbox" name="designaciones"
                                                value="{{ m.designacion.pk }}" id="materia-{{ m.designacion.pk }}"
-                                               {% if m.designacion.pk|stringformat:"s" in form.designaciones.value %}checked{% endif %}>
+                                               {% if m.sin_articulo %}disabled{% elif m.designacion.pk|stringformat:"s" in form.designaciones.value %}checked{% endif %}>
                                     </td>
                                     <td><label for="materia-{{ m.designacion.pk }}">{{ m.materia }}</label></td>
                                     <td>{{ m.situacion|default:"—" }}</td>
+                                    <td>
+                                        {% if m.articulo %}
+                                            <span class="fw-semibold">{{ m.articulo.articulo }}</span>
+                                            <span class="small text-secondary">· {{ m.articulo.cod_licencia }}</span>
+                                        {% elif m.sin_articulo %}
+                                            <span class="small text-danger">El nomenclador no tiene este motivo para {{ m.situacion|lower }}: no se incluye</span>
+                                        {% else %}
+                                            <span class="small text-secondary">elegí el motivo</span>
+                                        {% endif %}
+                                    </td>
                                     <td class="small">{% for dia in m.dias %}{{ dia|date:"D d/m" }}{% if not forloop.last %} · {% endif %}{% empty %}<span class="text-secondary">no da clase en el período</span>{% endfor %}</td>
                                     <td class="text-end">{{ m.dias|length }}</td>
                                     <td class="text-end">{{ m.horas|floatformat:"-2" }}</td>
@@ -104,7 +191,7 @@
                             {% endfor %}
                         </tbody>
                         <tfoot>
-                            <tr class="fw-semibold"><td></td><td>Total del docente</td><td></td><td></td><td class="text-end">{{ total_dias }}</td><td class="text-end">{{ total_horas|floatformat:"-2" }}</td></tr>
+                            <tr class="fw-semibold"><td></td><td>Total del docente</td><td></td><td></td><td></td><td class="text-end">{{ total_dias }}</td><td class="text-end">{{ total_horas|floatformat:"-2" }}</td></tr>
                         </tfoot>
                     </table>
                 </div>
@@ -159,7 +246,22 @@
 (function () {
     /* Al cambiar el docente o las fechas, se recalculan las materias. */
     var form = document.getElementById("form-licencia");
-    ["id_persona", "id_desde", "id_hasta"].forEach(function (id) {
+    /* Buscador del motivo: oculta las opciones que no coinciden. */
+    var buscar = document.getElementById("buscar-motivo");
+    var lista = document.getElementById("id_articulo");
+    if (buscar && lista) {
+        buscar.addEventListener("input", function () {
+            var texto = buscar.value.trim().toLowerCase();
+            lista.querySelectorAll("option").forEach(function (opcion) {
+                opcion.hidden = texto !== "" && opcion.dataset.buscar.indexOf(texto) === -1;
+            });
+            lista.querySelectorAll("optgroup").forEach(function (grupo) {
+                grupo.hidden = !grupo.querySelector("option:not([hidden])");
+            });
+        });
+    }
+
+    ["id_persona", "id_desde", "id_hasta", "id_articulo"].forEach(function (id) {
         var campo = document.getElementById(id);
         if (!campo) { return; }
         campo.addEventListener("change", function () {

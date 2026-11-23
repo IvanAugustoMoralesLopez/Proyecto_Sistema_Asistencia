@@ -278,17 +278,16 @@ def calcular_renglones(anio, mes):
 
 def _articulo_equivalente(articulo, designacion):
     """
-    El catálogo tiene el mismo artículo repetido por situación de revista.
-    Devuelve el que corresponde a la designación (o el mismo si no hay otro).
+    El artículo del mismo motivo para la situación de revista de la
+    designación: en el nomenclador el número cambia (309 B 1 titular, 331-A
+    interino), lo que se mantiene es el motivo (1-1). None si no existe:
+    el renglón queda sin artículo para que se elija a mano.
     """
+    from .nomenclador import articulo_para
+
     if articulo is None or not designacion.situacion_revista:
         return articulo
-    situacion = designacion.get_situacion_revista_display()
-    if (articulo.sit_rev or '').strip().lower() == situacion.lower():
-        return articulo
-    return LicenciaArticulo.objects.filter(
-        articulo=articulo.articulo, sit_rev__iexact=situacion,
-    ).first() or articulo
+    return articulo_para(articulo, designacion.get_situacion_revista_display())
 
 
 @transaction.atomic

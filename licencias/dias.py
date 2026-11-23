@@ -83,3 +83,45 @@ def mes_vecino(anio, mes, desplazamiento):
     """
     indice = anio * 12 + (mes - 1) + desplazamiento
     return indice // 12, indice % 12 + 1
+
+
+
+# ───────────── Ciclo lectivo (RN-08: el tope se cuenta por ciclo) ─────────────
+
+def mes_inicio_ciclo():
+    """Mes en que empieza el ciclo lectivo, de los parámetros del sistema."""
+    from reportes.models import ParametroSistema  # import local: evita ciclos
+
+    return ParametroSistema.obtener().mes_inicio_ciclo or 1
+
+
+def ciclo_de(fecha: date, mes: int = None) -> int:
+    """Ciclo lectivo al que pertenece la fecha: el año en que ese ciclo empezó.
+
+    Con el ciclo de marzo a febrero, el 10/02/2027 es del ciclo 2026.
+    """
+    mes = mes or mes_inicio_ciclo()
+    return fecha.year if fecha.month >= mes else fecha.year - 1
+
+
+def limites_del_ciclo(ciclo: int, mes: int = None):
+    """(primer día, último día) del ciclo lectivo."""
+    mes = mes or mes_inicio_ciclo()
+    inicio = date(ciclo, mes, 1)
+    if mes == 1:
+        return inicio, date(ciclo, 12, 31)
+    return inicio, date(ciclo + 1, mes, 1) - timedelta(days=1)
+
+
+def rango_en_ciclo(desde: date, hasta, ciclo: int, hoy: date = None, mes: int = None):
+    """
+    Como rango_en_anio, pero recortado al ciclo lectivo `ciclo`.
+    Devuelve (inicio, fin) o None si el período no toca ese ciclo.
+    """
+    hoy = hoy or fecha_de_hoy()
+    primero, ultimo = limites_del_ciclo(ciclo, mes)
+    inicio = max(desde, primero)
+    fin = min(hasta if hasta else hoy, ultimo)
+    if fin < inicio:
+        return None
+    return inicio, fin
