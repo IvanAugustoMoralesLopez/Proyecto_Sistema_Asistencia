@@ -5,7 +5,7 @@
 --   1) python manage.py migrate     (crea las tablas, las marcas P/I/LIC/LT/PR y los 3 roles)
 --   2) USE asistencia;              (o el nombre de tu base)
 -- Qué carga:
---   * 3 carreras y 12 materias          * 2 cargos (HC y COORD)
+--   * 3 carreras y 12 materias          * 4 cargos (150, 155, 165 y 166)
 --   * 20 docentes (DNI 99000001 a 99000020) y 22 designaciones con horarios
 --   * 5 artículos de licencia con tope anual y 12 licencias otorgadas
 --   * 11 feriados 2026                  * 35 registros de asistencia de octubre 2026
@@ -29,24 +29,49 @@ INSERT IGNORE INTO personal_carrera (nombre, plan_estudio, anio_plan, activa, pl
   ('Gestión Administrativa', 'Plan 2020', 2020, 1, 1);
 
 -- ───────────── Materias (espacios curriculares) ─────────────
-INSERT IGNORE INTO personal_espacio_curricular (nombre, carrera_id, activo) VALUES
-  ('Programación I', (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), 1),
-  ('Bases de Datos', (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), 1),
-  ('Ingeniería de Software', (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), 1),
-  ('Testing de Software', (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), 1),
-  ('Riesgos Laborales', (SELECT id FROM personal_carrera WHERE nombre = 'Higiene y Seguridad en el Trabajo'), 1),
-  ('Legislación Laboral', (SELECT id FROM personal_carrera WHERE nombre = 'Higiene y Seguridad en el Trabajo'), 1),
-  ('Ergonomía', (SELECT id FROM personal_carrera WHERE nombre = 'Higiene y Seguridad en el Trabajo'), 1),
-  ('Primeros Auxilios', (SELECT id FROM personal_carrera WHERE nombre = 'Higiene y Seguridad en el Trabajo'), 1),
-  ('Contabilidad', (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), 1),
-  ('Administración General', (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), 1),
-  ('Derecho Comercial', (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), 1),
-  ('Gestión de Personal', (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), 1);
+-- Cada materia se carga una sola vez; en qué carreras se dicta va en
+-- personal_espacio_curricular_carrera (una materia puede estar en varias).
+INSERT IGNORE INTO personal_espacio_curricular (nombre, activo) VALUES
+  ('Programación I', 1),
+  ('Bases de Datos', 1),
+  ('Ingeniería de Software', 1),
+  ('Testing de Software', 1),
+  ('Riesgos Laborales', 1),
+  ('Legislación Laboral', 1),
+  ('Ergonomía', 1),
+  ('Primeros Auxilios', 1),
+  ('Contabilidad', 1),
+  ('Administración General', 1),
+  ('Derecho Comercial', 1),
+  ('Gestión de Personal', 1);
 
--- ───────────── Cargos ─────────────
+-- Materia ↔ carrera. «Legislación Laboral» se dicta en dos carreras.
+INSERT IGNORE INTO personal_espacio_curricular_carrera (espaciocurricular_id, carrera_id)
+SELECT e.id, c.id
+FROM personal_espacio_curricular e
+JOIN personal_carrera c ON (e.nombre, c.nombre) IN (
+  ('Programación I', 'Desarrollo de Software'),
+  ('Bases de Datos', 'Desarrollo de Software'),
+  ('Ingeniería de Software', 'Desarrollo de Software'),
+  ('Testing de Software', 'Desarrollo de Software'),
+  ('Riesgos Laborales', 'Higiene y Seguridad en el Trabajo'),
+  ('Legislación Laboral', 'Higiene y Seguridad en el Trabajo'),
+  ('Legislación Laboral', 'Gestión Administrativa'),
+  ('Ergonomía', 'Higiene y Seguridad en el Trabajo'),
+  ('Primeros Auxilios', 'Higiene y Seguridad en el Trabajo'),
+  ('Contabilidad', 'Gestión Administrativa'),
+  ('Administración General', 'Gestión Administrativa'),
+  ('Derecho Comercial', 'Gestión Administrativa'),
+  ('Gestión de Personal', 'Gestión Administrativa')
+);
+
+-- ───────────── Cargos (códigos numéricos oficiales) ─────────────
+-- La migración personal 0006 ya los crea; se repiten por si la base es vieja.
 INSERT IGNORE INTO personal_cargo (codigo, descripcion, es_docente, activo) VALUES
-  ('HC', 'Horas cátedra', 1, 1),
-  ('COORD', 'Coordinador de carrera', 1, 1);
+  ('150', 'Secretaría', 0, 1),
+  ('155', 'Director de Estudio', 0, 1),
+  ('165', 'Bedel', 0, 1),
+  ('166', 'Horas cátedra', 1, 1);
 
 -- ───────────── Personas (docentes de prueba, DNI 99000001 a 99000020) ─────────────
 INSERT IGNORE INTO personal_persona (dni, apellido_nombre, apellido, nombres, tipo_documento, sexo, fecha_nacimiento, estado_civil, nacionalidad, nro_dgi, nro_dgr, domicilio_calle, barrio, localidad, codigo_postal, provincia, telefono, email, activa) VALUES
@@ -72,29 +97,29 @@ INSERT IGNORE INTO personal_persona (dni, apellido_nombre, apellido, nombres, ti
   ('99000020', 'VILLALBA, Joaquín', 'Villalba', 'Joaquín', 'DNI', 'M', '1970-09-01', '', 'Argentina', '', '', '', '', 'Resistencia', '', 'Chaco', '3794000020', 'villalba20@ejemplo.test', 1);
 
 -- ───────────── Designaciones (ids 9001 a 9022; entran por SQL, por eso no generan historial) ─────────────
-INSERT IGNORE INTO personal_designacion (id, persona_id, cargo_id, espacio_curricular_id, unidad_educativa_id, especialidad_id, reemplaza_id, situacion_revista, anio_curso, division_seccion, turno, hs_catedra, jornada, disp_alta_nro, sello_regional_as, motivo_id, norma_tipo, norma_numero, norma_anio, organismo_emisor, desde, hasta, pof, anio_pof, novedad, activo, observaciones, es_suplencia, plazo_indeterminado, sin_inicio) VALUES
-  (9001, '99000001', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Programación I' AND c.nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 6, '', '', '', NULL, 'Resolución', '100', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9002, '99000002', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Bases de Datos' AND c.nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 6, '', '', '', NULL, 'Resolución', '101', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9003, '99000003', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Ingeniería de Software' AND c.nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'INT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '102', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9004, '99000004', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Testing de Software' AND c.nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'INT', '1°', 'A', 'Tarde', 4, '', '', '', NULL, 'Resolución', '103', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9005, '99000005', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Riesgos Laborales' AND c.nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Tarde', 6, '', '', '', NULL, 'Resolución', '104', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9006, '99000006', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Legislación Laboral' AND c.nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '105', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9007, '99000007', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Ergonomía' AND c.nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'INT', '2°', 'A', 'Tarde', 4, '', '', '', NULL, 'Resolución', '106', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9008, '99000008', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Primeros Auxilios' AND c.nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'SUP', '1°', 'A', 'Tarde', 3, '', '', '', NULL, 'Resolución', '107', 2026, 'Ministerio de Educación', '2026-03-02', '2026-12-18', '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9009, '99000009', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Contabilidad' AND c.nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 6, '', '', '', NULL, 'Resolución', '108', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9010, '99000010', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Administración General' AND c.nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '109', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9011, '99000011', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Derecho Comercial' AND c.nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'INT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '110', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9012, '99000012', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Gestión de Personal' AND c.nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'SUP', '1°', 'A', 'Tarde', 3, '', '', '', NULL, 'Resolución', '111', 2026, 'Ministerio de Educación', '2026-03-02', '2026-12-18', '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9013, '99000013', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Programación I' AND c.nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'SUP', '2°', 'A', 'Tarde', 4, '', '', '', NULL, 'Resolución', '112', 2026, 'Ministerio de Educación', '2026-03-02', '2026-12-18', '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9014, '99000014', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Bases de Datos' AND c.nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'INT', '1°', 'A', 'Tarde', 4, '', '', '', NULL, 'Resolución', '113', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9015, '99000015', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Testing de Software' AND c.nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '114', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9016, '99000016', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Riesgos Laborales' AND c.nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'INT', '1°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '115', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9017, '99000017', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Contabilidad' AND c.nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'SUP', '2°', 'A', 'Tarde', 3, '', '', '', NULL, 'Resolución', '116', 2026, 'Ministerio de Educación', '2026-03-02', '2026-12-18', '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9018, '99000018', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Ingeniería de Software' AND c.nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 6, '', '', '', NULL, 'Resolución', '117', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9019, '99000019', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Ergonomía' AND c.nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '118', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9020, '99000020', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Derecho Comercial' AND c.nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'SUP', '1°', 'A', 'Tarde', 3, '', '', '', NULL, 'Resolución', '119', 2026, 'Ministerio de Educación', '2026-03-02', '2026-12-18', '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9021, '99000001', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Ingeniería de Software' AND c.nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '120', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9022, '99000009', 'HC', (SELECT e.id FROM personal_espacio_curricular e JOIN personal_carrera c ON c.id = e.carrera_id WHERE e.nombre = 'Gestión de Personal' AND c.nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '121', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0);
+INSERT IGNORE INTO personal_designacion (id, persona_id, cargo_id, espacio_curricular_id, carrera_id, unidad_educativa_id, especialidad_id, reemplaza_id, situacion_revista, anio_curso, division_seccion, turno, hs_catedra, jornada, disp_alta_nro, sello_regional_as, motivo_id, norma_tipo, norma_numero, norma_anio, organismo_emisor, desde, hasta, pof, anio_pof, novedad, activo, observaciones, es_suplencia, plazo_indeterminado, sin_inicio) VALUES
+  (9001, '99000001', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Programación I'), (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 6, '', '', '', NULL, 'Resolución', '100', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9002, '99000002', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Bases de Datos'), (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 6, '', '', '', NULL, 'Resolución', '101', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9003, '99000003', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Ingeniería de Software'), (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'INT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '102', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9004, '99000004', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Testing de Software'), (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'INT', '1°', 'A', 'Tarde', 4, '', '', '', NULL, 'Resolución', '103', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9005, '99000005', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Riesgos Laborales'), (SELECT id FROM personal_carrera WHERE nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Tarde', 6, '', '', '', NULL, 'Resolución', '104', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9006, '99000006', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Legislación Laboral'), (SELECT id FROM personal_carrera WHERE nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '105', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9007, '99000007', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Ergonomía'), (SELECT id FROM personal_carrera WHERE nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'INT', '2°', 'A', 'Tarde', 4, '', '', '', NULL, 'Resolución', '106', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9008, '99000008', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Primeros Auxilios'), (SELECT id FROM personal_carrera WHERE nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'SUP', '1°', 'A', 'Tarde', 3, '', '', '', NULL, 'Resolución', '107', 2026, 'Ministerio de Educación', '2026-03-02', '2026-12-18', '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9009, '99000009', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Contabilidad'), (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 6, '', '', '', NULL, 'Resolución', '108', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9010, '99000010', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Administración General'), (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '109', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9011, '99000011', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Derecho Comercial'), (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'INT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '110', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9012, '99000012', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Gestión de Personal'), (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'SUP', '1°', 'A', 'Tarde', 3, '', '', '', NULL, 'Resolución', '111', 2026, 'Ministerio de Educación', '2026-03-02', '2026-12-18', '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9013, '99000013', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Programación I'), (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'SUP', '2°', 'A', 'Tarde', 4, '', '', '', NULL, 'Resolución', '112', 2026, 'Ministerio de Educación', '2026-03-02', '2026-12-18', '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9014, '99000014', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Bases de Datos'), (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'INT', '1°', 'A', 'Tarde', 4, '', '', '', NULL, 'Resolución', '113', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9015, '99000015', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Testing de Software'), (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '114', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9016, '99000016', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Riesgos Laborales'), (SELECT id FROM personal_carrera WHERE nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'INT', '1°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '115', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9017, '99000017', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Contabilidad'), (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'SUP', '2°', 'A', 'Tarde', 3, '', '', '', NULL, 'Resolución', '116', 2026, 'Ministerio de Educación', '2026-03-02', '2026-12-18', '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9018, '99000018', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Ingeniería de Software'), (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 6, '', '', '', NULL, 'Resolución', '117', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9019, '99000019', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Ergonomía'), (SELECT id FROM personal_carrera WHERE nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '118', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9020, '99000020', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Derecho Comercial'), (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'SUP', '1°', 'A', 'Tarde', 3, '', '', '', NULL, 'Resolución', '119', 2026, 'Ministerio de Educación', '2026-03-02', '2026-12-18', '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9021, '99000001', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Ingeniería de Software'), (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '120', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9022, '99000009', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Gestión de Personal'), (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '121', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0);
 
 -- ───────────── Horarios por designación ─────────────
 INSERT IGNORE INTO personal_horario (designacion_id, dia, horas_catedra, hora_inicio, hora_fin) VALUES

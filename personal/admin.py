@@ -52,10 +52,17 @@ class CarreraAdmin(admin.ModelAdmin):
 
 @admin.register(EspacioCurricular)
 class EspacioCurricularAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "carrera", "activo")
-    search_fields = ("nombre", "carrera__nombre")
-    list_filter = ("activo", "carrera")
-    autocomplete_fields = ("carrera",)
+    list_display = ("nombre", "lista_carreras", "activo")
+    search_fields = ("nombre", "carreras__nombre")
+    list_filter = ("activo", "carreras")
+    filter_horizontal = ("carreras",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("carreras")
+
+    @admin.display(description="Carreras")
+    def lista_carreras(self, obj):
+        return ", ".join(carrera.nombre for carrera in obj.carreras.all())
 
 
 @admin.register(SituacionRevista)
@@ -119,6 +126,7 @@ class DesignacionAdmin(admin.ModelAdmin):
         "persona",
         "cargo",
         "espacio_curricular",
+        "carrera",
         "situacion_revista",
         "desde",
         "hasta",
@@ -135,6 +143,7 @@ class DesignacionAdmin(admin.ModelAdmin):
         "persona",
         "cargo",
         "espacio_curricular",
+        "carrera",
         "unidad_educativa",
         "especialidad",
         "motivo",

@@ -74,6 +74,58 @@
     aviso.className = "form-text";
     designacion.insertAdjacentElement("afterend", aviso);
 
+    // Recuadro con los datos de la designación elegida.
+    var ficha = document.createElement("div");
+    ficha.className = "card card-body bg-body-tertiary mt-2 small d-none";
+    aviso.insertAdjacentElement("afterend", ficha);
+
+    function renglon(rotulo, valor) {
+        if (!valor) { return; }
+        var div = document.createElement("div");
+        var b = document.createElement("strong");
+        b.textContent = rotulo + ": ";
+        div.appendChild(b);
+        div.appendChild(document.createTextNode(valor));
+        ficha.appendChild(div);
+    }
+
+    function mostrarFicha(datos) {
+        var d = datos.designacion;
+        ficha.replaceChildren();
+        if (!d) { ficha.classList.add("d-none"); return; }
+
+        renglon("Docente", d.docente + " (DNI " + d.dni + ")");
+        renglon("Materia", d.materia ? d.materia + (d.carrera ? " — " + d.carrera : "") : "");
+        renglon("Cargo", d.cargo);
+        renglon("Situación de revista", d.situacion);
+        renglon("Curso", [d.curso, d.division].filter(Boolean).join(" "));
+        renglon("Turno", d.turno);
+        renglon("Vigencia", d.desde + " al " + d.hasta);
+        renglon("Horario semanal", d.horario.length
+            ? d.horario.map(function (h) {
+                var franja = h.inicio && h.fin ? " " + h.inicio + "–" + h.fin : "";
+                return h.dia + " " + h.horas + " hs" + franja;
+              }).join(" · ")
+            : "sin horario cargado");
+        renglon("Día elegido", datos.fecha_texto + (datos.tiene_clase
+            ? " — tiene clase (" + datos.horas_dia + " hs)"
+            : " — no tiene clase ese día"));
+
+        if (!datos.tiene_clase && datos.ultimo_con_clase) {
+            var boton = document.createElement("button");
+            boton.type = "button";
+            boton.className = "btn btn-sm btn-outline-primary mt-2 align-self-start";
+            boton.textContent = "Usar el último día con clase: " + datos.ultimo_con_clase_texto;
+            boton.addEventListener("click", function () {
+                fecha.value = datos.ultimo_con_clase;
+                consultar();
+            });
+            ficha.appendChild(boton);
+        }
+
+        ficha.classList.remove("d-none");
+    }
+
     function opcionMarca() {
         return marca ? marca.options[marca.selectedIndex] : null;
     }
@@ -91,6 +143,8 @@
     function consultar() {
         if (!designacion.value || !fecha.value) {
             aviso.textContent = "";
+            ficha.replaceChildren();
+            ficha.classList.add("d-none");
             return;
         }
 
@@ -100,8 +154,9 @@
         fetch(consulta, { headers: { "X-Requested-With": "fetch" } })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (datos) {
-                if (!datos) { aviso.textContent = ""; return; }
+                if (!datos) { aviso.textContent = ""; mostrarFicha({}); return; }
 
+                mostrarFicha(datos);
                 var partes = [];
 
                 if (datos.aviso_calendario) {

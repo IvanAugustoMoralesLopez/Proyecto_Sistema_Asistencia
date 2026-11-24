@@ -1734,9 +1734,8 @@ class RobustezTests(BaseAsistenciaTests):
                 persona = Persona.objects.create(
                     dni=f"4000{i:04d}", apellido_nombre=f"APELLIDO{i}, N", sexo="M"
                 )
-                espacio = EspacioCurricular.objects.create(
-                    nombre=f"Materia {i}", carrera=carrera
-                )
+                espacio = EspacioCurricular.objects.create(nombre=f"Materia {i}")
+                espacio.carreras.add(carrera)
                 designacion = Designacion.objects.create(
                     persona=persona,
                     cargo=self.cargo,

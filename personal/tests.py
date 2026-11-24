@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from django.core.management import call_command
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, RequestFactory, TestCase
+from django.test import Client, RequestFactory, TestCase, TransactionTestCase
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.urls import reverse
@@ -1112,36 +1112,35 @@ class RequerimientosV2PersonalTests(TestCase):
         carrera_a = Carrera.objects.create(nombre="Carrera A")
         carrera_b = Carrera.objects.create(nombre="Carrera B")
         url_catalogo = reverse("personal:catalogos") + "?seccion=espacios"
-        for carrera in (carrera_a, carrera_b):
-            respuesta = self.cliente.post(
-                url_catalogo,
-                {
-                    "accion": "guardar",
-                    "nombre": "Matemática",
-                    "carrera": carrera.pk,
-                    "activo": "on",
-                },
-            )
-            self.assertRedirects(respuesta, url_catalogo)
-        materias = {
-            espacio.carrera_id: espacio
-            for espacio in EspacioCurricular.objects.filter(
-                nombre="Matemática"
-            )
-        }
-        materia_a = materias[carrera_a.pk]
-        materia_b = materias[carrera_b.pk]
+        # La materia se carga UNA sola vez, marcada en las dos carreras.
+        respuesta = self.cliente.post(
+            url_catalogo,
+            {
+                "accion": "guardar",
+                "nombre": "Matemática",
+                "carreras": [carrera_a.pk, carrera_b.pk],
+                "activo": "on",
+            },
+        )
+        self.assertRedirects(respuesta, url_catalogo)
+        materia = EspacioCurricular.objects.get(nombre="Matemática")
+        self.assertEqual(
+            set(materia.carreras.values_list("pk", flat=True)),
+            {carrera_a.pk, carrera_b.pk},
+        )
         titular = Designacion.objects.create(
             persona=self.persona,
             cargo=self.cargo,
-            espacio_curricular=materia_a,
+            espacio_curricular=materia,
+            carrera=carrera_a,
             situacion_revista=Designacion.Situacion.TITULAR,
             desde=date(2026, 3, 1),
         )
         suplente = Designacion.objects.create(
             persona=self.persona,
             cargo=self.cargo,
-            espacio_curricular=materia_b,
+            espacio_curricular=materia,
+            carrera=carrera_b,
             situacion_revista=Designacion.Situacion.SUPLENTE,
             desde=date(2026, 3, 1),
         )
@@ -1160,7 +1159,7 @@ class RequerimientosV2PersonalTests(TestCase):
         self.assertEqual(
             {
                 (
-                    item["designacion"].espacio_curricular.carrera.nombre,
+                    item["designacion"].carrera.nombre,
                     item["situacion"],
                 )
                 for item in afectadas
@@ -1359,3 +1358,260 @@ class RequerimientosV2PersonalTests(TestCase):
         total, rechazadas = _procesar_csv(archivo)
         self.assertEqual((total, rechazadas), (2, 1))
         self.assertEqual(Designacion.objects.filter(persona=self.persona).count(), 1)
+
+
+class CodigosNumericosDeCargoTests(TestCase):
+    """Los códigos de cargo son los numéricos oficiales (150, 155, 165, 166)."""
+
+    def setUp(self):
+        self.usuario = get_user_model().objects.create_user(
+            username="cargos-numericos", password="test-password"
+        )
+        self.usuario.user_permissions.add(
+            Permission.objects.get(codename="change_cargo")
+        )
+        self.cliente = Client()
+        self.cliente.force_login(self.usuario)
+        self.url = reverse("personal:catalogos") + "?seccion=cargos"
+
+    def test_la_migracion_crea_los_cargos_oficiales(self):
+        self.assertEqual(
+            dict(
+                Cargo.objects.filter(codigo__in=["150", "155", "165", "166"])
+                .values_list("codigo", "descripcion")
+            ),
+            {
+                "150": "Secretaría",
+                "155": "Director de Estudio",
+                "165": "Bedel",
+                "166": "Horas cátedra",
+            },
+        )
+
+    def test_el_codigo_con_letras_se_rechaza(self):
+        cargo = Cargo(codigo="HC", descripcion="Horas cátedra")
+        with self.assertRaises(ValidationError):
+            cargo.full_clean()
+
+        respuesta = self.cliente.post(
+            self.url,
+            {"accion": "guardar", "codigo": "HC", "descripcion": "Prueba"},
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "debe ser numérico")
+        self.assertFalse(Cargo.objects.filter(codigo="HC").exists())
+
+    def test_el_codigo_numerico_se_guarda(self):
+        respuesta = self.cliente.post(
+            self.url,
+            {"accion": "guardar", "codigo": "170", "descripcion": "Preceptor",
+             "activo": "on"},
+        )
+        self.assertRedirects(respuesta, self.url)
+        self.assertTrue(Cargo.objects.filter(codigo="170").exists())
+
+    def test_al_editar_no_se_puede_cambiar_el_codigo(self):
+        respuesta = self.cliente.post(
+            self.url,
+            {"accion": "guardar", "objeto_id": "166", "codigo": "999",
+             "descripcion": "Horas cátedra (editado)", "es_docente": "on",
+             "activo": "on"},
+        )
+        self.assertRedirects(respuesta, self.url)
+        self.assertFalse(Cargo.objects.filter(codigo="999").exists())
+        self.assertEqual(
+            Cargo.objects.get(codigo="166").descripcion, "Horas cátedra (editado)"
+        )
+
+
+class MateriaEnVariasCarrerasTests(TestCase):
+    """Una materia se carga una vez y puede estar en varias carreras."""
+
+    def setUp(self):
+        self.software = Carrera.objects.create(nombre="Software")
+        self.gestion = Carrera.objects.create(nombre="Gestión")
+        self.higiene = Carrera.objects.create(nombre="Higiene")
+        self.ingles = EspacioCurricular.objects.create(nombre="Inglés")
+        self.ingles.carreras.add(self.software, self.gestion)
+        self.persona = Persona.objects.create(dni="30999111", apellido_nombre="PÉREZ, Ana")
+        self.cargo = Cargo.objects.get(codigo="166")
+
+    def designacion(self, **datos):
+        datos.setdefault("espacio_curricular", self.ingles)
+        return Designacion(
+            persona=self.persona,
+            cargo=self.cargo,
+            situacion_revista=Designacion.Situacion.TITULAR,
+            desde=date(2026, 3, 1),
+            **datos,
+        )
+
+    def test_misma_materia_en_dos_carreras_con_dos_designaciones(self):
+        for carrera in (self.software, self.gestion):
+            designacion = self.designacion(carrera=carrera)
+            designacion.full_clean()
+            designacion.save()
+        self.assertEqual(EspacioCurricular.objects.filter(nombre="Inglés").count(), 1)
+        self.assertEqual(
+            set(self.ingles.designaciones.values_list("carrera__nombre", flat=True)),
+            {"Software", "Gestión"},
+        )
+
+    def test_materia_con_varias_carreras_exige_indicar_la_carrera(self):
+        with self.assertRaises(ValidationError) as error:
+            self.designacion().full_clean()
+        self.assertIn("carrera", error.exception.message_dict)
+
+    def test_no_acepta_una_carrera_que_no_tiene_la_materia(self):
+        with self.assertRaises(ValidationError) as error:
+            self.designacion(carrera=self.higiene).full_clean()
+        self.assertIn("carrera", error.exception.message_dict)
+
+    def test_materia_de_una_sola_carrera_la_completa_sola(self):
+        ergonomia = EspacioCurricular.objects.create(nombre="Ergonomía")
+        ergonomia.carreras.add(self.higiene)
+        designacion = self.designacion(espacio_curricular=ergonomia)
+        designacion.save()
+        self.assertEqual(designacion.carrera, self.higiene)
+
+    def test_cargar_una_materia_existente_le_suma_la_carrera(self):
+        from .forms import EspacioCurricularForm
+
+        form = EspacioCurricularForm(
+            data={"nombre": "  inglés ", "carreras": [self.higiene.pk], "activo": "on"}
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+
+        self.assertEqual(EspacioCurricular.objects.filter(nombre__iexact="inglés").count(), 1)
+        self.assertEqual(
+            set(self.ingles.carreras.values_list("nombre", flat=True)),
+            {"Software", "Gestión", "Higiene"},
+        )
+        self.assertIn("Higiene", form.aviso)
+
+    def test_sumar_carreras_no_desactiva_la_materia_existente(self):
+        from .forms import EspacioCurricularForm
+
+        form = EspacioCurricularForm(data={"nombre": "Inglés", "carreras": [self.higiene.pk]})
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        self.ingles.refresh_from_db()
+        self.assertTrue(self.ingles.activo)
+
+    def test_no_se_quita_una_carrera_con_designaciones_activas(self):
+        from .forms import EspacioCurricularForm
+
+        designacion = self.designacion(carrera=self.gestion)
+        designacion.save()
+        form = EspacioCurricularForm(
+            data={"nombre": "Inglés", "carreras": [self.software.pk], "activo": "on"},
+            instance=self.ingles,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("Gestión", str(form.errors["carreras"]))
+
+        # Dada de baja la designación, la carrera ya se puede quitar.
+        designacion.activo = False
+        designacion.save()
+        form = EspacioCurricularForm(
+            data={"nombre": "Inglés", "carreras": [self.software.pk], "activo": "on"},
+            instance=self.ingles,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        self.assertEqual(list(self.ingles.carreras.all()), [self.software])
+
+    def test_renombrar_con_el_nombre_de_otra_materia_se_rechaza(self):
+        from .forms import EspacioCurricularForm
+
+        otra = EspacioCurricular.objects.create(nombre="Francés")
+        otra.carreras.add(self.higiene)
+        form = EspacioCurricularForm(
+            data={"nombre": "Inglés", "carreras": [self.higiene.pk], "activo": "on"},
+            instance=otra,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("nombre", form.errors)
+
+    def test_csv_pide_la_carrera_si_la_materia_esta_en_varias(self):
+        def csv(contenido):
+            return SimpleUploadedFile(
+                "personal.csv", contenido.encode("utf-8"), content_type="text/csv"
+            )
+
+        total, rechazadas = _procesar_csv(csv(
+            "dni,cargo_codigo,espacio_curricular,desde\n"
+            "30999111,166,Inglés,2026-03-01\n"
+        ))
+        self.assertEqual((total, rechazadas), (1, 1))
+        self.assertIn("más de una carrera", ImportacionPersonalError.objects.get().motivo_error)
+
+        total, rechazadas = _procesar_csv(csv(
+            "dni,cargo_codigo,espacio_curricular,carrera,desde\n"
+            "30999111,166,Inglés,Gestión,2026-03-01\n"
+        ))
+        self.assertEqual((total, rechazadas), (1, 0))
+        self.assertEqual(
+            Designacion.objects.get(persona=self.persona).carrera, self.gestion
+        )
+
+
+class MigracionMateriasRepetidasTests(TransactionTestCase):
+    """La migración 0007 une las materias repetidas en distintas carreras."""
+
+    # Restaura los datos que crean las migraciones (cargos, marcas, roles)
+    # para los tests que corran después de este.
+    serialized_rollback = True
+    antes = [("personal", "0006_codigos_numericos_de_cargo")]
+    despues = [("personal", "0007_materia_en_varias_carreras")]
+
+    def tearDown(self):
+        # Deja la base de prueba en la última migración para los demás tests.
+        call_command("migrate", verbosity=0)
+        super().tearDown()
+
+    def test_une_materias_repetidas_y_conserva_la_carrera_de_cada_designacion(self):
+        from django.db import connection
+        from django.db.migrations.executor import MigrationExecutor
+
+        ejecutor = MigrationExecutor(connection)
+        ejecutor.migrate(self.antes)
+        viejas = ejecutor.loader.project_state(self.antes).apps
+        CarreraV = viejas.get_model("personal", "Carrera")
+        EspacioV = viejas.get_model("personal", "EspacioCurricular")
+        PersonaV = viejas.get_model("personal", "Persona")
+        DesignacionV = viejas.get_model("personal", "Designacion")
+
+        software = CarreraV.objects.create(nombre="Software")
+        gestion = CarreraV.objects.create(nombre="Gestión")
+        ingles_a = EspacioV.objects.create(nombre="Inglés", carrera=software)
+        ingles_b = EspacioV.objects.create(nombre="INGLES ", carrera=gestion)
+        persona = PersonaV.objects.create(dni="30999222", apellido_nombre="RUIZ, Juan")
+        for espacio in (ingles_a, ingles_b):
+            DesignacionV.objects.create(
+                persona=persona, cargo_id="166", espacio_curricular=espacio,
+                desde=date(2026, 3, 1),
+            )
+
+        ejecutor = MigrationExecutor(connection)
+        ejecutor.loader.build_graph()
+        ejecutor.migrate(self.despues)
+        nuevas = ejecutor.loader.project_state(self.despues).apps
+        EspacioN = nuevas.get_model("personal", "EspacioCurricular")
+        DesignacionN = nuevas.get_model("personal", "Designacion")
+
+        materias = list(EspacioN.objects.all())
+        self.assertEqual(len(materias), 1)
+        self.assertEqual(
+            set(materias[0].carreras.values_list("nombre", flat=True)),
+            {"Software", "Gestión"},
+        )
+        self.assertEqual(
+            sorted(
+                DesignacionN.objects.values_list(
+                    "espacio_curricular_id", "carrera__nombre"
+                )
+            ),
+            sorted([(materias[0].pk, "Software"), (materias[0].pk, "Gestión")]),
+        )

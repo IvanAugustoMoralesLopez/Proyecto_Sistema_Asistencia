@@ -59,7 +59,7 @@
                     <tbody>
                         {% for registro in registros %}
                         <tr>
-                            <td>{{ registro }}{% if seccion == 'instrumentos' and not registro.activo %} <span class="badge text-bg-secondary">inactivo</span>{% endif %}</td>
+                            <td>{{ registro }}{% if seccion == 'instrumentos' and not registro.activo %} <span class="badge text-bg-secondary">inactivo</span>{% endif %}{% if seccion == 'espacios' %}{% if not registro.activo %} <span class="badge text-bg-secondary">inactiva</span>{% endif %}<div class="small text-secondary">{% for carrera in registro.carreras.all %}{{ carrera.nombre }}{% if not forloop.last %} · {% endif %}{% empty %}Sin carrera{% endfor %}</div>{% endif %}</td>
                             <td class="text-end text-nowrap">
                                 <a class="btn btn-sm btn-outline-primary" href="?seccion={{ seccion }}&editar={{ registro.pk }}">Editar</a>
                                 <form method="post" class="d-inline">

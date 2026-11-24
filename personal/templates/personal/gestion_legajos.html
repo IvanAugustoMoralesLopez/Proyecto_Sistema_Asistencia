@@ -191,6 +191,7 @@
             <div class="row g-3 mb-3">
                 <div class="col-md-3">{{ designacion_form.cargo.label_tag }}{{ designacion_form.cargo }}</div>
                 <div class="col-md-3">{{ designacion_form.espacio_curricular.label_tag }}{{ designacion_form.espacio_curricular }}</div>
+                <div class="col-md-3">{{ designacion_form.carrera.label_tag }}{{ designacion_form.carrera }}</div>
                 <div class="col-md-3">{{ designacion_form.unidad_educativa.label_tag }}{{ designacion_form.unidad_educativa }}</div>
                 <div class="col-md-3">{{ designacion_form.situacion_revista.label_tag }}{{ designacion_form.situacion_revista }}</div>
             </div>
@@ -248,6 +249,8 @@
             {% endif %}
             </fieldset>
         </form>
+        {{ designacion_form.carreras_por_materia|json_script:"carreras-por-materia" }}
+        {% include "personal/_carrera_por_materia.html" %}
     </div>
 </div>
 
@@ -278,7 +281,7 @@
                         <td>
                             {% if designacion.espacio_curricular %}
                                 {{ designacion.espacio_curricular.nombre }}<br>
-                                <span class="small text-secondary">{{ designacion.espacio_curricular.carrera.nombre }}</span>
+                                <span class="small text-secondary">{{ designacion.carrera.nombre|default:"" }}</span>
                             {% else %}—{% endif %}
                         </td>
                         <td>{{ designacion.get_situacion_revista_display|default:"—" }}</td>
@@ -349,7 +352,10 @@
                         <td>{{ resultado.persona.dni }}</td>
                         <td>{{ resultado.persona.apellido_nombre }}</td>
                         <td>{{ resultado.cargo.descripcion }}</td>
-                        <td>{{ resultado.espacio_curricular|default:"—" }}</td>
+                        <td>
+                            {{ resultado.espacio_curricular|default:"—" }}
+                            {% if resultado.carrera %}<div class="small text-secondary">{{ resultado.carrera.nombre }}</div>{% endif %}
+                        </td>
                         <td>{{ resultado.get_situacion_revista_display|default:"—" }}</td>
                         <td>{{ resultado.desde_texto }} – {{ resultado.hasta_texto }}</td>
                         <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'personal:gestion_legajos' %}?dni={{ resultado.persona.dni|urlencode }}">Ver legajo</a></td>

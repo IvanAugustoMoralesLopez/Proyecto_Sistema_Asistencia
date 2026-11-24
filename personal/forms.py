@@ -112,11 +112,25 @@ class CargoForm(forms.ModelForm):
         model = Cargo
         fields = ["codigo", "descripcion", "es_docente", "activo"]
         widgets = {
-            "codigo": forms.TextInput(attrs={"class": "form-control"}),
+            "codigo": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "inputmode": "numeric",
+                    "pattern": r"\d+",
+                    "placeholder": "Ej.: 166",
+                }
+            ),
             "descripcion": forms.TextInput(attrs={"class": "form-control"}),
             "es_docente": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # El código es la clave del cargo: cambiarlo al editar crearía un
+        # cargo nuevo en vez de renombrar el existente, así que queda fijo.
+        if not self.instance._state.adding:
+            self.fields["codigo"].disabled = True
 
 
 class CarreraForm(forms.ModelForm):
@@ -149,14 +163,83 @@ class CarreraForm(forms.ModelForm):
 
 
 class EspacioCurricularForm(forms.ModelForm):
+    """Una materia se carga una sola vez y se marca en qué carreras se dicta."""
+
     class Meta:
         model = EspacioCurricular
-        fields = ["nombre", "carrera", "activo"]
+        fields = ["nombre", "carreras", "activo"]
         widgets = {
             "nombre": forms.TextInput(attrs={"class": "form-control"}),
-            "carrera": forms.Select(attrs={"class": "form-select"}),
+            "carreras": forms.CheckboxSelectMultiple(),
             "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
+        labels = {"carreras": "Carreras en las que se dicta"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["carreras"].queryset = Carrera.objects.order_by("nombre")
+
+    def clean_nombre(self):
+        nombre = " ".join((self.cleaned_data.get("nombre") or "").split())
+        existentes = EspacioCurricular.objects.filter(nombre__iexact=nombre)
+
+        if self.instance.pk:
+            # Renombrar no puede pisar otra materia que ya existe.
+            if existentes.exclude(pk=self.instance.pk).exists():
+                raise forms.ValidationError("Ya hay otra materia con ese nombre.")
+            return nombre
+
+        existente = existentes.first()
+        if existente is not None:
+            # Alta de una materia que ya existe: no se repite; se le suman
+            # las carreras elegidas (una materia puede estar en varias).
+            self.instance = existente
+            self.fusion = True
+            return existente.nombre
+        return nombre
+
+    def clean(self):
+        datos = super().clean()
+        # Al editar, no se puede quitar una carrera que usan designaciones
+        # activas: quedarían con una carrera que la materia ya no tiene.
+        if self.instance.pk and not getattr(self, "fusion", False) and "carreras" in datos:
+            quitadas = set(self.instance.carreras.all()) - set(datos["carreras"])
+            en_uso = sorted({
+                designacion.carrera.nombre
+                for designacion in Designacion.objects.filter(
+                    espacio_curricular=self.instance, carrera__in=quitadas, activo=True
+                ).select_related("carrera")
+            })
+            if en_uso:
+                self.add_error(
+                    "carreras",
+                    f"No se puede quitar {', '.join(en_uso)}: hay designaciones activas de "
+                    "esta materia en esa carrera. Primero cambialas o dalas de baja.",
+                )
+        return datos
+
+    @transaction.atomic
+    def save(self, commit=True):
+        fusion = getattr(self, "fusion", False)
+        if fusion:
+            # Se lee de nuevo y bloqueado: si alguien la editó mientras tanto,
+            # se suma sobre lo último guardado.
+            actual = EspacioCurricular.objects.select_for_update().get(pk=self.instance.pk)
+            previas = list(actual.carreras.all())
+            # Sumar carreras nunca desactiva una materia que ya existía.
+            self.instance.activo = actual.activo or self.cleaned_data.get("activo", True)
+
+        materia = super().save(commit=commit)
+
+        if fusion and commit:
+            materia.carreras.add(*previas)
+            nuevas = [c.nombre for c in self.cleaned_data["carreras"] if c not in previas]
+            self.aviso = (
+                f"«{materia.nombre}» ya existía: se le sumó {', '.join(nuevas)}."
+                if nuevas
+                else f"«{materia.nombre}» ya estaba en esas carreras."
+            )
+        return materia
 
 
 class BuscarLegajoForm(forms.Form):
@@ -179,9 +262,7 @@ class BuscarLegajoForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select"}),
     )
     espacio_curricular = forms.ModelChoiceField(
-        queryset=EspacioCurricular.objects.filter(activo=True)
-        .select_related("carrera")
-        .order_by("carrera__nombre", "nombre"),
+        queryset=EspacioCurricular.objects.filter(activo=True).order_by("nombre"),
         required=False,
         empty_label="Todos los espacios",
         label="Espacio curricular",
@@ -324,6 +405,7 @@ class DesignacionForm(forms.ModelForm):
         fields = [
             "cargo",
             "espacio_curricular",
+            "carrera",
             "unidad_educativa",
             "situacion_revista",
             "anio_curso",
@@ -350,6 +432,7 @@ class DesignacionForm(forms.ModelForm):
         widgets = {
             "cargo": forms.Select(attrs={"class": "form-select"}),
             "espacio_curricular": forms.Select(attrs={"class": "form-select"}),
+            "carrera": forms.Select(attrs={"class": "form-select"}),
             "unidad_educativa": forms.Select(attrs={"class": "form-select"}),
             "situacion_revista": forms.Select(attrs={"class": "form-select"}),
             "anio_curso": forms.TextInput(attrs={"class": "form-control"}),
@@ -392,10 +475,19 @@ class DesignacionForm(forms.ModelForm):
             self.initial["desde"] = self.instance.desde_texto
             self.initial["hasta"] = self.instance.hasta_texto
         self.fields["cargo"].queryset = Cargo.objects.order_by("descripcion")
-        self.fields["espacio_curricular"].queryset = (
-            EspacioCurricular.objects.select_related("carrera")
-            .order_by("carrera__nombre", "nombre")
+        espacios = EspacioCurricular.objects.prefetch_related("carreras").order_by(
+            "nombre"
         )
+        self.fields["espacio_curricular"].queryset = espacios
+        self.fields["carrera"].queryset = Carrera.objects.order_by("nombre")
+        self.fields["carrera"].help_text = (
+            "Si la materia está en una sola carrera se completa sola."
+        )
+        # Para la pantalla: qué carreras ofrece cada materia.
+        self.carreras_por_materia = {
+            str(espacio.pk): [carrera.pk for carrera in espacio.carreras.all()]
+            for espacio in espacios
+        }
         self.fields["unidad_educativa"].queryset = UnidadEducativa.objects.order_by(
             "descripcion", "numero"
         )

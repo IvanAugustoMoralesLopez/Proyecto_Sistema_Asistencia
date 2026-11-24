@@ -60,7 +60,10 @@
                     <td class="centro">{{ designacion.norma_numero|default:"—" }}</td>
                     <td class="centro">{{ designacion.norma_anio|default:"—" }}</td>
                     <td>{{ designacion.organismo_emisor|default:"—" }}</td>
-                    <td>{{ designacion.espacio_curricular|default:"—" }}</td>
+                    <td>
+                        {{ designacion.espacio_curricular|default:"—" }}
+                        {% if designacion.carrera %}<div class="small text-secondary">{{ designacion.carrera.nombre }}</div>{% endif %}
+                    </td>
                     <td>
                         {{ designacion.desde_texto }}
                         –

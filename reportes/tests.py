@@ -281,7 +281,7 @@ from personal.models import Cargo, Carrera, Designacion, EspacioCurricular, Pers
 class ConsultasTests(TestCase):
     def setUp(self):
         self.url = reverse("reportes:consultas")
-        cargo = Cargo.objects.create(codigo="166", descripcion="Hs cátedra")
+        cargo = Cargo.objects.get(codigo="166")
         self.sistemas = Carrera.objects.create(nombre="Desarrollo de Software")
         self.redes = Carrera.objects.create(nombre="Redes")
         art_salud = LicenciaArticulo.objects.create(
@@ -295,7 +295,8 @@ class ConsultasTests(TestCase):
 
         def designar(dni, nombre, carrera):
             persona = Persona.objects.create(dni=dni, apellido_nombre=nombre)
-            espacio = EspacioCurricular.objects.create(nombre=f"Mat {dni}", carrera=carrera)
+            espacio = EspacioCurricular.objects.create(nombre=f"Mat {dni}")
+            espacio.carreras.add(carrera)
             return Designacion.objects.create(
                 persona=persona, cargo=cargo, espacio_curricular=espacio, desde=date(2026, 3, 1)
             )
@@ -562,9 +563,10 @@ from .selectors import calcular_alertas
 
 class AlertasTests(TestCase):
     def setUp(self):
-        cargo = Cargo.objects.create(codigo="166", descripcion="Hs cátedra")
+        cargo = Cargo.objects.get(codigo="166")
         carrera = Carrera.objects.create(nombre="Software")
-        espacio = EspacioCurricular.objects.create(nombre="Prog", carrera=carrera)
+        espacio = EspacioCurricular.objects.create(nombre="Prog")
+        espacio.carreras.add(carrera)
         persona = Persona.objects.create(dni="33333333", apellido_nombre="CABRAL, ANA")
         self.designacion = Designacion.objects.create(
             persona=persona, cargo=cargo, espacio_curricular=espacio, desde=date(2026, 3, 1)
@@ -642,7 +644,7 @@ class AlertasDesignacionesTests(TestCase):
     HOY = date(2026, 11, 6)
 
     def setUp(self):
-        self.cargo = Cargo.objects.create(codigo="166", descripcion="Hs cátedra")
+        self.cargo = Cargo.objects.get(codigo="166")
         self.persona = Persona.objects.create(dni="44444444", apellido_nombre="LOPEZ, LEO")
         self.url = reverse("reportes:alertas_designaciones")
         self.client.force_login(crear_usuario("bedel", "consultar_licencias"))
@@ -700,7 +702,7 @@ class AlertasLicenciasVencimientoTests(TestCase):
     HOY = date(2026, 11, 6)
 
     def setUp(self):
-        cargo = Cargo.objects.create(codigo="166", descripcion="Hs cátedra")
+        cargo = Cargo.objects.get(codigo="166")
         persona = Persona.objects.create(dni="55555555", apellido_nombre="PEREZ, PAULA")
         self.designacion = Designacion.objects.create(
             persona=persona, cargo=cargo, desde=date(2026, 3, 1)

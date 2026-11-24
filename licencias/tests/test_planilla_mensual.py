@@ -43,7 +43,8 @@ class BasePlanillaMensual(TestCase):
         cls.abel = Persona.objects.create(dni="28999888", apellido_nombre="Abel, Luis")
 
         def designacion(persona, materia, horarios, situacion="TIT"):
-            espacio = EspacioCurricular.objects.create(nombre=materia, carrera=carrera)
+            espacio = EspacioCurricular.objects.create(nombre=materia)
+            espacio.carreras.add(carrera)
             nueva = Designacion.objects.create(
                 persona=persona, cargo=cls.cargo, espacio_curricular=espacio,
                 situacion_revista=situacion, desde=date(2026, 3, 1),

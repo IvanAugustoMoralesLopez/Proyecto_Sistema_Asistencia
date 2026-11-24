@@ -354,23 +354,34 @@ def _importar_fila_personal(fila, usuario=None):
     espacio_nombre = (fila.get("espacio_curricular") or "").strip()
     carrera_nombre = (fila.get("carrera") or "").strip()
     espacio = None
+    carrera = None
+    if carrera_nombre:
+        carrera = Carrera.objects.filter(nombre__iexact=carrera_nombre).first()
+        if carrera is None:
+            raise ValidationError(f"No existe la carrera '{carrera_nombre}'.")
     if espacio_nombre:
-        espacios = EspacioCurricular.objects.filter(
+        espacio = EspacioCurricular.objects.filter(
             nombre__iexact=espacio_nombre,
             activo=True,
-        )
-        if carrera_nombre:
-            espacios = espacios.filter(carrera__nombre__iexact=carrera_nombre)
-        elif espacios.count() > 1:
-            raise ValidationError(
-                f"El espacio curricular '{espacio_nombre}' existe en más de "
-                "una carrera: indique la columna 'carrera'."
-            )
-        espacio = espacios.first()
+        ).first()
         if espacio is None:
             raise ValidationError(
-                f"No existe el espacio curricular '{espacio_nombre}'"
-                + (f" en la carrera '{carrera_nombre}'." if carrera_nombre else ".")
+                f"No existe el espacio curricular '{espacio_nombre}'."
+            )
+        # La misma materia puede dictarse en varias carreras: la columna
+        # 'carrera' dice en cuál es esta designación.
+        carreras_materia = list(espacio.carreras.all())
+        if carrera is None:
+            if len(carreras_materia) > 1:
+                raise ValidationError(
+                    f"El espacio curricular '{espacio_nombre}' se dicta en más "
+                    "de una carrera: indique la columna 'carrera'."
+                )
+            carrera = carreras_materia[0] if carreras_materia else None
+        elif carreras_materia and carrera not in carreras_materia:
+            raise ValidationError(
+                f"El espacio curricular '{espacio_nombre}' no se dicta en la "
+                f"carrera '{carrera_nombre}'."
             )
 
     unidad_educativa = None
@@ -447,6 +458,7 @@ def _importar_fila_personal(fila, usuario=None):
         persona=persona,
         cargo=cargo,
         espacio_curricular=espacio,
+        carrera=carrera,
         unidad_educativa=unidad_educativa,
         especialidad=especialidad,
         reemplaza=reemplaza,
@@ -493,6 +505,7 @@ def _importar_fila_personal(fila, usuario=None):
         persona=persona,
         cargo=cargo,
         espacio_curricular=espacio,
+        carrera=carrera,
         situacion_revista=designacion.situacion_revista,
         desde=designacion.desde,
         hasta=designacion.hasta,
@@ -862,7 +875,7 @@ def _contexto_pantalla(
         "persona",
         "cargo",
         "espacio_curricular",
-        "espacio_curricular__carrera",
+        "carrera",
     ).order_by("persona__apellido_nombre", "desde")
     if not persona:
         resultados = resultados.filter(activo=True)
@@ -903,7 +916,7 @@ def _contexto_pantalla(
         designaciones = persona.designaciones.select_related(
             "cargo",
             "espacio_curricular",
-            "espacio_curricular__carrera",
+            "carrera",
         ).prefetch_related("horarios", "historial")
     else:
         designaciones = Designacion.objects.none()
@@ -928,9 +941,7 @@ def _contexto_pantalla(
             request.GET.get("pagina")
         ),
         "cargos": Cargo.objects.filter(activo=True).order_by("descripcion"),
-        "espacios": EspacioCurricular.objects.filter(activo=True)
-        .select_related("carrera")
-        .order_by("carrera__nombre", "nombre"),
+        "espacios": EspacioCurricular.objects.filter(activo=True).order_by("nombre"),
         "errores_importacion": ImportacionPersonalError.objects.all()[:10],
         "puede_guardar_persona": request.user.has_perm(
             "personal.change_persona" if persona else "personal.add_persona"
@@ -961,6 +972,7 @@ def registro_designaciones(request):
             "persona",
             "cargo",
             "espacio_curricular",
+            "carrera",
         )
         .prefetch_related("horarios")
         .order_by("persona__apellido_nombre", "desde", "pk")
@@ -972,7 +984,7 @@ def registro_designaciones(request):
             | Q(cargo__codigo__icontains=consulta)
             | Q(cargo__descripcion__icontains=consulta)
             | Q(espacio_curricular__nombre__icontains=consulta)
-            | Q(espacio_curricular__carrera__nombre__icontains=consulta)
+            | Q(carrera__nombre__icontains=consulta)
         )
     if situacion:
         designaciones = designaciones.filter(situacion_revista=situacion)
@@ -1081,7 +1093,12 @@ def catalogos_personal(request):
                         "No se pudo guardar el registro por datos relacionados.",
                     )
                 else:
-                    messages.success(request, f"{datos['titulo']} guardado correctamente.")
+                    # Materia que ya existía: se informa a qué carreras se sumó.
+                    aviso = getattr(form, "aviso", None)
+                    if aviso:
+                        messages.success(request, aviso)
+                    else:
+                        messages.success(request, f"{datos['titulo']} guardado correctamente.")
                     return redirect(f"{reverse('personal:catalogos')}?seccion={seccion}")
         elif accion == "eliminar":
             objeto_id_enviado = (request.POST.get("objeto_id") or "").strip()
@@ -1127,7 +1144,11 @@ def catalogos_personal(request):
             "titulo": datos["titulo"],
             "form": form,
             "objeto": objeto,
-            "registros": datos["modelo"].objects.all().order_by("pk"),
+            "registros": (
+                datos["modelo"].objects.prefetch_related("carreras").order_by("nombre")
+                if seccion == "espacios"
+                else datos["modelo"].objects.all().order_by("pk")
+            ),
         },
     )
 
@@ -1232,7 +1253,7 @@ def autocompletar_designaciones(request):
         "persona",
         "cargo",
         "espacio_curricular",
-        "espacio_curricular__carrera",
+        "carrera",
     )
     if termino:
         designaciones = designaciones.filter(

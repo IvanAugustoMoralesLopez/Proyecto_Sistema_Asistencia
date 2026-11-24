@@ -118,7 +118,8 @@ def buscar_licencias(filtros=None):
     licencias = LicenciaOtorgada.objects.select_related(
         "designacion__persona",
         "designacion__cargo",
-        "designacion__espacio_curricular__carrera",
+        "designacion__espacio_curricular",
+        "designacion__carrera",
         "articulo",
     ).order_by("-desde", "designacion__persona__apellido_nombre", "pk")
 
@@ -131,7 +132,7 @@ def buscar_licencias(filtros=None):
         )
     if filtros.get("carrera"):
         licencias = licencias.filter(
-            designacion__espacio_curricular__carrera=filtros["carrera"]
+            designacion__carrera=filtros["carrera"]
         )
     if filtros.get("espacio_curricular"):
         licencias = licencias.filter(
@@ -224,7 +225,7 @@ def _fila_de_licencia(lic):
         dni=designacion.persona.dni,
         docente=designacion.persona.apellido_nombre,
         cargo=str(designacion.cargo),
-        carrera=str(espacio.carrera) if espacio else "",
+        carrera=str(designacion.carrera) if designacion.carrera_id else "",
         materia=espacio.nombre if espacio else "",
         codigo=lic.articulo.cod_licencia,
         articulo=lic.articulo.articulo,
@@ -247,7 +248,7 @@ def _fila_de_ausencia(registro):
         dni=designacion.persona.dni,
         docente=designacion.persona.apellido_nombre,
         cargo=str(designacion.cargo),
-        carrera=str(espacio.carrera) if espacio else "",
+        carrera=str(designacion.carrera) if designacion.carrera_id else "",
         materia=espacio.nombre if espacio else "",
         codigo="",
         articulo="",
@@ -273,7 +274,8 @@ def buscar_ausencias(filtros=None):
     ).select_related(
         "designacion__persona",
         "designacion__cargo",
-        "designacion__espacio_curricular__carrera",
+        "designacion__espacio_curricular",
+        "designacion__carrera",
         "marca",
     ).order_by("-fecha", "designacion__persona__apellido_nombre", "pk")
 
@@ -286,7 +288,7 @@ def buscar_ausencias(filtros=None):
         )
     if filtros.get("carrera"):
         registros = registros.filter(
-            designacion__espacio_curricular__carrera=filtros["carrera"]
+            designacion__carrera=filtros["carrera"]
         )
     if filtros.get("espacio_curricular"):
         registros = registros.filter(
@@ -583,7 +585,7 @@ def calcular_designaciones_por_vencer(dias=DIAS_ANTICIPACION_POR_DEFECTO,
         activo=True,
         plazo_indeterminado=False,
         hasta__isnull=False,
-    ).select_related("persona", "cargo", "espacio_curricular__carrera")
+    ).select_related("persona", "cargo", "espacio_curricular", "carrera")
 
     if incluir_vencidas:
         designaciones = designaciones.filter(hasta__lte=limite)
@@ -600,7 +602,7 @@ def calcular_designaciones_por_vencer(dias=DIAS_ANTICIPACION_POR_DEFECTO,
             "docente": d.persona.apellido_nombre,
             "cargo": str(d.cargo),
             "materia": espacio.nombre if espacio else "",
-            "carrera": str(espacio.carrera) if espacio and espacio.carrera_id else "",
+            "carrera": str(d.carrera) if d.carrera_id else "",
             "situacion": d.get_situacion_revista_display() if d.situacion_revista else "",
             "es_suplencia": d.es_suplencia,
             "norma": _texto_norma(d),

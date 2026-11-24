@@ -51,6 +51,7 @@
             <div class="row g-3 mb-4">
                 <div class="col-md-3">{{ form.cargo.label_tag }}{{ form.cargo }}</div>
                 <div class="col-md-3">{{ form.espacio_curricular.label_tag }}{{ form.espacio_curricular }}</div>
+                <div class="col-md-3">{{ form.carrera.label_tag }}{{ form.carrera }}</div>
                 <div class="col-md-3">{{ form.unidad_educativa.label_tag }}{{ form.unidad_educativa }}</div>
                 <div class="col-md-3">{{ form.situacion_revista.label_tag }}{{ form.situacion_revista }}</div>
                 <div class="col-md-3">{{ form.anio_curso.label_tag }}{{ form.anio_curso }}</div>
@@ -138,6 +139,8 @@
         </form>
     </div>
 </div>
+{{ form.carreras_por_materia|json_script:"carreras-por-materia" }}
+{% include "personal/_carrera_por_materia.html" %}
 <script>
 (() => {
     const pasos = [...document.querySelectorAll('[data-wizard-step]')];
@@ -180,8 +183,13 @@
         } else if (paso === 2) {
             const cargo = document.querySelector('[name="cargo"]');
             const situacion = document.querySelector('[name="situacion_revista"]');
+            const materia = document.querySelector('[name="espacio_curricular"]');
+            const carrera = document.querySelector('[name="carrera"]');
             if (!cargo.value || !situacion.value) {
                 informar('Complete el cargo y la situación de revista antes de avanzar.');
+                valido = false;
+            } else if (materia.value && !carrera.value) {
+                informar('Indique en qué carrera dicta la materia elegida.');
                 valido = false;
             }
         } else if (paso === 5) {

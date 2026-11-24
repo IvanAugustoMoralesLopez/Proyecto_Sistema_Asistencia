@@ -81,7 +81,18 @@ class Persona(models.Model):
 
 
 class Cargo(models.Model):
-    codigo = models.CharField(max_length=10, primary_key=True)
+    # Código oficial del cargo: solo números (150 Secretaría, 155 Director de
+    # Estudio, 165 Bedel, 166 Horas cátedra).
+    codigo = models.CharField(
+        max_length=10,
+        primary_key=True,
+        validators=[
+            RegexValidator(
+                r"^\d+$",
+                "El código del cargo debe ser numérico (por ejemplo 166).",
+            )
+        ],
+    )
     descripcion = models.CharField(max_length=120)
     es_docente = models.BooleanField(default=True)
     activo = models.BooleanField(default=True)
@@ -112,26 +123,25 @@ class Carrera(models.Model):
 
 
 class EspacioCurricular(models.Model):
-    nombre = models.CharField(max_length=120)
-    carrera = models.ForeignKey(
+    """
+    Materia. Se carga una sola vez y puede pertenecer a varias carreras; la
+    carrera concreta de cada docente la indica su designación.
+    """
+
+    nombre = models.CharField(max_length=120, unique=True)
+    carreras = models.ManyToManyField(
         Carrera,
-        on_delete=models.PROTECT,
         related_name="espacios_curriculares",
+        db_table="personal_espacio_curricular_carrera",
     )
     activo = models.BooleanField(default=True)
 
     class Meta:
         db_table = "personal_espacio_curricular"
-        ordering = ["carrera__nombre", "nombre"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["nombre", "carrera"],
-                name="uq_espacio_carrera_mnombre",
-            ),
-        ]
+        ordering = ["nombre"]
 
     def __str__(self):
-        return f"{self.nombre} ({self.carrera.nombre})"
+        return self.nombre
 
 
 class SituacionRevista(models.Model):
@@ -263,6 +273,15 @@ class Designacion(models.Model):
         blank=True,
         null=True,
     )
+    # Carrera en la que el docente dicta la materia: una de las carreras de
+    # `espacio_curricular` (la misma materia puede estar en varias).
+    carrera = models.ForeignKey(
+        Carrera,
+        on_delete=models.PROTECT,
+        related_name="designaciones",
+        blank=True,
+        null=True,
+    )
     unidad_educativa = models.ForeignKey(
         UnidadEducativa,
         on_delete=models.PROTECT,
@@ -368,8 +387,32 @@ class Designacion(models.Model):
             and (self.hasta is None or fecha <= self.hasta)
         )
 
+    def _completar_carrera(self):
+        """Si la materia está en una sola carrera, la designación toma esa."""
+        if self.espacio_curricular_id and not self.carrera_id:
+            carreras = list(
+                self.espacio_curricular.carreras.values_list("pk", flat=True)[:2]
+            )
+            if len(carreras) == 1:
+                self.carrera_id = carreras[0]
+
     def clean(self):
         errores = {}
+        self._completar_carrera()
+        if self.espacio_curricular_id:
+            carreras_materia = set(
+                self.espacio_curricular.carreras.values_list("pk", flat=True)
+            )
+            if carreras_materia and not self.carrera_id:
+                errores["carrera"] = (
+                    "La materia se dicta en varias carreras: indique en cuál."
+                )
+            elif self.carrera_id and carreras_materia and (
+                self.carrera_id not in carreras_materia
+            ):
+                errores["carrera"] = (
+                    "La materia elegida no pertenece a esa carrera."
+                )
         if self.plazo_indeterminado and not self.es_suplencia:
             errores["plazo_indeterminado"] = (
                 "El plazo indeterminado sólo corresponde a una suplencia."
@@ -410,6 +453,7 @@ class Designacion(models.Model):
                 "persona_id",
                 "cargo_id",
                 "espacio_curricular_id",
+                "carrera_id",
                 "unidad_educativa_id",
                 "especialidad_id",
                 "reemplaza_id",
@@ -442,6 +486,7 @@ class Designacion(models.Model):
                 self.desde = FECHA_SIN_INICIO
             elif self.desde == FECHA_SIN_INICIO:
                 self.sin_inicio = True
+            self._completar_carrera()
             if not es_nueva:
                 anterior = (
                     type(self).objects.filter(pk=self.pk)

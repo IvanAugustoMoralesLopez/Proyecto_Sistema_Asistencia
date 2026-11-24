@@ -147,7 +147,7 @@
                                 </td>
                                 <td>
                                     {% if r.designacion.espacio_curricular %}{{ r.designacion.espacio_curricular.nombre }}{% else %}{{ r.designacion.cargo.descripcion }}{% endif %}
-                                    {% if r.designacion.espacio_curricular %}<br><small class="text-secondary">{{ r.designacion.espacio_curricular.carrera.nombre }}</small>{% endif %}
+                                    {% if r.designacion.carrera %}<br><small class="text-secondary">{{ r.designacion.carrera.nombre }}</small>{% endif %}
                                 </td>
                                 <td>{{ r.designacion.situacion_revista|default:"—" }}</td>
                                 <td>{{ r.marca }}</td>

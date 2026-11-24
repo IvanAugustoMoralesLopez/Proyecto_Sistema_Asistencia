@@ -274,9 +274,7 @@ class FiltroAsistenciaForm(forms.Form):
     espacio_curricular = forms.ModelChoiceField(
         required=False,
         label="Materia",
-        queryset=EspacioCurricular.objects.filter(activo=True)
-        .select_related("carrera")
-        .order_by("carrera__nombre", "nombre"),
+        queryset=EspacioCurricular.objects.filter(activo=True).order_by("nombre"),
         empty_label="Todas las materias",
     )
     estado_registro = forms.ChoiceField(

@@ -141,7 +141,8 @@ class AsistenteDeImputacionPantallaTests(TestCase):
         from personal.models import Carrera, EspacioCurricular
 
         carrera = Carrera.objects.create(nombre='Profesorado de Matemática')
-        espacio = EspacioCurricular.objects.create(nombre='Álgebra', carrera=carrera)
+        espacio = EspacioCurricular.objects.create(nombre='Álgebra')
+        espacio.carreras.add(carrera)
         persona = Persona.objects.create(dni=99000032, apellido_nombre='Con Materia, Docente')
         Designacion.objects.create(
             persona=persona, cargo=self.designacion.cargo, espacio_curricular=espacio,

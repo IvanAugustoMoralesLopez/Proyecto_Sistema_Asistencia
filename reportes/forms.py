@@ -255,9 +255,7 @@ class FiltroConsultaForm(forms.Form):
         )
         self.fields["tipo_licencia"].choices = [("", "Todos")] + [(t, t) for t in tipos]
         self.fields["espacio_curricular"].queryset = (
-            EspacioCurricular.objects.filter(activo=True)
-            .select_related("carrera")
-            .order_by("carrera__nombre", "nombre")
+            EspacioCurricular.objects.filter(activo=True).order_by("nombre")
         )
 
     def clean(self):
@@ -266,7 +264,7 @@ class FiltroConsultaForm(forms.Form):
         if desde and hasta and desde > hasta:
             raise forms.ValidationError("La fecha «desde» no puede ser posterior a «hasta».")
         carrera, espacio = datos.get("carrera"), datos.get("espacio_curricular")
-        if carrera and espacio and espacio.carrera_id != carrera.pk:
+        if carrera and espacio and not espacio.carreras.filter(pk=carrera.pk).exists():
             self.add_error("espacio_curricular", "La materia no pertenece a la carrera elegida.")
         return datos
 

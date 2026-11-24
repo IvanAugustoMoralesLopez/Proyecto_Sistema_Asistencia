@@ -361,8 +361,9 @@
     var selects = document.querySelectorAll("select[name^='agente-marca-']");
     var contador = document.getElementById("contador-pendientes");
 
-    /* El campo de horas solo se habilita si la opción elegida las pide. Va
-       vacío a propósito: las horas salen del horario de cada materia. */
+    /* Con «Asistió» (o sin elegir) el campo de horas queda deshabilitado y
+       vacío. Con una marca que pide horas se habilita y trae las horas de
+       las designaciones del docente ese día. */
     function sincronizar(select) {
         var opcion = select.options[select.selectedIndex];
         var fila = select.closest("tr");
@@ -370,9 +371,14 @@
         var usaHoras = opcion && opcion.dataset.horas === "1";
         var codigo = (opcion && opcion.dataset.codigo) || "";
 
-        if (horas) {
-            horas.readOnly = !usaHoras;
-            if (!usaHoras) { horas.value = ""; }
+        if (horas && !select.disabled) {
+            horas.disabled = !usaHoras;
+            if (!usaHoras) {
+                horas.value = "";
+            } else if (!horas.value) {
+                var horasDia = parseFloat(horas.dataset.horasDia) || 0;
+                if (horasDia > 0) { horas.value = horasDia; }
+            }
         }
 
         /* Apartados: inasistencia (¿llegó el formulario?) y licencia sin cargar. */

@@ -408,7 +408,7 @@ def renglones_del_mes(anio, mes):
         RenglonMensual.objects.filter(anio=anio, mes=mes)
         .select_related(
             'designacion__persona', 'designacion__cargo',
-            'designacion__espacio_curricular__carrera', 'articulo',
+            'designacion__espacio_curricular', 'designacion__carrera', 'articulo',
         )
         .order_by('designacion__persona__apellido_nombre', 'desde', 'designacion_id')
     )

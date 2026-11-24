@@ -15,7 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from licencias.models import LicenciaOtorgada
-from personal.models import Designacion
+from personal.models import Designacion, Horario
 
 from ..forms import FiltroAsistenciaForm, RegistroAsistenciaForm
 from ..models import CierreDiario, CierreMensual, EventoAsistencia, RegistroAsistencia
@@ -47,6 +47,10 @@ from ._comun import (
     vista_protegida,
 )
 
+NOMBRES_DIA_SEMANA = (
+    "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo",
+)
+
 
 @vista_protegida("asistencias.view_registroasistencia")
 def registro_diario(request):
@@ -61,7 +65,8 @@ def registro_diario(request):
         RegistroAsistencia.objects.select_related(
             "designacion__persona",
             "designacion__cargo",
-            "designacion__espacio_curricular__carrera",
+            "designacion__espacio_curricular",
+            "designacion__carrera",
             "marca",
             "licencia",
         )
@@ -311,7 +316,7 @@ def datos_designacion(request):
 
     designacion = (
         Designacion.objects.filter(pk=designacion_id)
-        .select_related("persona")
+        .select_related("persona", "cargo", "espacio_curricular", "carrera")
         .prefetch_related("horarios")
         .first()
     )
@@ -321,6 +326,21 @@ def datos_designacion(request):
 
     horas = horas_del_dia(designacion, fecha)
     horario = horario_del_dia(designacion, fecha)
+
+    # Si ese día no da clase, el último día anterior en que sí tuvo: es el que
+    # probablemente se quiso cargar.
+    ultimo_con_clase = None
+    if horario is None:
+        candidata = fecha
+        for _ in range(14):
+            candidata = _dia_vecino(candidata, -1)
+            if horario_del_dia(designacion, candidata) is not None:
+                ultimo_con_clase = candidata
+                break
+
+    espacio = designacion.espacio_curricular
+    nombres_dia = dict(Horario.Dia.choices)
+    orden_dia = list(nombres_dia)
     licencias = (
         LicenciaOtorgada.objects.select_related("articulo")
         .filter(designacion=designacion, desde__lte=fecha)
@@ -329,6 +349,41 @@ def datos_designacion(request):
     )
 
     return JsonResponse({
+        "designacion": {
+            "docente": designacion.persona.apellido_nombre,
+            "dni": designacion.persona.dni,
+            "cargo": designacion.cargo.descripcion,
+            "materia": espacio.nombre if espacio else "",
+            "carrera": designacion.carrera.nombre if designacion.carrera else "",
+            "situacion": designacion.get_situacion_revista_display(),
+            "curso": designacion.anio_curso,
+            "division": designacion.division_seccion,
+            "turno": designacion.turno,
+            "desde": designacion.desde_texto,
+            "hasta": designacion.hasta_texto,
+            "horario": [
+                {
+                    "dia": nombres_dia.get(h.dia, h.dia),
+                    "horas": h.horas_catedra,
+                    "inicio": h.hora_inicio.strftime("%H:%M") if h.hora_inicio else "",
+                    "fin": h.hora_fin.strftime("%H:%M") if h.hora_fin else "",
+                }
+                for h in sorted(
+                    designacion.horarios.all(),
+                    key=lambda h: orden_dia.index(h.dia) if h.dia in orden_dia else 9,
+                )
+            ],
+        },
+        "fecha_texto": f"{NOMBRES_DIA_SEMANA[fecha.weekday()]} {fecha:%d/%m/%Y}",
+        "ultimo_con_clase": (
+            ultimo_con_clase.isoformat() if ultimo_con_clase else ""
+        ),
+        "ultimo_con_clase_texto": (
+            f"{NOMBRES_DIA_SEMANA[ultimo_con_clase.weekday()]} "
+            f"{ultimo_con_clase:%d/%m/%Y}"
+            if ultimo_con_clase
+            else ""
+        ),
         "dia": clave_dia(fecha),
         "tiene_clase": horario is not None,
         "horas_dia": str(horas),
