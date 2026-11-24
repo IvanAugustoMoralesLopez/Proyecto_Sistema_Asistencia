@@ -1,0 +1,122 @@
+{% extends "asistencias/_base_asistencias.html" %}
+
+{% block title %}Asistencia de {{ titulo_mes }}{% endblock %}
+
+{% block extra_css %}
+{{ block.super }}
+<style media="print">
+    @page { size: A4 landscape; margin: 8mm; }
+</style>
+{% endblock %}
+
+{% block content %}
+{# La planilla es ancha como la hoja del Excel: en escritorio el menú queda en íconos (☰ lo vuelve a abrir). #}
+<script>
+    if (window.innerWidth > 768) { document.body.classList.add("menu-colapsado"); }
+</script>
+
+{% include "asistencias/includes/pestanas_dia_mes.html" with pestana="mes" %}
+
+<div class="pm-encabezado">
+    <div>
+        <p class="ruta">Asistencia › Planilla mensual</p>
+        <h1 class="encabezado-planilla__titulo">
+            Asistencia de {{ titulo_mes }}{% if carrera %} · {{ carrera.nombre }}{% elif filtro_sin_carrera %} · Sin carrera{% endif %}
+        </h1>
+        <p class="encabezado-planilla__subtitulo">
+            Igual que la hoja «ASISTENCIA» de la planilla: una fila por docente, PR si asistió,
+            I si faltó, P si tuvo permiso, LIC o LT si estuvo de licencia.
+        </p>
+    </div>
+
+    <div class="pm-acciones asis-no-imprimir">
+        <form method="get" id="form-carrera">
+            <input type="hidden" name="mes" value="{{ mes_valor }}">
+            <label class="visually-hidden" for="carrera">Carrera</label>
+            <select class="form-select pm-carrera" id="carrera" name="carrera">
+                <option value="">Todas las carreras</option>
+                {% for opcion in carreras %}
+                    <option value="{{ opcion.pk }}"{% if carrera and carrera.pk == opcion.pk %} selected{% endif %}>{{ opcion.nombre }}</option>
+                {% endfor %}
+                {% if hay_sin_carrera %}
+                    <option value="{{ sin_carrera }}"{% if filtro_sin_carrera %} selected{% endif %}>Sin carrera</option>
+                {% endif %}
+            </select>
+            <noscript><button class="btn btn-sm btn-primario-suave" type="submit">Ver</button></noscript>
+        </form>
+        {% if mes_anterior %}
+            <a href="?mes={{ mes_anterior }}{% if carrera_valor %}&amp;carrera={{ carrera_valor }}{% endif %}">« Mes anterior</a>
+        {% endif %}
+        {% if mes_siguiente %}
+            <a href="?mes={{ mes_siguiente }}{% if carrera_valor %}&amp;carrera={{ carrera_valor }}{% endif %}">Mes siguiente »</a>
+        {% endif %}
+        <a id="btn-exportar-mes"
+           href="{% url 'asistencia:planilla_mes_csv' %}?mes={{ mes_valor }}{% if carrera_valor %}&amp;carrera={{ carrera_valor }}{% endif %}">Exportar a Excel (CSV)</a>
+        <button type="button" class="pm-enlace" id="btn-imprimir-mes">Imprimir</button>
+    </div>
+</div>
+
+{% if not planilla.filas %}
+    <p class="text-secondary py-3">
+        No hay docentes con designaciones en {{ titulo_mes|lower }}{% if carrera %} en {{ carrera.nombre }}{% elif filtro_sin_carrera %} sin carrera{% endif %}.
+    </p>
+{% else %}
+<div class="pm-hoja">
+    <table class="pm-tabla" id="planilla-mes">
+        <thead>
+            <tr>
+                <th class="pm-num" scope="col">N°</th>
+                <th class="pm-nombre" scope="col">Apellido y nombre</th>
+                {% for dia in planilla.dias %}
+                    <th scope="col" class="pm-dia{% if dia.gris %} pm-gris{% endif %}"
+                        title="{{ dia.fecha|date:'l d/m/Y' }}{% if dia.motivo %} · {{ dia.motivo }}{% endif %}">
+                        <a href="{% url 'asistencia:registro_diario' %}?fecha={{ dia.fecha|date:'Y-m-d' }}">{{ dia.numero }}</a>
+                    </th>
+                {% endfor %}
+                {% for clave, titulo in columnas_totales %}
+                    <th scope="col" class="pm-total">{{ titulo }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for fila in planilla.filas %}
+                <tr>
+                    <td class="pm-num">{{ fila.numero }}</td>
+                    <td class="pm-nombre">{{ fila.persona.apellido_nombre }}<span class="pm-dni"> · {{ fila.persona.dni }}</span></td>
+                    {% for celda in fila.celdas %}<td class="pm-dia{% if celda.gris %} pm-gris{% endif %}{% if celda.clase %} pm-{{ celda.clase }}{% endif %}"{% if celda.detalle %} title="{{ celda.detalle }}"{% endif %}>{{ celda.texto }}</td>{% endfor %}
+                    {% for valor in fila.totales_en_orden %}
+                        <td class="pm-total">{{ valor|default:"" }}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<p class="pm-nota">
+    Gris: fin de semana, feriado, asueto o día inhábil.
+    Un punto (·) indica que tenía clase y todavía no se cargó.
+    Las columnas ENF COMUN, LARGO TRAT y OTROS cuentan los días de licencia según el artículo imputado
+    (Licencias → Planilla mensual IL-01 / IL-02).
+    Pasá el mouse por una celda para ver el detalle por materia.
+</p>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+(function () {
+    /* Elegir otra carrera actualiza la planilla. */
+    var carrera = document.getElementById("carrera");
+    if (carrera) {
+        carrera.addEventListener("change", function () { carrera.form.submit(); });
+    }
+
+    var imprimir = document.getElementById("btn-imprimir-mes");
+    if (imprimir) {
+        imprimir.addEventListener("click", function () { window.print(); });
+    }
+})();
+</script>
+{% endblock %}

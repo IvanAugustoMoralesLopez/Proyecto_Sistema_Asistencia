@@ -161,6 +161,9 @@ def registro_diario(request):
             "cargados_del_dia": conteo["cargados"],
             "faltan_cargar": conteo["pendientes"],
             "periodo_cerrado": periodo_cerrado,
+            # Pestañas Día / Mes: «Mes» abre el mes de la fecha que se mira.
+            "pestana_fecha": fecha_objeto.isoformat(),
+            "pestana_mes": f"{fecha_objeto:%Y-%m}",
             **contexto_sesion(request),
         },
     )

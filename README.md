@@ -106,6 +106,8 @@ Ejecutalo completo como script SQL sobre la base `asistencia` (por ejemplo con "
 3. A fin de mes, ...
 4. Se elige el artículo de cada renglón ...
 
+Para mirar el mes completo, en **Asistencia del día** está la pestaña **Mes**: una fila por docente y una columna por día, como la hoja «ASISTENCIA» del Excel. Se puede filtrar por carrera, exportar a CSV e imprimir. Un «·» marca un día con clase que todavía no se cargó.
+
 El detalle de qué cambió para cumplir cada requerimiento está en `CAMBIOS_REQUERIMIENTOS_v2.md`.
 
 ### 8. Levantar el servidor

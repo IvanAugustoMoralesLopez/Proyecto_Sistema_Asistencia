@@ -5,6 +5,8 @@ Vistas de asistencias.
 - `registro`: registro diario, alta/edición individual, historial y
   validación de registros.
 - `planilla`: planilla rápida (carga del día completo en una pantalla).
+- `planilla_mes`: pestaña «Mes» de Asistencia del día (planilla mensual
+  de consulta y su exportación a CSV).
 - `cierres`: cierre de jornada, listado de cierres y cierre/reapertura
   de períodos mensuales.
 - `recepcion`: recepción del formulario en papel de las inasistencias.
@@ -28,6 +30,7 @@ from .calendario import (
 from .cierres import cerrar_jornada, confirmar_cierre, lista_cierres, reapertura_mensual
 from .pendientes import resolver_pendiente_view
 from .planilla import planilla_rapida
+from .planilla_mes import planilla_mes, planilla_mes_csv
 from .recepcion import recepcion_formularios, recepcionar_formulario_view
 from .registro import (
     crear_asistencia,
@@ -51,6 +54,8 @@ __all__ = [
     "detalle_asistencia",
     "validar_registro",
     "planilla_rapida",
+    "planilla_mes",
+    "planilla_mes_csv",
     "resolver_pendiente_view",
     "cerrar_jornada",
     "lista_cierres",

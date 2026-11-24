@@ -26,6 +26,8 @@ leer y navegar:
   inhábiles (RF-10).
 - `agenda`: qué docentes dan clase cada día y con cuántas horas; es lo
   que permite autocompletar la carga diaria.
+- `planilla_mes`: planilla mensual de consulta (una fila por docente y
+  una columna por día), como la hoja «ASISTENCIA» del Excel.
 
 Todo lo que antes se importaba con `from asistencias.services import X`
 se sigue importando igual: este archivo reexporta la misma API pública.
@@ -72,6 +74,15 @@ from .pendientes import (
     resolver as resolver_pendiente,
     confirmar_injustificadas,
     validar_sin_vencidos,
+)
+from .planilla_mes import (
+    COLUMNAS_TOTALES,
+    SIN_CARRERA,
+    carreras_del_mes,
+    mes_pedido,
+    mes_vecino,
+    nombre_mes,
+    planilla_del_mes,
 )
 from .registro import (
     PlanillaConErrores,
@@ -155,4 +166,11 @@ __all__ = [
     "cargar_calendario_masivo",
     "validar_multiples",
     "inasistencias_del_periodo",
+    "COLUMNAS_TOTALES",
+    "SIN_CARRERA",
+    "carreras_del_mes",
+    "mes_pedido",
+    "mes_vecino",
+    "nombre_mes",
+    "planilla_del_mes",
 ]

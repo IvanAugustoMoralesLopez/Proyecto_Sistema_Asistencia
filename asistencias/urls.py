@@ -16,6 +16,16 @@ urlpatterns = [
         name="registro_diario",
     ),
     path(
+        "mes/",
+        views.planilla_mes,
+        name="planilla_mes",
+    ),
+    path(
+        "mes/csv/",
+        views.planilla_mes_csv,
+        name="planilla_mes_csv",
+    ),
+    path(
         "crear/",
         views.crear_asistencia,
         name="crear_asistencia",
