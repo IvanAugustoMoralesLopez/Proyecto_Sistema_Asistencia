@@ -1,3 +1,4 @@
+from urllib.parse import urlencode
 import csv
 import os
 
@@ -763,6 +764,16 @@ def detalle_licencia(request, licencia_id):
                 raise ValidationError("Acción no válida.")
         except ValidationError as exc:
             messages.error(request, " ".join(exc.messages))
+            # Con error se queda en el detalle (conservando a dónde volver).
+            destino = reverse("licencias:detalle_licencia", args=[licencia.pk])
+            volver = _volver_seguro(request)
+            if volver:
+                destino += f"?{urlencode({'volver': volver})}#prorrogar"
+            return redirect(destino)
+        # Si vino desde Legajos o Alertas, vuelve ahí con el aviso actualizado.
+        volver = _volver_seguro(request)
+        if volver:
+            return redirect(volver)
         return redirect("licencias:detalle_licencia", licencia_id=licencia.pk)
 
     from .licencia_docente import _materia
@@ -796,6 +807,8 @@ def detalle_licencia(request, licencia_id):
             "vigente": licencia.hasta is None or licencia.hasta >= fecha_de_hoy(),
             "total_dias": len({f for parte in partes for f in parte["dias"]}),
             "total_horas": sum((parte["horas"] for parte in partes), 0),
+            "volver": _volver_seguro(request),
+            "vence_hoy": licencia.hasta == fecha_de_hoy(),
         },
     )
 

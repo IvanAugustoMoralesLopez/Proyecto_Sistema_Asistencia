@@ -39,12 +39,37 @@
 </form>
 
 {% if alertas_licencias %}
-<div class="alert alert-info" role="alert">
-    <strong>{{ alertas_licencias|length }} licencia(s) vencen en los próximos 30 días.</strong>
-    {% for licencia in alertas_licencias %}
-        <div>{{ licencia.designacion.persona.apellido_nombre }} — {{ licencia.designacion.cargo.descripcion }} — vence {{ licencia.hasta }}</div>
-    {% endfor %}
-</div>
+<section class="alert alert-info" aria-labelledby="titulo-licencias-por-vencer">
+    <h2 class="h6 mb-2" id="titulo-licencias-por-vencer">
+        {{ alertas_licencias|length }} licencia{{ alertas_licencias|length|pluralize }} vence{{ alertas_licencias|length|pluralize:"n" }} en los próximos 30 días
+    </h2>
+    <div class="d-flex flex-column gap-2">
+        {% for a in alertas_licencias %}
+            {# Una tarjeta por licencia del docente; el botón lleva a prorrogarla. #}
+            <div class="bg-white rounded p-2 px-3 d-flex align-items-center gap-3 flex-wrap {% if a.vence_hoy %}border border-2 border-danger{% endif %}">
+                <div class="flex-grow-1">
+                    <div><strong>{{ a.docente }}</strong> <span class="text-secondary">· {{ a.tipo_licencia }}{% if a.cod_licencia %} · {{ a.cod_licencia }}{% endif %}</span></div>
+                    <div class="small text-secondary">
+                        {{ a.cargo }} · {{ a.materias|join:", " }} ({{ a.cantidad_materias }} materia{{ a.cantidad_materias|pluralize }}) · desde {{ a.desde|date:"d/m/Y" }}
+                    </div>
+                </div>
+                {% if a.vence_hoy %}
+                    <span class="badge text-bg-danger">Vence hoy · {{ a.hasta|date:"d/m" }}</span>
+                {% elif a.dias_restantes <= 7 %}
+                    <span class="badge text-bg-warning">Vence en {{ a.dias_restantes }} día{{ a.dias_restantes|pluralize }} · {{ a.hasta|date:"d/m" }}</span>
+                {% else %}
+                    <span class="badge text-bg-light border">Vence en {{ a.dias_restantes }} días · {{ a.hasta|date:"d/m" }}</span>
+                {% endif %}
+                {% if perms.licencias.view_licenciaotorgada %}
+                    <a class="btn {% if a.vence_hoy %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                       href="{% url 'licencias:detalle_licencia' a.pk %}?volver={{ request.get_full_path|urlencode }}#prorrogar">
+                        Ver / prorrogar →
+                    </a>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+</section>
 {% endif %}
 
 {% if alertas_designaciones %}

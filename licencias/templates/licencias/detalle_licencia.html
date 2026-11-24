@@ -13,7 +13,11 @@
         </h1>
         <p class="text-secondary mb-0">Art. {{ licencia.articulo.articulo }} · {{ licencia.articulo.tipo_licencia }}{% if licencia.articulo.cod_licencia %} · código {{ licencia.articulo.cod_licencia }}{% endif %}</p>
     </div>
-    <a class="btn btn-outline-secondary" href="{% url 'licencias:listado_licencias_otorgadas' %}">Volver al listado</a>
+    {% if volver %}
+        <a class="btn btn-outline-secondary" href="{{ volver }}">← Volver</a>
+    {% else %}
+        <a class="btn btn-outline-secondary" href="{% url 'licencias:listado_licencias_otorgadas' %}">Volver al listado</a>
+    {% endif %}
 </div>
 
 <div class="row g-3 mb-3">
@@ -82,11 +86,15 @@
 {% if perms.licencias.change_licenciaotorgada %}
 <div class="row g-3 mb-3">
     <div class="col-md-6">
-        <form method="post" class="card shadow-sm border-primary h-100">
+        <form method="post" class="card shadow-sm border-primary h-100" id="prorrogar">
             {% csrf_token %}
             <input type="hidden" name="accion" value="prorrogar">
+            {% if volver %}<input type="hidden" name="volver" value="{{ volver }}">{% endif %}
             <div class="card-body">
-                <h2 class="h6">Prorrogar</h2>
+                <div class="d-flex justify-content-between align-items-baseline gap-2">
+                    <h2 class="h6">Prorrogar</h2>
+                    {% if vence_hoy %}<span class="badge text-bg-danger">Vence hoy</span>{% endif %}
+                </div>
                 <p class="small text-secondary">Se marcan en la diaria los días nuevos con clase. Se mantiene la disposición.</p>
                 <label class="form-label" for="nuevo_hasta">Nuevo Hasta</label>
                 <input class="form-control mb-2" type="date" id="nuevo_hasta" name="nuevo_hasta" required>
@@ -98,6 +106,7 @@
         <form method="post" class="card shadow-sm border-warning h-100">
             {% csrf_token %}
             <input type="hidden" name="accion" value="cortar">
+            {% if volver %}<input type="hidden" name="volver" value="{{ volver }}">{% endif %}
             <div class="card-body">
                 <h2 class="h6">Cortar antes</h2>
                 <p class="small text-secondary">Los días marcados desde que volvió pasan a Presente (en borrador) para revisarlos en la diaria.</p>
@@ -123,4 +132,21 @@
         {% endfor %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+/* Desde Legajos o Alertas se llega con #prorrogar: resaltar el cuadro y
+   dejar el cursor en la fecha nueva. */
+(function () {
+    if (window.location.hash !== "#prorrogar") { return; }
+    var cuadro = document.getElementById("prorrogar");
+    var fecha = document.getElementById("nuevo_hasta");
+    if (!cuadro || !fecha) { return; }
+    cuadro.classList.add("border-2", "shadow");
+    cuadro.scrollIntoView({ block: "center" });
+    fecha.focus();
+})();
+</script>
 {% endblock %}

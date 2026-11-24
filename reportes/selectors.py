@@ -625,31 +625,55 @@ def calcular_licencias_por_vencer(dias=DIAS_ANTICIPACION_POR_DEFECTO, hoy=None):
     el docente vuelva o la licencia caduque. Las licencias sin «hasta»
     (abiertas) no tienen vencimiento y no se listan; las ya finalizadas
     tampoco. Orden: las que vencen antes, primero.
+
+    Una fila por licencia del docente: si abarca varias materias (mismo
+    `grupo`), van juntas, con la cantidad y los nombres en `materias`. `pk`
+    es el de una de ellas y lleva al detalle, donde se prorrogan todas.
     """
     hoy = hoy or fecha_de_hoy()
     limite = hoy + timedelta(days=dias)
 
     licencias = (
         LicenciaOtorgada.objects.filter(hasta__gte=hoy, hasta__lte=limite)
-        .select_related("designacion__persona", "designacion__cargo", "articulo")
+        .select_related(
+            "designacion__persona", "designacion__cargo",
+            "designacion__espacio_curricular", "articulo",
+        )
         .order_by("hasta", "designacion__persona__apellido_nombre", "pk")
     )
 
-    filas = []
+    filas, por_pedido = [], {}
     for lic in licencias:
-        restantes = (lic.hasta - hoy).days
         designacion = lic.designacion
-        filas.append({
+        materia = (
+            designacion.espacio_curricular.nombre
+            if designacion.espacio_curricular_id else str(designacion.cargo)
+        )
+        clave = lic.grupo or f"pk-{lic.pk}"
+        if clave in por_pedido:
+            fila = por_pedido[clave]
+            fila["materias"].append(materia)
+            fila["cantidad_materias"] += 1
+            fila["desde"] = min(fila["desde"], lic.desde)
+            continue
+
+        restantes = (lic.hasta - hoy).days
+        fila = {
             "pk": lic.pk,
             "dni": designacion.persona.dni,
             "docente": designacion.persona.apellido_nombre,
             "cargo": str(designacion.cargo),
             "articulo": lic.articulo.articulo,
+            "cod_licencia": lic.articulo.cod_licencia,
             "tipo_licencia": lic.articulo.tipo_licencia,
             "instrumento": texto_instrumento(lic),
             "desde": lic.desde,
             "hasta": lic.hasta,
             "dias_restantes": restantes,
             "vence_hoy": restantes == 0,
-        })
+            "materias": [materia],
+            "cantidad_materias": 1,
+        }
+        por_pedido[clave] = fila
+        filas.append(fila)
     return filas

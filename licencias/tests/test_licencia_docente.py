@@ -321,3 +321,54 @@ class AtajoMotivoTests(BaseLicenciaDocente):
         self.assertTrue(por_materia["Materia 2"]["sin_articulo"])
         self.assertEqual(por_materia["Materia 1"]["articulo"], self.enfermedad)
         self.assertNotIn(str(self.m2.pk), respuesta.context["form"]["designaciones"].value())
+
+
+class ProrrogaDesdeAvisoTests(BaseLicenciaDocente):
+    """Desde Legajos o Alertas se llega al detalle con #prorrogar y se vuelve."""
+
+    def test_prorroga_y_vuelve_a_donde_vino(self):
+        self.client.post(self.url, self.datos())
+        licencia = LicenciaOtorgada.objects.order_by("pk").first()
+        detalle = reverse("licencias:detalle_licencia", args=[licencia.pk])
+
+        respuesta = self.client.get(detalle, {"volver": "/personal/legajos/"})
+        self.assertContains(respuesta, 'id="prorrogar"')
+        self.assertContains(respuesta, 'name="volver" value="/personal/legajos/"')
+
+        respuesta = self.client.post(detalle, {
+            "accion": "prorrogar", "nuevo_hasta": "2026-10-28", "volver": "/personal/legajos/",
+        })
+        self.assertRedirects(respuesta, "/personal/legajos/", fetch_redirect_response=False)
+        self.assertEqual(
+            set(LicenciaOtorgada.objects.values_list("hasta", flat=True)), {date(2026, 10, 28)}
+        )
+
+    def test_un_volver_de_otro_sitio_se_ignora(self):
+        self.client.post(self.url, self.datos())
+        licencia = LicenciaOtorgada.objects.order_by("pk").first()
+        detalle = reverse("licencias:detalle_licencia", args=[licencia.pk])
+        respuesta = self.client.post(detalle, {
+            "accion": "prorrogar", "nuevo_hasta": "2026-10-28", "volver": "https://otro.sitio/",
+        })
+        self.assertRedirects(respuesta, detalle, fetch_redirect_response=False)
+
+
+class AvisoEnLegajosTests(BaseLicenciaDocente):
+    def test_legajos_muestra_la_licencia_con_su_boton(self):
+        from django.contrib.auth.models import Permission
+
+        from licencias.dias import fecha_de_hoy
+
+        hoy = fecha_de_hoy()
+        licencia = LicenciaOtorgada.objects.create(
+            designacion=self.m1, articulo=self.enfermedad, sit_rev="Titular", desde=hoy, hasta=hoy,
+        )
+        self.usuario.user_permissions.add(*Permission.objects.filter(
+            codename__in=["view_persona", "view_designacion", "view_licenciaotorgada"]
+        ))
+        self.client.force_login(type(self.usuario).objects.get(pk=self.usuario.pk))
+        respuesta = self.client.get(reverse("personal:gestion_legajos"))
+        self.assertContains(respuesta, "Vence hoy")
+        self.assertContains(
+            respuesta, reverse("licencias:detalle_licencia", args=[licencia.pk]) + "?volver="
+        )

@@ -922,12 +922,11 @@ def _contexto_pantalla(
         designaciones = Designacion.objects.none()
 
     hoy = timezone.localdate()
-    alertas_licencias = list(
-        LicenciaOtorgada.objects.filter(
-            hasta__gte=hoy,
-            hasta__lte=hoy + timedelta(days=30),
-        ).select_related("designacion__persona", "designacion__cargo")[:20]
-    )
+    # Las mismas que muestra Alertas › Licencias por vencer: una por licencia
+    # del docente (aunque abarque varias materias), la que vence antes primero.
+    from reportes.selectors import calcular_licencias_por_vencer
+
+    alertas_licencias = calcular_licencias_por_vencer(30, hoy=hoy)[:20]
 
     return {
         "filtro": filtro,

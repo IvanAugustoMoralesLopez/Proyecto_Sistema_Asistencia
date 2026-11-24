@@ -34,12 +34,14 @@
                 <th>DNI</th>
                 <th>Docente</th>
                 <th>Cargo</th>
+                <th>Materias</th>
                 <th>Artículo</th>
                 <th>Tipo de licencia</th>
                 <th>Instrumento</th>
                 <th>Desde</th>
                 <th>Hasta</th>
                 <th class="text-end">Días</th>
+                <th><span class="visually-hidden">Acción</span></th>
             </tr>
         </thead>
         <tbody>
@@ -53,15 +55,24 @@
                     <td>{{ a.dni }}</td>
                     <td>{{ a.docente }}</td>
                     <td>{{ a.cargo }}</td>
+                    <td>{{ a.materias|join:", " }}{% if a.cantidad_materias > 1 %} <span class="small text-secondary">({{ a.cantidad_materias }})</span>{% endif %}</td>
                     <td>{{ a.articulo }}</td>
                     <td>{{ a.tipo_licencia }}</td>
                     <td>{{ a.instrumento }}</td>
                     <td>{{ a.desde|date:"d/m/Y" }}</td>
                     <td>{{ a.hasta|date:"d/m/Y" }}</td>
                     <td class="text-end">{{ a.dias_restantes }}</td>
+                    <td class="text-nowrap">
+                        {% if perms.licencias.view_licenciaotorgada %}
+                            <a class="btn btn-sm {% if a.vence_hoy %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                               href="{% url 'licencias:detalle_licencia' a.pk %}?volver={{ request.get_full_path|urlencode }}#prorrogar">
+                                Ver / prorrogar →
+                            </a>
+                        {% endif %}
+                    </td>
                 </tr>
             {% empty %}
-                <tr><td colspan="10" class="text-center text-muted py-4">No hay licencias por vencer con estos criterios.</td></tr>
+                <tr><td colspan="12" class="text-center text-muted py-4">No hay licencias por vencer con estos criterios.</td></tr>
             {% endfor %}
         </tbody>
     </table>

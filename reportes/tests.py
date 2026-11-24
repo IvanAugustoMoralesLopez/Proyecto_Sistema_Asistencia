@@ -749,6 +749,36 @@ class AlertasLicenciasVencimientoTests(TestCase):
         self.assertEqual(respuesta.status_code, 200)
         self.assertIn("alertas", respuesta.context)
 
+    def test_una_fila_por_licencia_aunque_abarque_varias_materias(self):
+        import uuid
+
+        otra = Designacion.objects.create(
+            persona=self.designacion.persona, cargo=self.designacion.cargo, desde=date(2026, 3, 1)
+        )
+        grupo = uuid.uuid4()
+        for designacion in (self.designacion, otra):
+            LicenciaOtorgada.objects.create(
+                designacion=designacion, articulo=self.articulo, sit_rev="TIT",
+                desde=date(2026, 11, 2), hasta=date(2026, 11, 13), grupo=grupo,
+            )
+        (fila,) = calcular_licencias_por_vencer(30, hoy=self.HOY)
+        self.assertEqual(fila["cantidad_materias"], 2)
+
+    def test_boton_para_prorrogar_si_puede_ver_licencias(self):
+        from django.utils import timezone
+
+        hoy = timezone.localdate()
+        lic = self.licencia(hoy, hoy)
+        detalle = reverse("licencias:detalle_licencia", args=[lic.pk])
+        self.assertNotContains(self.client.get(self.url), detalle)  # sin permiso de licencias
+
+        self.client.force_login(
+            crear_usuario("secre", "consultar_licencias", "view_licenciaotorgada")
+        )
+        respuesta = self.client.get(self.url)
+        self.assertContains(respuesta, f"{detalle}?volver=")
+        self.assertContains(respuesta, "#prorrogar")
+
 
 # ───────────── Correcciones de la revisión técnica (A2, M11, B5, B6) ─────────────
 
