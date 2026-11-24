@@ -34,7 +34,9 @@ def designaciones_del_docente(persona, desde, hasta=None):
     """Designaciones activas del docente vigentes en algún día del período."""
     fin = hasta or desde
     return (
-        Designacion.objects.select_related("persona", "cargo", "espacio_curricular")
+        Designacion.objects.select_related(
+            "persona", "cargo", "espacio_curricular", "carrera"
+        )
         .prefetch_related("horarios")
         .filter(persona=persona, activo=True, desde__lte=fin)
         .filter(Q(hasta__isnull=True) | Q(hasta__gte=desde))
@@ -79,11 +81,15 @@ def materias_afectadas(persona, desde, hasta=None, articulo=None):
             if designacion.situacion_revista
             else ""
         )
+        materia = _materia(designacion)
+        carrera = designacion.carrera.nombre if designacion.carrera_id else ""
         propio = articulo_para(articulo, situacion) if articulo is not None else None
         materias.append(
             {
                 "designacion": designacion,
-                "materia": _materia(designacion),
+                "materia": materia,
+                "carrera": carrera,
+                "etiqueta": f"{materia} ({carrera})" if carrera else materia,
                 "situacion": situacion,
                 "dias": dias,
                 "horas": horas,

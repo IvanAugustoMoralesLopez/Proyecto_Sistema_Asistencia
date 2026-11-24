@@ -1276,6 +1276,9 @@ def autocompletar_designaciones(request):
                         if designacion.espacio_curricular
                         else ""
                     ),
+                    "carrera": (
+                        designacion.carrera.nombre if designacion.carrera else ""
+                    ),
                     "texto": (
                         f"{designacion.persona.apellido_nombre} - "
                         f"{designacion.persona.dni} - {designacion.cargo.descripcion}"

@@ -116,7 +116,9 @@
                             var boton = document.createElement('button');
                             boton.type = 'button';
                             boton.className = 'list-group-item list-group-item-action';
-                            boton.textContent = item.texto + (item.espacio ? ' - ' + item.espacio : '');
+                            boton.textContent = item.texto
+                                + (item.espacio ? ' - ' + item.espacio : '')
+                                + (item.carrera ? ' (' + item.carrera + ')' : '');
                             boton.addEventListener('click', function () {
                                 buscador.value = item.dni;
                                 contenedor.innerHTML = '';

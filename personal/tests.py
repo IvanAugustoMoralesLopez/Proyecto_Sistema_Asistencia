@@ -1170,6 +1170,44 @@ class RequerimientosV2PersonalTests(TestCase):
             all(item["dias"] == [date(2026, 3, 9)] for item in afectadas)
         )
 
+    def test_busqueda_de_designaciones_muestra_la_misma_materia_por_carrera(self):
+        carrera_a = Carrera.objects.create(nombre="Carrera A")
+        carrera_b = Carrera.objects.create(nombre="Carrera B")
+        materia = EspacioCurricular.objects.create(nombre="Matemática")
+        materia.carreras.add(carrera_a, carrera_b)
+        for carrera, situacion in (
+            (carrera_a, Designacion.Situacion.TITULAR),
+            (carrera_b, Designacion.Situacion.SUPLENTE),
+        ):
+            Designacion.objects.create(
+                persona=self.persona,
+                cargo=self.cargo,
+                espacio_curricular=materia,
+                carrera=carrera,
+                situacion_revista=situacion,
+                desde=date(2026, 3, 1),
+            )
+
+        respuesta = self.cliente.get(
+            reverse("inicio_personal"), {"q": self.persona.dni}
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.context["designaciones"]), 2)
+        self.assertContains(respuesta, "Carrera A")
+        self.assertContains(respuesta, "Carrera B")
+        self.assertContains(respuesta, "Matemática")
+
+        autocomplete = self.cliente.get(
+            reverse("personal:designaciones_autocompletar"),
+            {"q": self.persona.dni},
+        )
+        self.assertEqual(autocomplete.status_code, 200)
+        self.assertEqual(
+            {item["carrera"] for item in autocomplete.json()["resultados"]},
+            {"Carrera A", "Carrera B"},
+        )
+
     def test_csv_excel_con_separador_punto_y_coma(self):
         respuesta = self.cliente.post(
             self.url,

@@ -84,6 +84,8 @@ def _etiqueta_designacion(designacion):
         etiqueta += f" - {designacion.get_situacion_revista_display()}"
     if designacion.espacio_curricular_id:
         etiqueta += f" - {designacion.espacio_curricular.nombre}"
+    if designacion.carrera_id:
+        etiqueta += f" ({designacion.carrera.nombre})"
     return etiqueta
 
 class LicenciaOtorgadaForm(forms.ModelForm):
@@ -127,7 +129,7 @@ class LicenciaOtorgadaForm(forms.ModelForm):
 
         self.fields["designacion"].queryset = (
             designaciones.select_related(
-                "persona", "cargo","espacio_curricular"
+                "persona", "cargo", "espacio_curricular", "carrera"
             ).order_by("persona__apellido_nombre")
         )
         # La opción muestra también la situación de revista de la designación.
@@ -368,7 +370,8 @@ class LicenciaDocenteForm(forms.Form):
             actual=(self.data.get("disp_tipo") if self.is_bound else "") or ""
         )
         self.fields["designaciones"].choices = [
-            (str(m["designacion"].pk), m["materia"]) for m in (materias or [])
+            (str(m["designacion"].pk), m.get("etiqueta", m["materia"]))
+            for m in (materias or [])
         ]
 
     def clean_disp_numero(self):

@@ -172,7 +172,7 @@
                                                value="{{ m.designacion.pk }}" id="materia-{{ m.designacion.pk }}"
                                                {% if m.sin_articulo %}disabled{% elif m.designacion.pk|stringformat:"s" in form.designaciones.value %}checked{% endif %}>
                                     </td>
-                                    <td><label for="materia-{{ m.designacion.pk }}">{{ m.materia }}</label></td>
+                                    <td><label for="materia-{{ m.designacion.pk }}">{{ m.etiqueta }}</label></td>
                                     <td>{{ m.situacion|default:"—" }}</td>
                                     <td>
                                         {% if m.articulo %}

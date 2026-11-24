@@ -6,13 +6,14 @@
 --   2) USE asistencia;              (o el nombre de tu base)
 -- Qué carga:
 --   * 3 carreras y 12 materias          * 4 cargos (150, 155, 165 y 166)
---   * 20 docentes (DNI 99000001 a 99000020) y 22 designaciones con horarios
---   * 5 artículos de licencia con tope anual y 12 licencias otorgadas
+--   * 20 docentes (DNI 99000001 a 99000020) y 23 designaciones con horarios
+--   * 3 especialidades y 3 unidades educativas para probar Designaciones
+--   * 6 artículos de licencia con tope anual y 12 licencias otorgadas
 --   * 11 feriados 2026                  * 35 registros de asistencia de octubre 2026
 --   * 9 usuarios del sistema (3 Bedelía, 3 Secretaría, 3 Subsecretaría)
 -- Contraseña de todos los usuarios: Prueba2026!
--- Es 100 % ficticio y el script es seguro de re-ejecutar (todos los INSERT
--- usan IGNORE: si ya existen, los salta en vez de cortar el script).
+-- Es 100 % ficticio y el script es seguro de re-ejecutar: usa INSERT IGNORE
+-- para claves únicas y NOT EXISTS para las unidades educativas.
 -- Para borrar lo cargado mirá el bloque de limpieza al final.
 --
 -- En DBeaver: pegá todo el archivo en el editor SQL y ejecutá el script
@@ -65,6 +66,36 @@ JOIN personal_carrera c ON (e.nombre, c.nombre) IN (
   ('Gestión de Personal', 'Gestión Administrativa')
 );
 
+-- ───────────── Catálogos de Especialidad y Unidad Educativa ─────────────
+INSERT IGNORE INTO personal_especialidad_catalogo (titulo, activa) VALUES
+  ('Desarrollo de Software', 1),
+  ('Higiene y Seguridad en el Trabajo', 1),
+  ('Gestión Administrativa', 1);
+
+-- Unidad Educativa no tiene una clave natural única: evitar duplicados al
+-- volver a ejecutar el script comprobando número y descripción.
+INSERT INTO personal_unidad_educativa
+  (numero, descripcion, codigo_oficina, codigo_anexo, nivel_modalidad, categoria, zona, localidad_paraje, activa)
+SELECT 'UE-001', 'Instituto Técnico de Prueba - Sede Corrientes', '1452', '00', 'Superior', 'Técnica', 'Urbana', 'Corrientes', 1
+WHERE NOT EXISTS (
+  SELECT 1 FROM personal_unidad_educativa
+  WHERE numero = 'UE-001' AND descripcion = 'Instituto Técnico de Prueba - Sede Corrientes'
+);
+INSERT INTO personal_unidad_educativa
+  (numero, descripcion, codigo_oficina, codigo_anexo, nivel_modalidad, categoria, zona, localidad_paraje, activa)
+SELECT 'UE-002', 'Instituto Técnico de Prueba - Sede Resistencia', '1452', '00', 'Superior', 'Técnica', 'Urbana', 'Resistencia', 1
+WHERE NOT EXISTS (
+  SELECT 1 FROM personal_unidad_educativa
+  WHERE numero = 'UE-002' AND descripcion = 'Instituto Técnico de Prueba - Sede Resistencia'
+);
+INSERT INTO personal_unidad_educativa
+  (numero, descripcion, codigo_oficina, codigo_anexo, nivel_modalidad, categoria, zona, localidad_paraje, activa)
+SELECT 'UE-003', 'Instituto Técnico de Prueba - Anexo Gestión', '1452', '01', 'Superior', 'Técnica', 'Urbana', 'Corrientes', 1
+WHERE NOT EXISTS (
+  SELECT 1 FROM personal_unidad_educativa
+  WHERE numero = 'UE-003' AND descripcion = 'Instituto Técnico de Prueba - Anexo Gestión'
+);
+
 -- ───────────── Cargos (códigos numéricos oficiales) ─────────────
 -- La migración personal 0006 ya los crea; se repiten por si la base es vieja.
 INSERT IGNORE INTO personal_cargo (codigo, descripcion, es_docente, activo) VALUES
@@ -96,7 +127,9 @@ INSERT IGNORE INTO personal_persona (dni, apellido_nombre, apellido, nombres, ti
   ('99000019', 'SOSA, Paola', 'Sosa', 'Paola', 'DNI', 'F', '1997-08-22', '', 'Argentina', '', '', '', '', 'Corrientes', '', 'Corrientes', '3794000019', 'sosa19@ejemplo.test', 1),
   ('99000020', 'VILLALBA, Joaquín', 'Villalba', 'Joaquín', 'DNI', 'M', '1970-09-01', '', 'Argentina', '', '', '', '', 'Resistencia', '', 'Chaco', '3794000020', 'villalba20@ejemplo.test', 1);
 
--- ───────────── Designaciones (ids 9001 a 9022; entran por SQL, por eso no generan historial) ─────────────
+-- ───────────── Designaciones (ids 9001 a 9023; entran por SQL, por eso no generan historial) ─────────────
+-- 99000006 dicta Legislación Laboral en dos carreras: titular en Higiene y
+-- suplente en Gestión. Sirve para comprobar que la licencia lista ambas.
 INSERT IGNORE INTO personal_designacion (id, persona_id, cargo_id, espacio_curricular_id, carrera_id, unidad_educativa_id, especialidad_id, reemplaza_id, situacion_revista, anio_curso, division_seccion, turno, hs_catedra, jornada, disp_alta_nro, sello_regional_as, motivo_id, norma_tipo, norma_numero, norma_anio, organismo_emisor, desde, hasta, pof, anio_pof, novedad, activo, observaciones, es_suplencia, plazo_indeterminado, sin_inicio) VALUES
   (9001, '99000001', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Programación I'), (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 6, '', '', '', NULL, 'Resolución', '100', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
   (9002, '99000002', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Bases de Datos'), (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 6, '', '', '', NULL, 'Resolución', '101', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
@@ -119,7 +152,29 @@ INSERT IGNORE INTO personal_designacion (id, persona_id, cargo_id, espacio_curri
   (9019, '99000019', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Ergonomía'), (SELECT id FROM personal_carrera WHERE nombre = 'Higiene y Seguridad en el Trabajo'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '118', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
   (9020, '99000020', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Derecho Comercial'), (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'SUP', '1°', 'A', 'Tarde', 3, '', '', '', NULL, 'Resolución', '119', 2026, 'Ministerio de Educación', '2026-03-02', '2026-12-18', '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
   (9021, '99000001', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Ingeniería de Software'), (SELECT id FROM personal_carrera WHERE nombre = 'Desarrollo de Software'), NULL, NULL, NULL, 'TIT', '2°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '120', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
-  (9022, '99000009', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Gestión de Personal'), (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '121', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0);
+  (9022, '99000009', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Gestión de Personal'), (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'TIT', '1°', 'A', 'Noche', 4, '', '', '', NULL, 'Resolución', '121', 2026, 'Ministerio de Educación', '2026-03-02', NULL, '', NULL, '', 1, 'Dato de prueba', 0, 0, 0),
+  (9023, '99000006', '166', (SELECT id FROM personal_espacio_curricular WHERE nombre = 'Legislación Laboral'), (SELECT id FROM personal_carrera WHERE nombre = 'Gestión Administrativa'), NULL, NULL, NULL, 'SUP', '1°', 'A', 'Noche', 3, '', '', '', NULL, 'Resolución', '122', 2026, 'Ministerio de Educación', '2026-03-02', '2026-12-18', '', NULL, '', 1, 'Prueba de una materia compartida entre carreras', 1, 0, 0);
+
+-- Completa los catálogos asociados a cada designación de prueba.
+-- Workbench puede bloquear un UPDATE con JOIN en modo de actualizaciones
+-- seguras. Este cambio temporal está acotado al rango fijo de IDs de prueba.
+SET @sql_safe_updates_anterior = @@SESSION.SQL_SAFE_UPDATES;
+SET SESSION SQL_SAFE_UPDATES = 0;
+UPDATE personal_designacion d
+JOIN personal_carrera c ON c.id = d.carrera_id
+JOIN personal_unidad_educativa u
+  ON ((c.nombre = 'Desarrollo de Software' AND u.numero = 'UE-001'
+      AND u.descripcion = 'Instituto Técnico de Prueba - Sede Corrientes')
+  OR (c.nombre = 'Higiene y Seguridad en el Trabajo' AND u.numero = 'UE-002'
+      AND u.descripcion = 'Instituto Técnico de Prueba - Sede Resistencia')
+  OR (c.nombre = 'Gestión Administrativa' AND u.numero = 'UE-003'
+      AND u.descripcion = 'Instituto Técnico de Prueba - Anexo Gestión'))
+JOIN personal_especialidad_catalogo e
+  ON e.titulo = c.nombre
+SET d.unidad_educativa_id = u.id,
+    d.especialidad_id = e.id
+WHERE d.id BETWEEN 9001 AND 9023;
+SET SESSION SQL_SAFE_UPDATES = @sql_safe_updates_anterior;
 
 -- ───────────── Horarios por designación ─────────────
 INSERT IGNORE INTO personal_horario (designacion_id, dia, horas_catedra, hora_inicio, hora_fin) VALUES
@@ -166,11 +221,14 @@ INSERT IGNORE INTO personal_horario (designacion_id, dia, horas_catedra, hora_in
   (9021, 'LUN', 2, '18:00:00', '20:00:00'),
   (9021, 'MIE', 2, '18:00:00', '19:30:00'),
   (9022, 'MAR', 2, '18:00:00', '20:00:00'),
-  (9022, 'JUE', 2, '18:00:00', '19:30:00');
+  (9022, 'JUE', 2, '18:00:00', '19:30:00'),
+  (9023, 'MIE', 2, '18:00:00', '19:30:00');
 
 -- ───────────── Artículos de licencia (con tope anual de días para probar las alertas) ─────────────
+-- S-14 es una variante ficticia para probar una licencia en la designación suplente 9023.
 INSERT IGNORE INTO licencia_articulo (cod_licencia, articulo, clase, tipo_licencia, categoria_informe, sit_rev, goce_haberes, autoridad, plazo, tope_dias_anual) VALUES
   ('T-14', '14', 'Licencia', 'Enfermedad común', 'Enfermedad común', 'Titular', 'Con goce de haberes', 'Dirección', 'Según artículo', 30),
+  ('S-14', '14', 'Licencia', 'Enfermedad común', 'Enfermedad común', 'Suplente', 'Con goce de haberes', 'Dirección', 'Según artículo', 20),
   ('T-15', '15', 'Licencia', 'Largo tratamiento', 'Largo tratamiento', 'Titular', 'Con goce de haberes', 'Dirección', 'Según artículo', NULL),
   ('T-20', '20', 'Licencia', 'Razones particulares', 'Razones particulares', 'Titular', 'Con goce de haberes', 'Dirección', 'Según artículo', 6),
   ('T-22', '22', 'Licencia', 'Examen', 'Examen', 'Titular', 'Con goce de haberes', 'Dirección', 'Según artículo', 10),
@@ -272,11 +330,13 @@ COMMIT;
 -- LIMPIEZA (descomentá para quitar los datos de prueba; las carreras, materias,
 -- cargos, artículos y feriados quedan porque pueden ser datos reales)
 -- =============================================================================
--- DELETE FROM asistencia_registro WHERE designacion_id BETWEEN 9001 AND 9022;
+-- DELETE FROM asistencia_registro WHERE designacion_id BETWEEN 9001 AND 9023;
 -- DELETE FROM licencia_otorgada WHERE id BETWEEN 9001 AND 9012;
--- DELETE FROM personal_horario WHERE designacion_id BETWEEN 9001 AND 9022;
--- DELETE FROM personal_historial_designacion WHERE designacion_id BETWEEN 9001 AND 9022;
--- DELETE FROM personal_designacion WHERE id BETWEEN 9001 AND 9022;
+-- DELETE FROM personal_horario WHERE designacion_id BETWEEN 9001 AND 9023;
+-- DELETE FROM personal_historial_designacion WHERE designacion_id BETWEEN 9001 AND 9023;
+-- DELETE FROM personal_designacion WHERE id BETWEEN 9001 AND 9023;
 -- DELETE FROM personal_persona WHERE dni BETWEEN '99000001' AND '99000020';
 -- DELETE FROM auth_user_groups WHERE user_id IN (SELECT id FROM auth_user WHERE username REGEXP '^(bedelia|secretaria|subsecretaria)[0-9]$');
 -- DELETE FROM auth_user WHERE username REGEXP '^(bedelia|secretaria|subsecretaria)[0-9]$';
+-- DELETE FROM personal_unidad_educativa WHERE numero IN ('UE-001', 'UE-002', 'UE-003');
+-- DELETE FROM personal_especialidad_catalogo WHERE titulo IN ('Desarrollo de Software', 'Higiene y Seguridad en el Trabajo', 'Gestión Administrativa');

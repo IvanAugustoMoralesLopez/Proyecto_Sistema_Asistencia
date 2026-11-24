@@ -150,4 +150,33 @@ class AsistenteDeImputacionPantallaTests(TestCase):
         )
 
         html = str(LicenciaOtorgadaForm()['designacion'])
-        self.assertIn(' - Titular - Álgebra</option>', html)
+        self.assertIn(
+            ' - Titular - Álgebra (Profesorado de Matemática)</option>',
+            html,
+        )
+
+    def test_etiqueta_de_designacion_distingue_materia_por_carrera(self):
+        from licencias.forms import LicenciaOtorgadaForm
+        from personal.models import Carrera, EspacioCurricular
+
+        carrera = Carrera.objects.create(nombre="Profesorado de Matemática")
+        materia = EspacioCurricular.objects.create(nombre="Álgebra")
+        materia.carreras.add(carrera)
+        persona = Persona.objects.create(
+            dni=99000033, apellido_nombre="Por Carrera, Docente"
+        )
+        Designacion.objects.create(
+            persona=persona,
+            cargo=self.designacion.cargo,
+            espacio_curricular=materia,
+            carrera=carrera,
+            desde=date(2026, 1, 1),
+            situacion_revista="TIT",
+        )
+
+        html = str(LicenciaOtorgadaForm()["designacion"])
+
+        self.assertIn(
+            " - Titular - Álgebra (Profesorado de Matemática)</option>",
+            html,
+        )

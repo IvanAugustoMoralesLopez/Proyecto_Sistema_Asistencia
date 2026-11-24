@@ -61,6 +61,87 @@ class LicenciaDocenteTests(BaseLicenciaDocente):
         self.assertContains(respuesta, "Materia 2")
         self.assertEqual(respuesta.context["form"].initial["disp_numero"], "1")
 
+    def test_licencia_se_distingue_y_aplica_a_una_materia_en_dos_carreras(self):
+        from personal.models import Carrera, Designacion, EspacioCurricular, Horario
+
+        carrera_a = Carrera.objects.get(nombre="TSDS")
+        carrera_b = Carrera.objects.create(nombre="TSGA")
+        materia = EspacioCurricular.objects.create(nombre="Legislación Laboral")
+        materia.carreras.add(carrera_a, carrera_b)
+        titular = Designacion.objects.create(
+            persona=self.zarate,
+            cargo=self.cargo,
+            espacio_curricular=materia,
+            carrera=carrera_a,
+            situacion_revista="TIT",
+            desde=date(2026, 3, 1),
+        )
+        suplente = Designacion.objects.create(
+            persona=self.zarate,
+            cargo=self.cargo,
+            espacio_curricular=materia,
+            carrera=carrera_b,
+            situacion_revista="SUP",
+            desde=date(2026, 3, 1),
+        )
+        for designacion in (titular, suplente):
+            Horario.objects.create(
+                designacion=designacion, dia="MIE", horas_catedra=2
+            )
+
+        previa = self.client.get(
+            self.url,
+            {
+                "persona": self.zarate.pk,
+                "desde": "2026-10-21",
+                "hasta": "2026-10-21",
+                "articulo": self.enfermedad.pk,
+            },
+        )
+        self.assertEqual(previa.status_code, 200)
+        self.assertContains(previa, "Legislación Laboral (TSDS)")
+        self.assertContains(previa, "Legislación Laboral (TSGA)")
+
+        respuesta = self.client.post(
+            self.url,
+            self.datos(
+                desde="2026-10-21",
+                hasta="2026-10-21",
+                designaciones=[str(titular.pk), str(suplente.pk)],
+            ),
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        licencias = list(
+            LicenciaOtorgada.objects.filter(
+                designacion__in=(titular, suplente)
+            ).select_related("designacion", "articulo")
+        )
+        self.assertEqual(len(licencias), 2)
+        self.assertEqual(
+            {licencia.designacion_id for licencia in licencias},
+            {titular.pk, suplente.pk},
+        )
+        self.assertEqual(
+            {licencia.designacion.carrera_id for licencia in licencias},
+            {carrera_a.pk, carrera_b.pk},
+        )
+        self.assertEqual(
+            {licencia.sit_rev for licencia in licencias},
+            {"Titular", "Suplente"},
+        )
+        self.assertEqual(len({licencia.grupo for licencia in licencias}), 1)
+        self.assertEqual(
+            set(
+                RegistroAsistencia.objects.filter(
+                    designacion__in=(titular, suplente),
+                    fecha=MIE_21,
+                    marca__codigo="LIC",
+                ).values_list("designacion_id", flat=True)
+            ),
+            {titular.pk, suplente.pk},
+        )
+
     def test_llegar_con_la_designacion_trae_al_docente(self):
         respuesta = self.client.get(
             self.url, {"designacion": self.m1.pk, "desde": "2026-10-22"}
