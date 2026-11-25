@@ -714,3 +714,59 @@ def calcular_licencias_por_vencer(dias=DIAS_ANTICIPACION_POR_DEFECTO, hoy=None):
         por_pedido[clave] = fila
         filas.append(fila)
     return filas
+
+
+def calcular_licencias_sin_fin(hoy=None):
+    """
+    Licencias otorgadas que todavía no tienen fecha de fin («hasta» vacío).
+
+    En la asistencia diaria se marcan solo hasta hoy, hasta que se les carga
+    la fecha de fin (Prorrogar). Se listan para que
+    ninguna quede olvidada, sin importar el mes en que empezaron: las más
+    viejas, primero. Una fila por licencia del docente (mismo `grupo`), con
+    las mismas claves que calcular_licencias_por_vencer, `hasta` en None y
+    `dias_abierta`: los días desde que empezó.
+    """
+    hoy = hoy or fecha_de_hoy()
+    licencias = (
+        LicenciaOtorgada.objects.filter(hasta__isnull=True)
+        .select_related(
+            "designacion__persona", "designacion__cargo",
+            "designacion__espacio_curricular", "articulo",
+        )
+        .order_by("desde", "designacion__persona__apellido_nombre", "pk")
+    )
+
+    filas, por_pedido = [], {}
+    for lic in licencias:
+        designacion = lic.designacion
+        materia = (
+            designacion.espacio_curricular.nombre
+            if designacion.espacio_curricular_id else str(designacion.cargo)
+        )
+        clave = lic.grupo or f"pk-{lic.pk}"
+        if clave in por_pedido:
+            por_pedido[clave]["materias"].append(materia)
+            por_pedido[clave]["cantidad_materias"] += 1
+            continue
+        fila = {
+            "pk": lic.pk,
+            "dni": designacion.persona.dni,
+            "docente": designacion.persona.apellido_nombre,
+            "cargo": str(designacion.cargo),
+            "articulo": lic.articulo.articulo,
+            "cod_licencia": lic.articulo.cod_licencia,
+            "tipo_licencia": lic.articulo.tipo_licencia,
+            "instrumento": texto_instrumento(lic) if lic.disp_numero else "Pendiente de numerar",
+            "desde": lic.desde,
+            "hasta": None,
+            "sin_fin": True,
+            "dias_abierta": max((hoy - lic.desde).days, 0),
+            "dias_restantes": None,
+            "vence_hoy": False,
+            "materias": [materia],
+            "cantidad_materias": 1,
+        }
+        por_pedido[clave] = fila
+        filas.append(fila)
+    return filas

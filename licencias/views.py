@@ -41,7 +41,6 @@ from .licencia_docente import (
     materias_afectadas,
     motivos_frecuentes,
     prorrogar,
-    proximo_numero,
     ultimas_licencias,
 )
 from .models import LicenciaArticulo, LicenciaOtorgada, ResolucionAdjunta
@@ -53,6 +52,7 @@ from .planilla_mensual import (
     disposiciones_emitidas_del_mes,
     faltas_sin_formulario,
     imputar_renglones,
+    licencias_sin_fin_del_mes,
     previsualizar_disposiciones_planilla,
     procesar_mes,
 )
@@ -465,6 +465,7 @@ def planilla_mensual(request, anio: int, mes: int):
         "por_emitir": previsualizar_disposiciones_planilla(anio, mes),
         "emitidas": disposiciones_emitidas_del_mes(anio, mes),
         "sin_formulario": faltas_sin_formulario(anio, mes),
+        "sin_fin": licencias_sin_fin_del_mes(anio, mes),
         "puede_modificar": request.user.has_perm("licencias.change_licenciaotorgada"),
         "mes_anterior": {"anio": anio_anterior, "mes": mes_anterior},
         "mes_siguiente": {"anio": anio_siguiente, "mes": mes_siguiente},
@@ -631,11 +632,13 @@ def nueva_licencia(request):
                     hasta=form.cleaned_data["hasta"],
                     designaciones=elegidas,
                     datos=form.cleaned_data,
+                    # RF-16: la licencia se carga sin número; lo recibe al emitir
+                    # las disposiciones del mes, junto con faltas y permisos.
                     disposicion={
                         "tipo": form.cleaned_data["disp_tipo"],
                         "oficina": form.cleaned_data["disp_oficina"],
-                        "numero": form.cleaned_data["disp_numero"],
-                        "anio": form.cleaned_data["disp_anio"],
+                        "numero": "",
+                        "anio": None,
                     },
                 )
             except ValidationError as exc:
@@ -643,11 +646,11 @@ def nueva_licencia(request):
                     form.add_error(None, mensaje)
             else:
                 materias_texto = "materia" if len(creadas) == 1 else "materias"
-                numero = creadas[0].disp_numero
                 messages.success(
                     request,
-                    f"La licencia se registró en {len(creadas)} {materias_texto}"
-                    + (f" con la Disposición N° {numero}/{creadas[0].disp_anio}." if numero else "."),
+                    f"La licencia se registró en {len(creadas)} {materias_texto}. "
+                    "La disposición queda pendiente de numerar: recibe su número al "
+                    "emitir las disposiciones del mes.",
                 )
                 for licencia in creadas:
                     _marcar_y_avisar(request, licencia)
@@ -655,15 +658,12 @@ def nueva_licencia(request):
                     volver or reverse("licencias:detalle_licencia", args=[creadas[0].pk])
                 )
     else:
-        anio = (desde or fecha_de_hoy()).year
         inicial = {
             "persona": persona.pk if persona else None,
             "desde": desde,
             "hasta": hasta,
             "designaciones": con_clase,
             "disp_oficina": oficina,
-            "disp_anio": anio,
-            "disp_numero": str(proximo_numero(oficina, anio)),
             "disp_tipo": DISPOSICION_TIPO,
             "articulo": articulo.pk if articulo else None,
         }

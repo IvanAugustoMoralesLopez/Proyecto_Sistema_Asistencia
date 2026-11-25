@@ -199,28 +199,30 @@
         </div>
     </div>
 
-    <div class="card shadow-sm border-success mb-3">
+    <div class="card shadow-sm border-primary mb-3">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h2 class="h6 mb-0">Disposición interna</h2>
-            <span class="badge text-bg-success">Una sola para todas las materias</span>
+            <span class="badge text-bg-primary">Una sola para todas las materias</span>
         </div>
         <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-3">{{ form.disp_tipo.label_tag }} {{ form.disp_tipo }}</div>
-                <div class="col-md-3">{{ form.disp_oficina.label_tag }} {{ form.disp_oficina }}</div>
-                <div class="col-md-3">
-                    {{ form.disp_numero.label_tag }} {{ form.disp_numero }}
-                    {% for error in form.disp_numero.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-                </div>
-                <div class="col-md-3">
-                    {{ form.disp_anio.label_tag }} {{ form.disp_anio }}
-                    {% for error in form.disp_anio.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            {# RF-16: el número se asigna al emitir las disposiciones del mes. #}
+            <div class="alert alert-primary d-flex gap-2 mb-3" role="note">
+                <i class="bi bi-info-circle"></i>
+                <div>
+                    <strong>El número se asigna a fin de mes.</strong>
+                    Al emitir las disposiciones del mes, esta licencia recibe su número junto con
+                    las inasistencias y los permisos, en orden alfabético por apellido. Hasta
+                    entonces figura como <em>Pendiente de numerar</em>.
                 </div>
             </div>
-            <p class="small text-secondary mt-2 mb-0">
-                Se propone el próximo número libre de la oficina en el año. Se puede cambiar:
-                si el número ya existe, el sistema avisa y no guarda.
-            </p>
+            <div class="row g-3">
+                <div class="col-md-4">{{ form.disp_tipo.label_tag }} {{ form.disp_tipo }}</div>
+                <div class="col-md-4">{{ form.disp_oficina.label_tag }} {{ form.disp_oficina }}</div>
+                <div class="col-md-4">
+                    <label class="form-label" for="disp-numero-pendiente">Número</label>
+                    <input class="form-control" id="disp-numero-pendiente" value="Se asigna al emitir" disabled>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -261,15 +263,33 @@
         });
     }
 
-    ["id_persona", "id_desde", "id_hasta", "id_articulo"].forEach(function (id) {
+    function recalcular() {
+        var accion = document.createElement("input");
+        accion.type = "hidden"; accion.name = "accion"; accion.value = "calcular";
+        form.appendChild(accion);
+        form.noValidate = true;
+        form.submit();
+    }
+
+    /* Docente y motivo: se recalcula apenas se elige. */
+    ["id_persona", "id_articulo"].forEach(function (id) {
+        var campo = document.getElementById(id);
+        if (campo) { campo.addEventListener("change", recalcular); }
+    });
+
+    /* Fechas: el navegador avisa un cambio con cada dígito que se tipea (al
+       escribir el año 2026, primero ve el año 0002). Se recalcula solo con la
+       fecha completa (año 2000 o más, o vacía) y cuando se deja de tipear. */
+    var espera = null;
+    ["id_desde", "id_hasta"].forEach(function (id) {
         var campo = document.getElementById(id);
         if (!campo) { return; }
+        campo.addEventListener("keydown", function () { clearTimeout(espera); });
         campo.addEventListener("change", function () {
-            var accion = document.createElement("input");
-            accion.type = "hidden"; accion.name = "accion"; accion.value = "calcular";
-            form.appendChild(accion);
-            form.noValidate = true;
-            form.submit();
+            clearTimeout(espera);
+            var anio = campo.value ? parseInt(campo.value.slice(0, 4), 10) : null;
+            if (anio !== null && anio < 2000) { return; }
+            espera = setTimeout(recalcular, 700);
         });
     });
 })();

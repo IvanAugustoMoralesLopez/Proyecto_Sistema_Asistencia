@@ -35,7 +35,9 @@
                 <div class="fs-5 fw-semibold">N° {{ licencia.disp_numero }}/{{ licencia.disp_anio }} · Oficina {{ licencia.disp_oficina }}</div>
                 <a class="small" href="{% url 'licencias:planilla_mensual' licencia.desde.year licencia.desde.month %}#disposiciones-del-mes">Ver en las disposiciones del mes</a>
             {% else %}
-                <div class="fs-6 text-secondary">Sin número todavía</div>
+                <div class="fs-6"><span class="badge text-bg-warning">Pendiente de numerar</span></div>
+                <div class="small text-secondary">Se asigna al emitir las disposiciones de la
+                    <a href="{% url 'licencias:planilla_mensual' licencia.desde.year licencia.desde.month %}">planilla de {{ licencia.desde|date:"F" }}</a>.</div>
             {% endif %}
         </div></div>
     </div>

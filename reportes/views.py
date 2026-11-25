@@ -31,6 +31,7 @@ from .selectors import (
     calcular_designaciones_con_horas_sin_cuadrar,
     calcular_designaciones_por_vencer,
     calcular_licencias_por_vencer,
+    calcular_licencias_sin_fin,
     UMBRAL_POR_DEFECTO,
     buscar_eventos,
     calcular_alertas,
@@ -320,13 +321,29 @@ def alertas_horas(request):
 @login_required
 @permission_required("reportes.consultar_licencias", raise_exception=True)
 def alertas_licencias_vencimiento(request):
-    datos = request.GET or {"dias": DIAS_ANTICIPACION_POR_DEFECTO}
+    datos = request.GET.copy() if request.GET else {}
+    datos.setdefault("dias", DIAS_ANTICIPACION_POR_DEFECTO)
     form = FiltroLicenciasVencimientoForm(datos)
-    lista = []
+    lista, mostrar = [], FiltroLicenciasVencimientoForm.POR_VENCER
+    por_vencer, sin_fin = [], []
     if form.is_valid():
-        lista = calcular_licencias_por_vencer(form.cleaned_data["dias"])
+        mostrar = form.cleaned_data["mostrar"]
+        por_vencer = calcular_licencias_por_vencer(form.cleaned_data["dias"])
+        sin_fin = calcular_licencias_sin_fin()
+        if mostrar == FiltroLicenciasVencimientoForm.SIN_FIN:
+            lista = sin_fin
+        elif mostrar == FiltroLicenciasVencimientoForm.TODAS:
+            lista = por_vencer + sin_fin
+        else:
+            lista = por_vencer
     return render(
         request,
         "reportes/alertas_licencias_vencimiento.html",
-        {"form": form, "alertas": lista},
+        {
+            "form": form,
+            "alertas": lista,
+            "mostrar": mostrar,
+            "cantidad_por_vencer": len(por_vencer),
+            "cantidad_sin_fin": len(sin_fin),
+        },
     )

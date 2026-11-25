@@ -43,6 +43,12 @@ class BaseLicenciaDocente(BasePlanillaMensual):
         datos.update(cambios)
         return datos
 
+    def emitir_octubre(self):
+        planilla = reverse("licencias:planilla_mensual", args=[2026, 10])
+        self.client.post(planilla, {"accion": "procesar"})
+        self.client.post(planilla, {"accion": "emitir"})
+        return planilla
+
 
 class LicenciaDocenteTests(BaseLicenciaDocente):
     def test_calcula_las_materias_afectadas_con_sus_dias(self):
@@ -52,14 +58,16 @@ class LicenciaDocenteTests(BaseLicenciaDocente):
         self.assertEqual(por_materia["Materia 2"]["dias"], [JUE_22, VIE_23])
         self.assertEqual(por_materia["Materia 1"]["horas"], 5)
 
-    def test_la_pantalla_precarga_docente_materias_y_numero(self):
+    def test_la_pantalla_precarga_docente_y_materias_sin_numero(self):
+        """RF-16: el número de disposición ya no se propone al cargar."""
         respuesta = self.client.get(
             self.url, {"persona": self.zarate.pk, "desde": "2026-10-21"}
         )
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, "Materia 1")
         self.assertContains(respuesta, "Materia 2")
-        self.assertEqual(respuesta.context["form"].initial["disp_numero"], "1")
+        self.assertNotIn("disp_numero", respuesta.context["form"].initial)
+        self.assertContains(respuesta, "Se asigna al emitir")
 
     def test_licencia_se_distingue_y_aplica_a_una_materia_en_dos_carreras(self):
         from personal.models import Carrera, Designacion, EspacioCurricular, Horario
@@ -148,13 +156,14 @@ class LicenciaDocenteTests(BaseLicenciaDocente):
         )
         self.assertEqual(respuesta.context["persona"], self.zarate)
 
-    def test_guarda_una_licencia_por_materia_con_la_misma_disposicion(self):
+    def test_guarda_una_licencia_por_materia_pendiente_de_numerar(self):
+        # Aunque llegue un número en el formulario, la licencia queda sin número (RF-16).
         respuesta = self.client.post(self.url, self.datos())
         self.assertEqual(respuesta.status_code, 302)
         licencias = list(LicenciaOtorgada.objects.order_by("designacion_id"))
         self.assertEqual(len(licencias), 2)
         self.assertEqual(licencias[0].grupo, licencias[1].grupo)
-        self.assertEqual({l.disp_numero for l in licencias}, {"7"})
+        self.assertEqual({l.disp_numero for l in licencias}, {None})
         # La diaria queda marcada con LIC en los días con clase de cada materia.
         marcados = set(
             RegistroAsistencia.objects.filter(marca__codigo="LIC").values_list(
@@ -166,15 +175,32 @@ class LicenciaDocenteTests(BaseLicenciaDocente):
             {(self.m1.pk, MIE_21), (self.m1.pk, JUE_22), (self.m2.pk, JUE_22), (self.m2.pk, VIE_23)},
         )
 
-    def test_un_numero_de_disposicion_usado_no_se_repite(self):
+    def test_al_emitir_la_licencia_recibe_un_numero_en_todas_sus_materias(self):
+        from licencias.models import RenglonMensual
+
         self.client.post(self.url, self.datos())
-        respuesta = self.client.post(
-            self.url,
-            self.datos(persona=self.abel.pk, designaciones=[self.m3.pk], desde="2026-10-29", hasta="2026-10-29"),
+        self.emitir_octubre()
+        self.assertEqual(
+            set(LicenciaOtorgada.objects.values_list("disp_numero", "disp_anio", "disp_oficina")),
+            {("1", 2026, "1452")},
         )
-        self.assertEqual(respuesta.status_code, 200)
-        self.assertContains(respuesta, "ya la usa")
-        self.assertEqual(LicenciaOtorgada.objects.count(), 2)
+        self.assertEqual(
+            set(RenglonMensual.objects.values_list("disp_numero", flat=True)), {"1"}
+        )
+
+    def test_licencias_y_faltas_se_numeran_juntas_en_orden_alfabetico(self):
+        """RF-16: Abel (falta con formulario) va antes que Zárate (licencia)."""
+        self.client.post(self.url, self.datos())
+        self.marcar(self.m3, date(2026, 10, 29), "I", "2", nro_formulario="F-9",
+                    estado_justificacion="JUSTIFICADA")
+        self.emitir_octubre()
+        self.assertEqual(
+            set(LicenciaOtorgada.objects.values_list("disp_numero", flat=True)), {"2"}
+        )
+        from licencias.models import RenglonMensual
+        self.assertEqual(
+            RenglonMensual.objects.get(designacion=self.m3).disp_numero, "1"
+        )
 
     def test_es_todo_o_nada_si_una_materia_no_tiene_articulo(self):
         # No hay artículo 14 para interinos: Materia 2 no se puede encuadrar.
@@ -196,8 +222,9 @@ class LicenciaDocenteTests(BaseLicenciaDocente):
         self.assertEqual(por_materia[self.m1.pk].articulo, self.enfermedad)
         self.assertEqual(por_materia[self.m2.pk].articulo, self.enfermedad_sup)
         self.assertEqual(por_materia[self.m2.pk].sit_rev, "Suplente")
+        self.emitir_octubre()
         self.assertEqual(
-            {l.disp_numero for l in por_materia.values()}, {"7"}
+            set(LicenciaOtorgada.objects.values_list("disp_numero", flat=True)), {"1"}
         )
 
     def test_el_tope_cuenta_dias_del_docente_no_licencias(self):
@@ -236,7 +263,12 @@ class LicenciaDocenteTests(BaseLicenciaDocente):
         )
         self.assertContains(respuesta, "Materia 1")
         self.assertContains(respuesta, "Materia 2")
-        self.assertContains(respuesta, "N° 7/2026")
+        self.assertContains(respuesta, "Pendiente de numerar")
+        self.emitir_octubre()
+        respuesta = self.client.get(
+            reverse("licencias:detalle_licencia", args=[licencia.pk])
+        )
+        self.assertContains(respuesta, "N° 1/2026")
 
 
 class DisposicionesEditablesTests(BaseLicenciaDocente):
@@ -244,14 +276,13 @@ class DisposicionesEditablesTests(BaseLicenciaDocente):
         from licencias.models import RenglonMensual
 
         self.client.post(self.url, self.datos())
-        planilla = reverse("licencias:planilla_mensual", args=[2026, 10])
-        self.client.post(planilla, {"accion": "procesar"})
+        planilla = self.emitir_octubre()
         self.assertEqual(
-            set(RenglonMensual.objects.values_list("disp_numero", flat=True)), {"7"}
+            set(RenglonMensual.objects.values_list("disp_numero", flat=True)), {"1"}
         )
         self.client.post(
             planilla,
-            {"accion": "disposiciones", "disp-numero-2026-7": "9", "disp-oficina-2026-7": "1452"},
+            {"accion": "disposiciones", "disp-numero-2026-1": "9", "disp-oficina-2026-1": "1452"},
         )
         self.assertEqual(
             set(RenglonMensual.objects.values_list("disp_numero", flat=True)), {"9"}
@@ -267,17 +298,17 @@ class DisposicionesEditablesTests(BaseLicenciaDocente):
         self.client.post(
             self.url,
             self.datos(persona=self.abel.pk, designaciones=[self.m3.pk],
-                       desde="2026-10-22", hasta="2026-10-22", disp_numero="8"),
+                       desde="2026-10-22", hasta="2026-10-22"),
         )
-        planilla = reverse("licencias:planilla_mensual", args=[2026, 10])
-        self.client.post(planilla, {"accion": "procesar"})
+        planilla = self.emitir_octubre()
+        # Abel recibe el 1 y Zárate el 2: el 1 de Abel no puede pasar a ser el 2.
         self.client.post(
             planilla,
-            {"accion": "disposiciones", "disp-numero-2026-8": "7", "disp-oficina-2026-8": "1452"},
+            {"accion": "disposiciones", "disp-numero-2026-1": "2", "disp-oficina-2026-1": "1452"},
         )
         self.assertEqual(
             set(RenglonMensual.objects.filter(designacion=self.m3).values_list("disp_numero", flat=True)),
-            {"8"},
+            {"1"},
         )
 
 
@@ -371,4 +402,52 @@ class AvisoEnLegajosTests(BaseLicenciaDocente):
         self.assertContains(respuesta, "Vence hoy")
         self.assertContains(
             respuesta, reverse("licencias:detalle_licencia", args=[licencia.pk]) + "?volver="
+        )
+
+
+class SinFechaDeFinTests(BaseLicenciaDocente):
+    """
+    Una licencia sin fecha de fin se marca en la diaria solo hasta hoy: queda
+    a la vista en la planilla del mes en que empieza, y recibe un solo número
+    al emitir ese mes.
+    """
+
+    def test_aparece_en_la_planilla_del_mes_en_que_empieza(self):
+        self.client.post(self.url, self.datos(hasta=""))
+        octubre = self.client.get(reverse("licencias:planilla_mensual", args=[2026, 10]))
+        self.assertContains(octubre, "Licencias sin fecha de fin que empezaron este mes (1)")
+        self.assertContains(octubre, "Zárate, Ana")
+        self.assertContains(octubre, "Pendiente de numerar")
+        self.assertContains(octubre, "#prorrogar")
+        noviembre = self.client.get(reverse("licencias:planilla_mensual", args=[2026, 11]))
+        self.assertNotContains(noviembre, "Licencias sin fecha de fin que empezaron")
+
+    def test_se_numera_una_sola_vez_al_emitir_el_mes_en_que_empieza(self):
+        from licencias.models import RenglonMensual
+
+        self.client.post(self.url, self.datos(hasta=""))
+        self.emitir_octubre()
+        self.assertEqual(
+            set(LicenciaOtorgada.objects.values_list("disp_numero", flat=True)), {"1"}
+        )
+        self.assertEqual(
+            set(RenglonMensual.objects.values_list("disp_numero", flat=True)), {"1"}
+        )
+
+    def test_si_todavia_no_tiene_dias_marcados_se_numera_igual(self):
+        """Una licencia sin fin sin renglones en el mes recibe su número con ese mes."""
+        import uuid
+
+        grupo = uuid.uuid4()
+        for designacion in (self.m1, self.m2):
+            LicenciaOtorgada.objects.create(
+                designacion=designacion, articulo=self.enfermedad, sit_rev="Titular",
+                desde=date(2026, 10, 30), hasta=None, grupo=grupo,
+            )
+        self.marcar(self.m3, date(2026, 10, 29), "I", "2", nro_formulario="F-9",
+                    estado_justificacion="JUSTIFICADA")
+        self.emitir_octubre()
+        # Abel (falta) recibe el 1; la licencia de Zárate, el 2, en sus dos materias.
+        self.assertEqual(
+            set(LicenciaOtorgada.objects.values_list("disp_numero", flat=True)), {"2"}
         )

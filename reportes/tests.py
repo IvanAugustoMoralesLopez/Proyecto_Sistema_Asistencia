@@ -809,6 +809,36 @@ class AlertasLicenciasVencimientoTests(TestCase):
         self.licencia(date(2026, 11, 2), None)
         self.assertEqual(calcular_licencias_por_vencer(30, hoy=self.HOY), [])
 
+    def test_las_licencias_sin_fecha_de_fin_tienen_su_filtro(self):
+        from .selectors import calcular_licencias_sin_fin
+
+        vieja = self.licencia(date(2026, 9, 14), None)
+        self.licencia(date(2026, 11, 2), None)
+        self.licencia(date(2026, 11, 2), date(2026, 11, 13))   # esta sí vence
+        filas = calcular_licencias_sin_fin(hoy=self.HOY)
+        self.assertEqual([f["pk"] for f in filas][0], vieja.pk)   # la más vieja primero
+        self.assertEqual(len(filas), 2)
+        self.assertEqual(filas[0]["dias_abierta"], 53)
+        self.assertEqual(filas[0]["instrumento"], "Pendiente de numerar")
+
+    def test_la_vista_filtra_por_vencer_sin_fin_y_todas(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        hoy = timezone.localdate()
+        self.licencia(hoy, hoy + timedelta(days=5))
+        self.licencia(hoy, None)
+        por_vencer = self.client.get(self.url)
+        sin_fin = self.client.get(self.url, {"mostrar": "sin_fin", "dias": 30})
+        todas = self.client.get(self.url, {"mostrar": "todas", "dias": 30})
+        self.assertEqual(len(por_vencer.context["alertas"]), 1)
+        self.assertEqual(por_vencer.context["cantidad_sin_fin"], 1)
+        self.assertEqual(len(sin_fin.context["alertas"]), 1)
+        self.assertContains(sin_fin, "Sin fecha de fin")
+        self.assertContains(sin_fin, "Poner fecha de fin")
+        self.assertEqual(len(todas.context["alertas"]), 2)
+
     def test_vista_requiere_permiso(self):
         self.client.force_login(crear_usuario("sin"))
         self.assertEqual(self.client.get(self.url).status_code, 403)

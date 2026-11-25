@@ -10,6 +10,13 @@
 <form method="get" class="card card-body mb-4">
     <div class="row g-3 align-items-end">
         <div class="col-md-3">
+            <label class="form-label" for="{{ form.mostrar.id_for_label }}">{{ form.mostrar.label }}</label>
+            {{ form.mostrar }}
+            <div class="form-text">
+                Por vencer: {{ cantidad_por_vencer }} · Sin fecha de fin: {{ cantidad_sin_fin }}
+            </div>
+        </div>
+        <div class="col-md-3">
             <label class="form-label" for="{{ form.dias.id_for_label }}">{{ form.dias.label }}</label>
             {{ form.dias }}
             {% for error in form.dias.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
@@ -22,8 +29,15 @@
 </form>
 
 <p class="text-muted small">
-    Licencias otorgadas cuya fecha «hasta» está por llegar, para renovarlas o cargar el reemplazo a tiempo.
-    No se incluyen las licencias sin fecha de fin ni las ya finalizadas.
+    {% if mostrar == "sin_fin" %}
+        Licencias otorgadas que todavía no tienen fecha de fin: en la asistencia diaria se marcan solo
+        hasta hoy. Usá <strong>Poner fecha de fin</strong> cuando llegue el alta o la resolución, para que se marque el resto.
+    {% elif mostrar == "todas" %}
+        Licencias por vencer y licencias sin fecha de fin. No se incluyen las ya finalizadas.
+    {% else %}
+        Licencias otorgadas cuya fecha «hasta» está por llegar, para renovarlas o cargar el reemplazo a tiempo.
+        Las licencias sin fecha de fin se ven eligiendo «Sin fecha de fin» en Mostrar.
+    {% endif %}
 </p>
 
 <div class="table-responsive">
@@ -48,7 +62,8 @@
             {% for a in alertas %}
                 <tr>
                     <td>
-                        {% if a.vence_hoy %}<span class="badge text-bg-danger">Vence hoy</span>
+                        {% if a.sin_fin %}<span class="badge text-bg-warning">Sin fecha de fin</span>
+                        {% elif a.vence_hoy %}<span class="badge text-bg-danger">Vence hoy</span>
                         {% elif a.dias_restantes <= 7 %}<span class="badge text-bg-warning">Vence pronto</span>
                         {% else %}<span class="badge text-bg-info">Por vencer</span>{% endif %}
                     </td>
@@ -60,19 +75,26 @@
                     <td>{{ a.tipo_licencia }}</td>
                     <td>{{ a.instrumento }}</td>
                     <td>{{ a.desde|date:"d/m/Y" }}</td>
-                    <td>{{ a.hasta|date:"d/m/Y" }}</td>
-                    <td class="text-end">{{ a.dias_restantes }}</td>
+                    <td>{% if a.sin_fin %}—{% else %}{{ a.hasta|date:"d/m/Y" }}{% endif %}</td>
+                    <td class="text-end">{% if a.sin_fin %}<span class="small text-secondary">abierta hace {{ a.dias_abierta }}</span>{% else %}{{ a.dias_restantes }}{% endif %}</td>
                     <td class="text-nowrap">
                         {% if perms.licencias.view_licenciaotorgada %}
+                            {% if a.sin_fin %}
+                            <a class="btn btn-sm btn-warning"
+                               href="{% url 'licencias:detalle_licencia' a.pk %}?volver={{ request.get_full_path|urlencode }}#prorrogar">
+                                Poner fecha de fin
+                            </a>
+                            {% else %}
                             <a class="btn btn-sm {% if a.vence_hoy %}btn-primary{% else %}btn-outline-primary{% endif %}"
                                href="{% url 'licencias:detalle_licencia' a.pk %}?volver={{ request.get_full_path|urlencode }}#prorrogar">
                                 Ver / prorrogar →
                             </a>
+                            {% endif %}
                         {% endif %}
                     </td>
                 </tr>
             {% empty %}
-                <tr><td colspan="12" class="text-center text-muted py-4">No hay licencias por vencer con estos criterios.</td></tr>
+                <tr><td colspan="12" class="text-center text-muted py-4">{% if mostrar == "sin_fin" %}No hay licencias sin fecha de fin.{% else %}No hay licencias por vencer con estos criterios.{% endif %}</td></tr>
             {% endfor %}
         </tbody>
     </table>

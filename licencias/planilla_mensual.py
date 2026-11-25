@@ -547,6 +547,56 @@ def faltas_sin_formulario(anio, mes):
     return pendientes
 
 
+def licencias_sin_fin_del_mes(anio, mes):
+    """
+    Licencias sin fecha de fin que empiezan en el mes, una por pedido (las
+    materias de una licencia por docente comparten `grupo`).
+
+    Una licencia sin "hasta" se marca en la diaria solo hasta hoy (RF-14):
+    este cuadro las deja a la vista en el mes en que empezaron, para
+    cargarles la fecha de fin con Prorrogar y que se marque el resto.
+    """
+    from .models import LicenciaOtorgada
+
+    primer_dia, ultimo_dia = _rango_del_mes(anio, mes)
+    licencias = (
+        LicenciaOtorgada.objects.filter(
+            hasta__isnull=True,
+            desde__range=(primer_dia, ultimo_dia),
+        )
+        .select_related(
+            'designacion__persona',
+            'designacion__espacio_curricular',
+            'designacion__cargo',
+            'articulo',
+        )
+        .order_by('desde', 'pk')
+    )
+
+    pedidos = {}
+    for licencia in licencias:
+        clave = licencia.grupo or licencia.pk
+        designacion = licencia.designacion
+        materia = (
+            designacion.espacio_curricular.nombre
+            if designacion.espacio_curricular_id
+            else designacion.cargo.descripcion
+        )
+        if clave not in pedidos:
+            pedidos[clave] = {
+                'licencia': licencia,
+                'docente': designacion.persona,
+                'articulo': licencia.articulo,
+                'desde': licencia.desde,
+                'materias': [],
+            }
+        pedidos[clave]['materias'].append(materia)
+
+    resultado = list(pedidos.values())
+    resultado.sort(key=lambda p: (_clave_alfabetica(p['docente'].apellido_nombre), p['desde']))
+    return resultado
+
+
 def articulos_para_renglon(renglon, todos):
     """Artículos del catálogo que corresponden a la situación de revista."""
     situacion = (
@@ -730,20 +780,76 @@ def _lleva_disposicion(renglon):
 
 def _bloques_a_numerar(anio, mes):
     """
-    Períodos del mes que todavía no tienen disposición, en orden alfabético
-    por apellido (RF-16). Devuelve [(clave, [renglones])].
+    Lo que se numera al emitir las disposiciones del mes (RF-16), en orden
+    alfabético por apellido. Cada bloque es un dict con `docente`, `desde`,
+    `hasta`, `renglones` (los del mes que comparten la disposición) y
+    `licencias` (las licencias otorgadas que reciben el mismo número).
+
+    - Renglones del mes sin número que llevan disposición: inasistencias con
+      formulario, permisos y licencias (RN-11: uno por agente y período).
+    - Licencias sin fecha de fin que empezaron en el mes y todavía no tienen
+      número ni renglones en el mes (por ejemplo, si empiezan después de hoy
+      y todavía no se marcó ningún día): su disposición se emite igual con
+      el mes en que empiezan. Las que ya tienen renglones se numeran por
+      ellos, una sola vez.
     """
-    bloques = defaultdict(list)
+    bloques = {}
     for renglon in renglones_del_mes(anio, mes):
-        if not renglon.disp_numero and _lleva_disposicion(renglon):
-            bloques[renglon.clave_de_bloque].append(renglon)
+        if renglon.disp_numero or not _lleva_disposicion(renglon):
+            continue
+        bloque = bloques.setdefault(renglon.clave_de_bloque, {
+            'docente': renglon.designacion.persona,
+            'desde': renglon.desde,
+            'hasta': renglon.hasta,
+            'renglones': [],
+            'licencias': [],
+        })
+        bloque['renglones'].append(renglon)
 
-    def orden(item):
-        (persona_id, desde, hasta), renglones = item
-        apellido = renglones[0].designacion.persona.apellido_nombre
-        return (_clave_alfabetica(apellido), desde, hasta, persona_id)
+    # Pedidos que ya se numeran por sus renglones: no llevan un segundo número.
+    con_renglones = set()
+    for bloque in bloques.values():
+        for renglon in bloque['renglones']:
+            if renglon.licencia_id:
+                con_renglones.add(renglon.licencia_id)
+                if renglon.licencia.grupo:
+                    con_renglones.add(renglon.licencia.grupo)
 
-    return sorted(bloques.items(), key=orden)
+    for pedido in licencias_sin_fin_del_mes(anio, mes):
+        licencia = pedido['licencia']
+        if licencia.disp_numero or (licencia.grupo or licencia.pk) in con_renglones:
+            continue
+        bloques[('sin_fin', licencia.grupo or licencia.pk)] = {
+            'docente': pedido['docente'],
+            'desde': pedido['desde'],
+            'hasta': None,
+            'renglones': [],
+            'licencias': [licencia],
+            'materias': pedido['materias'],
+        }
+
+    def orden(bloque):
+        return (
+            _clave_alfabetica(bloque['docente'].apellido_nombre),
+            bloque['desde'],
+            bloque['hasta'] or bloque['desde'],
+            bloque['docente'].pk,
+        )
+
+    return sorted(bloques.values(), key=orden)
+
+
+def _licencias_del_bloque(bloque):
+    """Todas las licencias que comparten el número: las del pedido completo (grupo)."""
+    ids = {r.licencia_id for r in bloque['renglones'] if r.licencia_id}
+    ids |= {licencia.pk for licencia in bloque['licencias']}
+    if not ids:
+        return LicenciaOtorgada.objects.none()
+    grupos = set(
+        LicenciaOtorgada.objects.filter(pk__in=ids, grupo__isnull=False)
+        .values_list('grupo', flat=True)
+    )
+    return LicenciaOtorgada.objects.filter(Q(pk__in=ids) | Q(grupo__in=grupos))
 
 
 def disposiciones_emitidas_del_mes(anio, mes):
@@ -774,24 +880,27 @@ def disposiciones_emitidas_del_mes(anio, mes):
 
 
 def previsualizar_disposiciones_planilla(anio, mes):
-    """[(numero, [renglones])] con los números que se asignarían."""
+    """[(numero, bloque)] con los números que se asignarían al emitir."""
     numero = ultimo_numero_emitido(_oficina_por_defecto(), anio)
     resultado = []
-    for _, renglones in _bloques_a_numerar(anio, mes):
+    for bloque in _bloques_a_numerar(anio, mes):
         numero += 1
-        resultado.append((numero, renglones))
+        resultado.append((numero, bloque))
     return resultado
 
 
 @transaction.atomic
 def emitir_disposiciones_planilla(anio, mes, usuario=None):
     """
-    RF-16: numera las disposiciones internas del mes.
+    RF-16: numera las disposiciones internas del mes, todas juntas.
 
+    - Correlativas, continuando el último número de la oficina y el año, en
+      orden alfabético por apellido del docente: inasistencias con
+      formulario, permisos y licencias, sin distinguir (las licencias ya no
+      se numeran al cargarlas).
     - RN-11: un único número para todas las materias de un agente en un
-      mismo día o período de licencia.
-    - Correlativas, continuando el último número de la oficina y el año, con
-      los períodos ordenados alfabéticamente por apellido del docente.
+      mismo día o período. Una licencia lo recibe en todas sus materias
+      (su `grupo`) y en sus renglones de otros meses todavía sin número.
     - RN-07 / RN-08: oficina de los parámetros (1452) y año del período.
 
     Devuelve [(numero, [renglones])].
@@ -801,16 +910,34 @@ def emitir_disposiciones_planilla(anio, mes, usuario=None):
     numero = ultimo_numero_emitido(oficina, anio)
     emitidas = []
 
-    for _, renglones in _bloques_a_numerar(anio, mes):
+    for bloque in _bloques_a_numerar(anio, mes):
         numero += 1
-        for renglon in renglones:
+        for renglon in bloque['renglones']:
             renglon.disp_tipo = DISPOSICION_TIPO
             renglon.disp_numero = str(numero)
             renglon.disp_anio = anio
             renglon.oficina = renglon.oficina or oficina
             renglon.actualizado_por = usuario
             renglon.save()
-        emitidas.append((numero, renglones))
+
+        licencias = _licencias_del_bloque(bloque)
+        if licencias.exists():
+            licencias.update(
+                disp_tipo=DISPOSICION_TIPO,
+                disp_numero=str(numero),
+                disp_anio=anio,
+                disp_oficina=oficina,
+            )
+            # Renglones de esas licencias en otros meses, todavía sin número.
+            RenglonMensual.objects.filter(
+                licencia__in=licencias, disp_numero=''
+            ).update(
+                disp_tipo=DISPOSICION_TIPO,
+                disp_numero=str(numero),
+                disp_anio=anio,
+                actualizado_por=usuario,
+            )
+        emitidas.append((numero, bloque['renglones']))
 
     return emitidas
 

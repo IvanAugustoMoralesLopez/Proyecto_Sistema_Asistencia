@@ -37,6 +37,58 @@
     {% endif %}
 </div>
 
+{% if sin_fin %}
+{# Licencias sin fecha de fin que empezaron este mes: se marcan en la diaria
+   solo hasta hoy. Se las muestra acá para cargarles la fecha de fin con
+   Prorrogar. #}
+<div class="card border-warning shadow-sm mb-4" id="licencias-sin-fin">
+    <div class="card-header bg-warning-subtle">
+        <h2 class="h5 mb-0">Licencias sin fecha de fin que empezaron este mes ({{ sin_fin|length }})</h2>
+    </div>
+    <div class="card-body">
+        <p class="mb-3">
+            Estas licencias todavía no tienen fecha de fin: en la asistencia diaria se marcan solo
+            hasta hoy, así que en los cuadros de abajo figuran hasta hoy. Cuando se sepa hasta
+            cuándo, cargala con <strong>Poner fecha de fin</strong> y después tocá
+            <strong>Volver a procesar el mes</strong>.
+        </p>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Docente</th>
+                        <th>Artículo</th>
+                        <th>Desde</th>
+                        <th>Materias</th>
+                        <th>Disposición</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pedido in sin_fin %}
+                        <tr>
+                            <td>{{ pedido.docente.apellido_nombre }}<br><small class="text-secondary">DNI {{ pedido.docente.dni }}</small></td>
+                            <td>{{ pedido.articulo.articulo }} · {{ pedido.articulo.tipo_licencia }}<br><small class="text-secondary">código {{ pedido.articulo.cod_licencia }}</small></td>
+                            <td class="text-nowrap">{{ pedido.desde|date:"d/m/Y" }}</td>
+                            <td>
+                                {% for materia in pedido.materias %}<div>{{ materia }}</div>{% endfor %}
+                            </td>
+                            <td class="text-nowrap">{% if pedido.licencia.disp_numero %}{{ pedido.licencia.disp_numero }}/{{ pedido.licencia.disp_anio }}{% else %}<span class="badge text-bg-warning">Pendiente de numerar</span>{% endif %}</td>
+                            <td class="text-end">
+                                <a class="btn btn-sm btn-outline-warning text-dark"
+                                   href="{% url 'licencias:detalle_licencia' pedido.licencia.pk %}?volver={{ request.get_full_path|urlencode }}#prorrogar">
+                                    Poner fecha de fin
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% if not hay_renglones %}
     <div class="alert alert-info">
         Todavía no hay renglones para este mes. Tocá <strong>Procesar el mes</strong>
@@ -231,22 +283,34 @@
 
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-header bg-dark text-white">
-        <h2 class="h5 mb-0">Disposiciones de faltas y permisos a emitir</h2>
+        <h2 class="h5 mb-0">Disposiciones del mes a emitir</h2>
     </div>
     <div class="card-body">
         <p class="text-secondary">
-            Las licencias ya traen su disposición desde que se cargan. Acá quedan las
-            faltas con formulario y los permisos: una sola disposición por docente y
-            período, numeradas en forma correlativa y en orden alfabético por apellido.
+            Licencias, faltas con formulario y permisos se numeran juntos a fin de mes (RF-16):
+            una sola disposición por docente y período, correlativas y en orden alfabético por
+            apellido. Las licencias sin fecha de fin se numeran con el mes en que empiezan.
         </p>
         {% if por_emitir %}
             <ul class="mb-3">
-                {% for numero, renglones in por_emitir %}
+                {% for numero, bloque in por_emitir %}
                     <li>
                         <strong>N° {{ numero }}/{{ anio }}</strong> —
-                        {{ renglones.0.designacion.persona.apellido_nombre }},
-                        {{ renglones.0.desde|date:"d/m/Y" }} al {{ renglones.0.hasta|date:"d/m/Y" }}
-                        ({{ renglones|length }} materia{{ renglones|length|pluralize }})
+                        {{ bloque.docente.apellido_nombre }},
+                        {% if bloque.hasta %}
+                            {{ bloque.desde|date:"d/m/Y" }} al {{ bloque.hasta|date:"d/m/Y" }}
+                            ({{ bloque.renglones|length }} materia{{ bloque.renglones|length|pluralize }})
+                        {% else %}
+                            licencia desde el {{ bloque.desde|date:"d/m/Y" }}, sin fecha de fin
+                            ({{ bloque.materias|length }} materia{{ bloque.materias|length|pluralize }})
+                        {% endif %}
+                        {% if bloque.renglones.0.marca == "LIC" or bloque.renglones.0.marca == "LT" or not bloque.hasta %}
+                            <span class="badge text-bg-primary">Licencia</span>
+                        {% elif bloque.renglones.0.marca == "P" %}
+                            <span class="badge text-bg-secondary">Permiso</span>
+                        {% else %}
+                            <span class="badge text-bg-warning">Inasistencia</span>
+                        {% endif %}
                     </li>
                 {% endfor %}
             </ul>

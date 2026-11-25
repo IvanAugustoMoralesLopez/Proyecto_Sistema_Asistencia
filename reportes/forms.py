@@ -329,9 +329,27 @@ class FiltroDesignacionesForm(forms.Form):
 
 
 class FiltroLicenciasVencimientoForm(forms.Form):
+    POR_VENCER = "por_vencer"
+    SIN_FIN = "sin_fin"
+    TODAS = "todas"
+    MOSTRAR = [
+        (POR_VENCER, "Por vencer"),
+        (SIN_FIN, "Sin fecha de fin"),
+        (TODAS, "Todas"),
+    ]
+
+    mostrar = forms.ChoiceField(
+        label="Mostrar",
+        choices=MOSTRAR,
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
     dias = forms.TypedChoiceField(
         label="Avisar con",
         choices=FiltroDesignacionesForm.ANTICIPACIONES,
         coerce=int,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
+
+    def clean_mostrar(self):
+        return self.cleaned_data.get("mostrar") or self.POR_VENCER
