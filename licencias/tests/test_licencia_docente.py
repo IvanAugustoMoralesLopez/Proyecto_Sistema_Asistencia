@@ -419,6 +419,7 @@ class SinFechaDeFinTests(BaseLicenciaDocente):
         self.assertContains(octubre, "Zárate, Ana")
         self.assertContains(octubre, "Pendiente de numerar")
         self.assertContains(octubre, "#prorrogar")
+        self.assertNotContains(octubre, "{#")  # el comentario de la plantilla no se ve
         noviembre = self.client.get(reverse("licencias:planilla_mensual", args=[2026, 11]))
         self.assertNotContains(noviembre, "Licencias sin fecha de fin que empezaron")
 
@@ -450,4 +451,36 @@ class SinFechaDeFinTests(BaseLicenciaDocente):
         # Abel (falta) recibe el 1; la licencia de Zárate, el 2, en sus dos materias.
         self.assertEqual(
             set(LicenciaOtorgada.objects.values_list("disp_numero", flat=True)), {"2"}
+        )
+
+    def test_cortar_una_licencia_abierta_marca_los_dias_hasta_el_fin(self):
+        """
+        «Cortar antes» en una licencia sin fecha de fin le pone fin: los días
+        hasta ese fin tienen que quedar marcados, no solo los de hasta hoy.
+        """
+        import uuid
+
+        grupo = uuid.uuid4()
+        licencias = [
+            LicenciaOtorgada.objects.create(
+                designacion=designacion, articulo=self.enfermedad, sit_rev="Titular",
+                desde=date(2026, 10, 21), hasta=None, grupo=grupo,
+            )
+            for designacion in (self.m1, self.m2)
+        ]
+        respuesta = self.client.post(
+            reverse("licencias:detalle_licencia", args=[licencias[0].pk]),
+            {"accion": "cortar", "volvio_el": "2026-10-24"},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(
+            set(LicenciaOtorgada.objects.values_list("hasta", flat=True)), {date(2026, 10, 23)}
+        )
+        # Materia 1: mié 21 y jue 22. Materia 2: jue 22 y vie 23.
+        self.assertEqual(
+            sorted(RegistroAsistencia.objects.values_list("designacion_id", "fecha")),
+            sorted([
+                (self.m1.pk, date(2026, 10, 21)), (self.m1.pk, date(2026, 10, 22)),
+                (self.m2.pk, date(2026, 10, 22)), (self.m2.pk, date(2026, 10, 23)),
+            ]),
         )

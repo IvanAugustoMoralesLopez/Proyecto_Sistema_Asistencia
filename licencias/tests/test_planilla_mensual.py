@@ -671,6 +671,25 @@ class LicenciaPorDocenteTests(BasePlanillaMensual):
             self.assertEqual((renglon.desde, renglon.hasta), (date(2026, 10, 21), date(2026, 10, 30)))
         self.assertEqual({r.designacion for r in renglones}, {self.m1, self.m2})
 
+    def test_una_clase_de_otra_materia_no_corta_la_licencia(self):
+        """
+        Licencia solo en Materia 1 (mié y jue). El viernes 23 Zárate da Materia 2,
+        que no está de licencia: eso no interrumpe el período de Materia 1.
+        """
+        import uuid
+
+        licencia = LicenciaOtorgada.objects.create(
+            designacion=self.m1, articulo=self.enfermedad, sit_rev="Titular",
+            desde=date(2026, 10, 21), hasta=date(2026, 10, 29), grupo=uuid.uuid4(),
+        )
+        for fecha in (date(2026, 10, 21), date(2026, 10, 22), date(2026, 10, 28), date(2026, 10, 29)):
+            self.marcar(self.m1, fecha, "LIC", licencia=licencia)
+        procesar_mes(2026, 10, self.usuario)
+        self.assertEqual(
+            [(r.desde, r.hasta, r.dias) for r in self.renglones()],
+            [(date(2026, 10, 21), date(2026, 10, 29), 4)],
+        )
+
     def test_dos_pedidos_distintos_siguen_separados(self):
         import uuid
 

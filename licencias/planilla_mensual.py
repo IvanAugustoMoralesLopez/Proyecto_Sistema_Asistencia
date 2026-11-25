@@ -258,14 +258,27 @@ def _renglones_en_ventana(personas, primer_dia, ultimo_dia, desde, hasta):
         # registro de cada (designación, fecha) y fechas de cada novedad
         registro_de = {(r.designacion_id, r.fecha): r for r in del_agente}
         fechas_por_clave = defaultdict(set)
+        designaciones_por_clave = defaultdict(set)
         for registro in del_agente:
             if registro.marca.codigo in MARCAS_CON_NOVEDAD:
-                fechas_por_clave[_clave_de_novedad(registro)].add(registro.fecha)
+                clave = _clave_de_novedad(registro)
+                fechas_por_clave[clave].add(registro.fecha)
+                designaciones_por_clave[clave].add(registro.designacion_id)
 
         for clave, fechas in fechas_por_clave.items():
             marca = clave[0]
 
-            for bloque in _bloques(fechas, designaciones):
+            # Una licencia corta su período solo por las clases de las materias
+            # que cubre: si el docente da otra materia ese día, no la interrumpe.
+            # Las faltas y permisos sin licencia miran todas las del agente.
+            if clave[1] is not None:
+                de_la_novedad = [
+                    d for d in designaciones if d.pk in designaciones_por_clave[clave]
+                ]
+            else:
+                de_la_novedad = designaciones
+
+            for bloque in _bloques(fechas, de_la_novedad):
                 del_mes = [f for f in bloque if primer_dia <= f <= ultimo_dia]
                 if not del_mes:
                     continue
@@ -276,7 +289,8 @@ def _renglones_en_ventana(personas, primer_dia, ultimo_dia, desde, hasta):
 
                 # RF-12 / RN-10: un renglón por cada materia que el agente
                 # debía dictar en esos días, la haya cargado o no el operador.
-                for designacion in designaciones:
+                # En una licencia, solo las materias que cubre.
+                for designacion in de_la_novedad:
                     dias = 0
                     horas = Decimal('0')
                     licencia = None

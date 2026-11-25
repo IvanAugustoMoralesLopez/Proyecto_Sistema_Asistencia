@@ -746,11 +746,18 @@ def detalle_licencia(request, licencia_id):
                 volvio = parse_date(request.POST.get("volvio_el", "") or "")
                 if volvio is None:
                     raise ValidationError("Indicá el día en que volvió a trabajar.")
+                # Una licencia sin fecha de fin solo estaba marcada hasta hoy:
+                # al cortarla se le pone fin, y hay que marcar los días que
+                # faltan hasta ese fin (si ya tenía fin, ya estaban marcados).
+                estaba_abierta = any(parte.hasta is None for parte in grupo)
                 liberados, avisos = cortar(grupo, volvio, request.user)
                 messages.success(
                     request,
                     f"La licencia se cortó: termina el {grupo[0].hasta:%d/%m/%Y}.",
                 )
+                if estaba_abierta:
+                    for parte in grupo:
+                        _marcar_y_avisar(request, parte)
                 if liberados:
                     messages.info(
                         request,

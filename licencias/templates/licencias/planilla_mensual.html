@@ -38,9 +38,11 @@
 </div>
 
 {% if sin_fin %}
-{# Licencias sin fecha de fin que empezaron este mes: se marcan en la diaria
-   solo hasta hoy. Se las muestra acá para cargarles la fecha de fin con
-   Prorrogar. #}
+{% comment %}
+Licencias sin fecha de fin que empezaron este mes: se marcan en la diaria
+solo hasta hoy. Se las muestra acá para cargarles la fecha de fin con
+Prorrogar.
+{% endcomment %}
 <div class="card border-warning shadow-sm mb-4" id="licencias-sin-fin">
     <div class="card-header bg-warning-subtle">
         <h2 class="h5 mb-0">Licencias sin fecha de fin que empezaron este mes ({{ sin_fin|length }})</h2>
