@@ -44,8 +44,16 @@ MARCAS_CON_NOVEDAD = ('I', 'P', 'LIC', 'LT')
 DIA_HORARIO = {0: 'LUN', 1: 'MAR', 2: 'MIE', 3: 'JUE', 4: 'VIE'}
 
 # Cuánto se mira fuera del mes para conocer el inicio y el fin reales de un
-# período que empezó antes o termina después (RF-14).
+# período que empezó antes o termina después (RF-14). Es la primera mirada:
+# si un período llega cerca del borde, la búsqueda se amplía de a
+# DIAS_DE_MARGEN hasta encontrar su inicio y su fin reales (licencias de
+# varios meses, como un largo tratamiento o una maternidad).
 DIAS_DE_MARGEN = 62
+# Un período que empieza o termina a menos de esto del borde de lo mirado
+# puede seguir más allá: se amplía la búsqueda.
+DIAS_CERCA_DEL_BORDE = 31
+# Tope de la búsqueda hacia cada lado (3 años), para no recorrer la base entera.
+DIAS_MAXIMOS_DE_BUSQUEDA = 3 * 366
 
 DISPOSICION_TIPO = 'Disposición'
 PENDIENTE = ''
@@ -123,6 +131,13 @@ def _clave_de_novedad(registro):
     codigo = registro.marca.codigo
     if codigo == 'I' and registro.estado_justificacion == 'INJUSTIFICADA':
         return (codigo, None, registro.fecha)
+    # Una licencia por docente se guarda como una licencia por materia, unidas
+    # por `grupo`: es un solo pedido y un solo período. Si se agrupara por
+    # licencia, cada materia armaría su período por separado y se cortaría en
+    # los días en que el docente da clase en otra materia.
+    licencia = registro.licencia
+    if licencia is not None and licencia.grupo:
+        return (codigo, licencia.grupo, None)
     return (codigo, registro.licencia_id, None)
 
 
@@ -160,7 +175,6 @@ def calcular_renglones(anio, mes):
     nro_formulario.
     """
     from asistencias.models import RegistroAsistencia
-    from personal.models import Designacion
 
     primer_dia, ultimo_dia = _rango_del_mes(anio, mes)
 
@@ -173,16 +187,50 @@ def calcular_renglones(anio, mes):
     if not personas:
         return []
 
-    # Todos los registros de esos agentes en el mes y un margen alrededor:
-    # hacen falta los "presentes" (cortan un período) y los días de otros
-    # meses (dan el Desde y el Hasta reales).
+    # RF-14 / RN-10: se mira el mes y un margen alrededor. Si algún período
+    # llega cerca del borde de lo mirado, puede seguir más allá: se amplía
+    # la búsqueda de ese lado y se vuelve a calcular, hasta que todos los
+    # períodos queden enteros adentro.
+    desde = primer_dia - timedelta(days=DIAS_DE_MARGEN)
+    hasta = ultimo_dia + timedelta(days=DIAS_DE_MARGEN)
+    while True:
+        renglones, cerca_del_inicio, cerca_del_fin = _renglones_en_ventana(
+            personas, primer_dia, ultimo_dia, desde, hasta
+        )
+        ampliar_antes = (
+            cerca_del_inicio
+            and (primer_dia - desde).days < DIAS_MAXIMOS_DE_BUSQUEDA
+        )
+        ampliar_despues = (
+            cerca_del_fin
+            and (hasta - ultimo_dia).days < DIAS_MAXIMOS_DE_BUSQUEDA
+        )
+        if not (ampliar_antes or ampliar_despues):
+            return renglones
+        if ampliar_antes:
+            desde -= timedelta(days=DIAS_DE_MARGEN)
+        if ampliar_despues:
+            hasta += timedelta(days=DIAS_DE_MARGEN)
+
+
+def _renglones_en_ventana(personas, primer_dia, ultimo_dia, desde, hasta):
+    """
+    Renglones del mes mirando los registros entre `desde` y `hasta`.
+    Devuelve (renglones, cerca_del_inicio, cerca_del_fin): los dos últimos
+    avisan si algún período del mes llega cerca del borde de lo mirado y
+    podría empezar antes o terminar después.
+    """
+    from asistencias.models import RegistroAsistencia
+    from personal.models import Designacion
+
+    # Todos los registros de esos agentes en la ventana: hacen falta los
+    # "presentes" (cortan un período) y los días de otros meses (dan el
+    # Desde y el Hasta reales).
+    cerca_del_inicio = cerca_del_fin = False
     registros = (
         RegistroAsistencia.objects.filter(
             designacion__persona_id__in=personas,
-            fecha__range=(
-                primer_dia - timedelta(days=DIAS_DE_MARGEN),
-                ultimo_dia + timedelta(days=DIAS_DE_MARGEN),
-            ),
+            fecha__range=(desde, hasta),
         )
         .select_related('marca', 'licencia')
         .order_by('fecha', 'designacion_id')
@@ -221,6 +269,10 @@ def calcular_renglones(anio, mes):
                 del_mes = [f for f in bloque if primer_dia <= f <= ultimo_dia]
                 if not del_mes:
                     continue
+                if (bloque[0] - desde).days <= DIAS_CERCA_DEL_BORDE:
+                    cerca_del_inicio = True
+                if (hasta - bloque[-1]).days <= DIAS_CERCA_DEL_BORDE:
+                    cerca_del_fin = True
 
                 # RF-12 / RN-10: un renglón por cada materia que el agente
                 # debía dictar en esos días, la haya cargado o no el operador.
@@ -282,7 +334,7 @@ def calcular_renglones(anio, mes):
                             'injustificada': injustificada and not formulario,
                         })
 
-    return renglones
+    return renglones, cerca_del_inicio, cerca_del_fin
 
 
 def _articulo_equivalente(articulo, designacion):

@@ -3,7 +3,7 @@ Planilla mensual generada desde la asistencia diaria (Documento de
 Requerimientos v2.0): RF-12, RF-13, RF-14, RF-15, RF-16, RN-04, RN-05,
 RN-06, RN-07, RN-08, RN-10 y RN-11.
 """
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -173,6 +173,45 @@ class DesgloseTests(BasePlanillaMensual):
             self.assertEqual((renglon.desde, renglon.hasta), (date(2026, 10, 28), date(2026, 11, 5)))
         self.assertEqual([r.horas for r in octubre], [Decimal("5"), Decimal("6")])
         self.assertEqual([r.horas for r in noviembre], [Decimal("5"), Decimal("4")])
+
+    def marcar_jueves(self, desde, hasta, codigo="LT"):
+        """Materia 3 de Abel se dicta los jueves: marca cada jueves del período."""
+        fecha = desde
+        while fecha <= hasta:
+            if fecha.weekday() == 3:
+                self.marcar(self.m3, fecha, codigo, "2")
+            fecha += timedelta(days=1)
+
+    def test_un_periodo_de_varios_meses_muestra_el_mismo_intervalo_en_todos(self):
+        """RF-14 / RN-10: un largo tratamiento de junio a octubre, igual en cada mes."""
+        self.marcar_jueves(date(2026, 6, 1), date(2026, 10, 30))
+        for mes in (6, 7, 8, 9, 10):
+            procesar_mes(2026, mes, self.usuario)
+            (renglon,) = self.renglones(2026, mes)
+            self.assertEqual(
+                (renglon.desde, renglon.hasta),
+                (date(2026, 6, 4), date(2026, 10, 29)),  # primer y último jueves
+                f"mes {mes}",
+            )
+
+    def test_un_periodo_de_mas_de_un_anio_tambien_se_ve_entero(self):
+        """La búsqueda se amplía todas las veces que haga falta."""
+        self.marcar_jueves(date(2025, 9, 1), date(2026, 12, 31))
+        procesar_mes(2026, 3, self.usuario)
+        (renglon,) = self.renglones(2026, 3)
+        self.assertEqual((renglon.desde, renglon.hasta), (date(2025, 9, 4), date(2026, 12, 31)))
+
+    def test_un_presente_sigue_cortando_un_periodo_largo(self):
+        """Ampliar la búsqueda no une dos licencias separadas por un día de clase."""
+        self.marcar_jueves(date(2026, 6, 1), date(2026, 8, 31))
+        self.marcar(self.m3, date(2026, 9, 3), "PR", "0")
+        self.marcar_jueves(date(2026, 9, 4), date(2026, 10, 30))
+        procesar_mes(2026, 8, self.usuario)
+        procesar_mes(2026, 10, self.usuario)
+        (agosto,) = self.renglones(2026, 8)
+        (octubre,) = self.renglones(2026, 10)
+        self.assertEqual((agosto.desde, agosto.hasta), (date(2026, 6, 4), date(2026, 8, 27)))
+        self.assertEqual((octubre.desde, octubre.hasta), (date(2026, 9, 10), date(2026, 10, 29)))
 
     def test_cada_inasistencia_injustificada_se_computa_por_su_dia(self):
         """RN-06: la falta simple vale solo por el día en que ocurrió."""
@@ -596,6 +635,55 @@ class PantallaTests(BasePlanillaMensual):
     def test_un_mes_invalido_da_404(self):
         self.assertEqual(
             self.client.get(reverse("licencias:planilla_mensual", args=[2026, 13])).status_code, 404
+        )
+
+
+class LicenciaPorDocenteTests(BasePlanillaMensual):
+    """
+    Una licencia por docente se guarda como una licencia por materia unidas por
+    `grupo`. En la planilla es un solo período: no se corta en los días en que
+    el docente da clase en otra de sus materias.
+    """
+
+    def test_las_materias_de_un_mismo_pedido_comparten_el_periodo(self):
+        import uuid
+
+        grupo = uuid.uuid4()
+        desde, hasta = date(2026, 10, 21), date(2026, 10, 30)  # mié 21 a vie 30
+        lic_m1, lic_m2 = (
+            LicenciaOtorgada.objects.create(
+                designacion=d, articulo=self.enfermedad, sit_rev="Titular",
+                desde=desde, hasta=hasta, grupo=grupo,
+            )
+            for d in (self.m1, self.m2)
+        )
+        # Materia 1: mié y jue. Materia 2: jue y vie.
+        for fecha in (date(2026, 10, 21), date(2026, 10, 22), date(2026, 10, 28), date(2026, 10, 29)):
+            self.marcar(self.m1, fecha, "LIC", licencia=lic_m1)
+        for fecha in (date(2026, 10, 22), date(2026, 10, 23), date(2026, 10, 29), date(2026, 10, 30)):
+            self.marcar(self.m2, fecha, "LIC", licencia=lic_m2)
+
+        procesar_mes(2026, 10, self.usuario)
+
+        renglones = self.renglones()
+        self.assertEqual(len(renglones), 2)  # un renglón por materia, no uno por pedazo
+        for renglon in renglones:
+            self.assertEqual((renglon.desde, renglon.hasta), (date(2026, 10, 21), date(2026, 10, 30)))
+        self.assertEqual({r.designacion for r in renglones}, {self.m1, self.m2})
+
+    def test_dos_pedidos_distintos_siguen_separados(self):
+        import uuid
+
+        for d, fecha in ((self.m1, date(2026, 10, 21)), (self.m1, date(2026, 10, 28))):
+            licencia = LicenciaOtorgada.objects.create(
+                designacion=d, articulo=self.enfermedad, sit_rev="Titular",
+                desde=fecha, hasta=fecha, grupo=uuid.uuid4(),
+            )
+            self.marcar(d, fecha, "LIC", licencia=licencia)
+        procesar_mes(2026, 10, self.usuario)
+        self.assertEqual(
+            [(r.desde, r.hasta) for r in self.renglones()],
+            [(date(2026, 10, 21), date(2026, 10, 21)), (date(2026, 10, 28), date(2026, 10, 28))],
         )
 
 

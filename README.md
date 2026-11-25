@@ -89,15 +89,20 @@ El puerto es **3307**, el mismo que `settings.py` usa por defecto. Si tu MariaDB
 ```
 python manage.py migrate
 python manage.py sincronizar_roles
+python manage.py cargar_nomenclador
 ```
 
 `migrate` crea las tablas, las marcas de asistencia y los tres roles. Las marcas siguen el Documento de Requerimientos v2.0: **P = Permiso, I = Inasistencia, LIC = Licencia médica o especial, LT = Largo tratamiento, PR = Presente**. Si tu base ya tenía registros con el significado anterior (P = Presente, PR = Presente retirado), la migración `asistencias 0011` los convierte solos: los P pasan a PR y los PR pasan a I con una nota en las observaciones. También crea el catálogo de tipos de instrumento legal (Resolución y Disposición). `sincronizar_roles` deja los permisos de cada rol al día.
+
+`cargar_nomenclador` carga los 148 artículos del Nomenclador de Licencias oficial (`licencias/data/nomenclador.csv`): sin este paso, el selector de artículos de la planilla mensual queda vacío o con artículos de prueba. Se puede correr las veces que haga falta (crea los códigos nuevos y actualiza los que cambiaron); con `--dry-run` muestra qué haría sin guardar nada.
 
 ### 6. Cargar datos de prueba (opcional)
 
 El archivo `datos_prueba.sql` carga datos ficticios: 20 docentes, 22 designaciones, 12 licencias, feriados 2026, registros de asistencia de octubre 2026 y 9 usuarios. Antes tenés que haber corrido `migrate` (paso 5).
 
 Ejecutalo completo como script SQL sobre la base `asistencia` (por ejemplo con "Execute SQL File" en Navicat o "Execute SQL Script" en DBeaver, no una sentencia suelta). Está pensado para poder volver a ejecutarse sin duplicar datos. El bloque de limpieza al final del archivo sirve para borrarlos.
+
+Los datos de prueba traen 5 artículos inventados (T-14, T-15, T-20, T-22 y T-25). Para pasar sus licencias a los artículos oficiales y borrarlos, después de cargar el SQL corré `python manage.py cargar_nomenclador --reemplazar-inventados` (muestra qué cambiaría) y, si está bien, lo mismo con `--confirmar`.
 
 ### 7. Uso mensual (cuadros IL-01 / IL-02)
 
