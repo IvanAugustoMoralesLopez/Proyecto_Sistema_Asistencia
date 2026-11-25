@@ -1839,7 +1839,7 @@ class ValidarRegistroTests(BaseAsistenciaTests):
 
 
 class CierreDiarioTests(BaseAsistenciaTests):
-    """RN-06: jornada cerrada, modificar requiere Secretaría o Subsecretaría."""
+    """RN-06: jornada cerrada, modificar requiere el permiso de jornadas cerradas."""
 
     def setUp(self):
         super().setUp()
@@ -1907,7 +1907,7 @@ class CierreDiarioTests(BaseAsistenciaTests):
                 datos=self.datos(),
                 motivo="Olvido de carga del día anterior",
             )
-        self.assertIn("Secretaría o Subsecretaría", str(contexto.exception))
+        self.assertIn("permiso para modificar jornadas cerradas", str(contexto.exception))
         self.assertFalse(RegistroAsistencia.objects.exists())
 
     def test_quien_solo_carga_no_puede_corregir_en_una_jornada_cerrada(self):
@@ -2067,7 +2067,7 @@ class CierreDiarioVistasTests(BaseAsistenciaTests):
             },
         )
         textos = [str(m) for m in get_messages(respuesta.wsgi_request)]
-        self.assertTrue(any("Secretaría o Subsecretaría" in t for t in textos))
+        self.assertTrue(any("permiso para modificar jornadas cerradas" in t for t in textos))
 
     def test_el_listado_de_cierres_incluye_las_jornadas(self):
         cerrar_dia(usuario=self.usuario, token=self.token, fecha=LUNES)
@@ -2625,7 +2625,7 @@ class PlanillaVistasTests(BasePlanillaTests):
         cerrar_dia(usuario=self.usuario, token=self.token, fecha=LUNES)
         self.client.force_login(crear_usuario("bedel", PERMISOS_CARGA))
         respuesta = self.ver()
-        self.assertContains(respuesta, "requiere autorización de Secretaría")
+        self.assertContains(respuesta, "requiere el permiso para")
         self.assertNotContains(respuesta, "btn-guardar-asistencia")
 
     def test_el_registro_diario_enlaza_a_la_planilla(self):
@@ -2720,17 +2720,25 @@ class CierreMensualTests(BaseAsistenciaTests):
 class ConcurrenciaTests(TestCase):
     def setUp(self):
         self.usuarios = [
-            User.objects.create_user(f"op{i}") for i in range(3)
+            User.objects.create_user(f"op{i}") for i in range(4)
         ]
 
-    def test_el_limite_de_operadores_es_dos(self):
-        self.assertEqual(MAX_OPERADORES, 2)
+    def ocupar(self, *indices):
+        for i in indices:
+            adquirir_sesion_edicion(self.usuarios[i], str(uuid.uuid4()))
 
-    def test_un_tercer_operador_es_rechazado(self):
-        adquirir_sesion_edicion(self.usuarios[0], str(uuid.uuid4()))
-        adquirir_sesion_edicion(self.usuarios[1], str(uuid.uuid4()))
+    def test_el_limite_de_operadores_es_tres(self):
+        # RF-19: las 3 operadoras (2 principales y 1 secundaria) cargan a la vez.
+        self.assertEqual(MAX_OPERADORES, 3)
+
+    def test_las_tres_operadoras_cargan_a_la_vez(self):
+        self.ocupar(0, 1, 2)
+        self.assertEqual(SesionEdicion.objects.filter(activa=True).count(), 3)
+
+    def test_una_cuarta_persona_es_rechazada(self):
+        self.ocupar(0, 1, 2)
         with self.assertRaises(ValidationError):
-            adquirir_sesion_edicion(self.usuarios[2], str(uuid.uuid4()))
+            adquirir_sesion_edicion(self.usuarios[3], str(uuid.uuid4()))
 
     def test_la_misma_sesion_no_ocupa_otro_lugar(self):
         token = str(uuid.uuid4())
@@ -2740,19 +2748,18 @@ class ConcurrenciaTests(TestCase):
         self.assertEqual(SesionEdicion.objects.filter(activa=True).count(), 2)
 
     def test_una_sesion_expirada_libera_el_lugar(self):
-        adquirir_sesion_edicion(self.usuarios[0], str(uuid.uuid4()))
-        adquirir_sesion_edicion(self.usuarios[1], str(uuid.uuid4()))
+        self.ocupar(0, 1, 2)
         SesionEdicion.objects.filter(usuario=self.usuarios[0]).update(
             expira_en=timezone.now() - timedelta(minutes=1)
         )
-        adquirir_sesion_edicion(self.usuarios[2], str(uuid.uuid4()))
+        adquirir_sesion_edicion(self.usuarios[3], str(uuid.uuid4()))
 
     def test_liberar_la_sesion_libera_el_lugar(self):
         token = str(uuid.uuid4())
         adquirir_sesion_edicion(self.usuarios[0], token)
-        adquirir_sesion_edicion(self.usuarios[1], str(uuid.uuid4()))
+        self.ocupar(1, 2)
         liberar_sesion_edicion(self.usuarios[0], token)
-        adquirir_sesion_edicion(self.usuarios[2], str(uuid.uuid4()))
+        adquirir_sesion_edicion(self.usuarios[3], str(uuid.uuid4()))
 
     def test_el_token_de_otro_usuario_se_deniega(self):
         token = str(uuid.uuid4())
@@ -2788,9 +2795,8 @@ class ConcurrenciaTests(TestCase):
         SesionEdicion.objects.filter(pk=sesion.pk).update(
             expira_en=timezone.now() - timedelta(minutes=1)
         )
-        # Otros dos operadores toman los dos lugares mientras está vencida.
-        adquirir_sesion_edicion(self.usuarios[1], str(uuid.uuid4()))
-        adquirir_sesion_edicion(self.usuarios[2], str(uuid.uuid4()))
+        # Las otras tres personas toman los lugares mientras está vencida.
+        self.ocupar(1, 2, 3)
         with self.assertRaises(ValidationError):
             adquirir_sesion_edicion(self.usuarios[0], token)
         self.assertFalse(SesionEdicion.objects.get(token=token).activa)
@@ -3055,12 +3061,37 @@ class MarcarLicenciaTests(TestCase):
         self.assertIn("anterior", omitidos[date(2026, 3, 10)])
         self.assertIn("posterior", omitidos[date(2026, 3, 13)])
 
-    def test_licencia_sin_fecha_hasta_no_marca_nada_y_avisa(self):
+    def test_licencia_sin_fecha_hasta_marca_hasta_hoy_y_avisa(self):
+        """RF-14: la licencia abierta (largo tratamiento) marca los días ya transcurridos."""
         from .services import marcar_licencia
 
         licencia = self._licencia_en(date(2026, 3, 9), None)
 
-        resumen = marcar_licencia(licencia)
+        with mock.patch(
+            "asistencias.services.licencia_marcado.timezone.localdate",
+            return_value=date(2026, 3, 11),
+        ):
+            resumen = marcar_licencia(licencia)
+
+        self.assertEqual(
+            resumen["marcados"],
+            [date(2026, 3, 9), date(2026, 3, 10), date(2026, 3, 11)],
+        )
+        self.assertTrue(any("hasta hoy" in aviso for aviso in resumen["advertencias"]))
+        self.assertFalse(
+            RegistroAsistencia.objects.filter(fecha__gt=date(2026, 3, 11)).exists()
+        )
+
+    def test_licencia_sin_fecha_hasta_que_todavia_no_empezo_no_marca(self):
+        from .services import marcar_licencia
+
+        licencia = self._licencia_en(date(2026, 3, 9), None)
+
+        with mock.patch(
+            "asistencias.services.licencia_marcado.timezone.localdate",
+            return_value=date(2026, 3, 6),
+        ):
+            resumen = marcar_licencia(licencia)
 
         self.assertEqual(resumen["marcados"], [])
         self.assertTrue(resumen["advertencias"])
@@ -3583,10 +3614,11 @@ class AvisoDeLugaresOcupadosTests(BaseAsistenciaTests):
     def test_el_aviso_nombra_a_quienes_estan_cargando(self):
         otra = User.objects.create_user("ana", first_name="Ana", last_name="Gómez")
         adquirir_sesion_edicion(otra, str(uuid.uuid4()))
+        adquirir_sesion_edicion(User.objects.create_user("beto"), str(uuid.uuid4()))
 
-        tercera = crear_usuario("tercera", PERMISOS_CARGA)
+        cuarta = crear_usuario("cuarta", PERMISOS_CARGA)
         with self.assertRaises(ValidationError) as contexto:
-            adquirir_sesion_edicion(tercera, str(uuid.uuid4()))
+            adquirir_sesion_edicion(cuarta, str(uuid.uuid4()))
 
         mensaje = " ".join(contexto.exception.messages)
         self.assertIn("Ana Gómez", mensaje)
@@ -3610,7 +3642,7 @@ class AvisoDeLugaresOcupadosTests(BaseAsistenciaTests):
             reverse("asistencia:registro_diario"), {"fecha": LUNES.isoformat()}
         )
         self.assertContains(respuesta, "Cargando asistencia ahora")
-        self.assertEqual(respuesta.context["sesion_libres"], 1)
+        self.assertEqual(respuesta.context["sesion_libres"], 2)
 
     def test_el_boton_de_liberar_solo_aparece_si_tengo_lugar(self):
         otro = crear_usuario("mirona", PERMISOS_LECTURA)
@@ -3774,14 +3806,14 @@ class PantallasEnLenguajeLlanoTests(BasePlanillaTests):
     def test_el_estado_se_explica_en_castellano(self):
         self.guardar()
         respuesta = self.diaria()
-        self.assertContains(respuesta, "Falta la revisi")
+        self.assertContains(respuesta, "Falta validarlo")
         self.assertNotContains(respuesta, ">Borrador<")
 
     # ── Punto 7: cerrar el día pide escribir la fecha ──
     def test_cerrar_el_dia_pide_confirmar_escribiendo_la_fecha(self):
         respuesta = self.diaria()
         self.assertContains(respuesta, "confirmacion_cierre")
-        self.assertContains(respuesta, "no vas a poder cambiar nada")
+        self.assertContains(respuesta, "cada cambio de este día pide un motivo")
 
     # ── Punto 14: medias horas ──
     def test_las_horas_se_piden_de_media_en_media(self):
@@ -3816,7 +3848,7 @@ class PantallasEnLenguajeLlanoTests(BasePlanillaTests):
 
         mensaje = " ".join(contexto.exception.messages)
         self.assertIn("septiembre de 2026", mensaje)
-        self.assertIn("Secretaría o Subsecretaría", mensaje)
+        self.assertIn("reabrirlo desde Asistencia › Cierres", mensaje)
 
     # ── Punto 2 y 4: avisos en español y botón que habla ──
     def test_el_aviso_de_cambios_sin_guardar_esta_en_castellano(self):
@@ -3912,7 +3944,7 @@ class PaginadoYRevisionDelDiaTests(BaseAsistenciaTests):
         pendiente = self.guardar()
         respuesta = self.dia()
         self.assertContains(respuesta, "Revisar este día")
-        self.assertContains(respuesta, "1</b> sin revisar por Secretaría")
+        self.assertContains(respuesta, "1</b> sin validar")
         self.assertContains(
             respuesta,
             f'{reverse("asistencia:historial")}?desde=2026-09-14'
@@ -3956,7 +3988,7 @@ class PaginadoYRevisionDelDiaTests(BaseAsistenciaTests):
         )
         respuesta = self.dia()
         self.assertNotContains(respuesta, "btn-revisar-dia")
-        self.assertContains(respuesta, "todo revisado por Secretaría")
+        self.assertContains(respuesta, "todo validado")
 
     def test_revisar_este_dia_no_aparece_a_quien_no_puede_validar(self):
         self.guardar()

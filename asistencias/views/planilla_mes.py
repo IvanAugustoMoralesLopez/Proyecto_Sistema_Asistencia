@@ -23,7 +23,7 @@ from ..services import (
     nombre_mes,
     planilla_del_mes,
 )
-from ._comun import vista_protegida
+from ._comun import celda_csv, vista_protegida
 
 
 class ParametroInvalido(ValueError):
@@ -130,9 +130,15 @@ def planilla_mes_csv(request):
         + [str(dia["numero"]) for dia in planilla["dias"]]
         + [titulo for _, titulo in COLUMNAS_TOTALES]
     )
+    # INC-01: nombre y DNI pasan por celda_csv para que Excel no los tome como
+    # fórmula; las celdas de los días son códigos del sistema (PR, I, ·).
     for fila in planilla["filas"]:
         writer.writerow(
-            [fila["numero"], fila["persona"].apellido_nombre, fila["persona"].dni]
+            [
+                fila["numero"],
+                celda_csv(fila["persona"].apellido_nombre),
+                celda_csv(fila["persona"].dni),
+            ]
             + [celda["texto"] for celda in fila["celdas"]]
             + [fila["totales"][clave] or "" for clave, _ in COLUMNAS_TOTALES]
         )

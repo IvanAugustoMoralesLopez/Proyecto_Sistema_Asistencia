@@ -205,6 +205,29 @@ class Motivo(models.Model):
         return self.descripcion
 
 
+def problema_de_horas(hs_nombradas, horas_por_dia):
+    """
+    Control de horas cátedra: el horario semanal de una designación tiene que
+    sumar las horas cátedra nombradas en ella. Devuelve None si coinciden, o
+    el texto del problema. Es la única regla: la usan el formulario de
+    designación, la importación CSV y las alertas de Reportes.
+    """
+    total = sum(int(horas or 0) for horas in horas_por_dia)
+    if not hs_nombradas:
+        if total:
+            return (
+                "Indique las horas cátedra nombradas de la designación "
+                f"(el horario semanal suma {total})."
+            )
+        return "Indique las horas cátedra nombradas y el horario semanal."
+    if total != hs_nombradas:
+        return (
+            f"El horario semanal suma {total} horas y la designación tiene "
+            f"{hs_nombradas} horas cátedra nombradas: deben coincidir."
+        )
+    return None
+
+
 def _usuario_de_la_peticion():
     """Usuario de la petición en curso (lo guarda el middleware de reportes)."""
     # Import local: reportes importa personal, no al revés.
@@ -387,6 +410,12 @@ class Designacion(models.Model):
             and (self.hasta is None or fecha <= self.hasta)
         )
 
+    def problema_de_horas(self):
+        """Texto del desajuste entre el horario y las horas nombradas, o None."""
+        return problema_de_horas(
+            self.hs_catedra, [h.horas_catedra for h in self.horarios.all()]
+        )
+
     def _completar_carrera(self):
         """Si la materia está en una sola carrera, la designación toma esa."""
         if self.espacio_curricular_id and not self.carrera_id:
@@ -419,7 +448,8 @@ class Designacion(models.Model):
             )
         if self.es_suplencia and not self.plazo_indeterminado and self.hasta is None:
             errores["hasta"] = (
-                "Indique la fecha de cese o marque el plazo como indeterminado."
+                "Indique la fecha de cese en Hasta o escriba SIN TERMINO "
+                "(plazo indeterminado)."
             )
         if self.plazo_indeterminado and self.hasta is not None:
             errores["hasta"] = (

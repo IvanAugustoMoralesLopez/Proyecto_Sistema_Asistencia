@@ -202,7 +202,8 @@ class DesignacionTests(TestCase):
                 "situacion_revista": Designacion.Situacion.SUPLENTE,
                 "desde": "2026-07-01",
                 "hasta": "2026-07-31",
-                "es_suplencia": "on",
+                "hs_catedra": "2",
+                "horas_lun": "2",
                 "reemplaza": designacion_titular.pk,
             }
         )
@@ -306,9 +307,9 @@ class DesignacionTests(TestCase):
                 "anio_curso": "",
                 "division_seccion": "",
                 "turno": "Mañana",
-                "hs_catedra": "4",
+                # El horario (3 + 2) tiene que sumar las horas nombradas.
+                "hs_catedra": "5",
                 "jornada": "",
-                "especialidad": "",
                 "disp_alta_nro": "",
                 "sello_regional_as": "",
                 "motivo": "",
@@ -317,7 +318,8 @@ class DesignacionTests(TestCase):
                 "norma_anio": "",
                 "organismo_emisor": "",
                 "desde": "2026-03-01",
-                "hasta": "",
+                # Suplente sin fecha de cese: plazo indeterminado.
+                "hasta": "SIN TERMINO",
                 "pof": "",
                 "anio_pof": "",
                 "novedad": "",
@@ -746,9 +748,8 @@ class DesignacionTests(TestCase):
                 "anio_curso": "",
                 "division_seccion": "",
                 "turno": "",
-                "hs_catedra": "",
+                "hs_catedra": "2",
                 "jornada": "",
-                "especialidad": "",
                 "disp_alta_nro": "",
                 "sello_regional_as": "",
                 "motivo": "",
@@ -799,7 +800,8 @@ class DesignacionTests(TestCase):
                 "cargo": self.cargo.pk,
                 "situacion_revista": Designacion.Situacion.INTERINO,
                 "desde": "2026-03-01",
-                "horas_lun": "0",
+                "hs_catedra": "2",
+                "horas_lun": "2",
                 "horas_mar": "0",
                 "horas_mie": "0",
                 "horas_jue": "0",
@@ -934,6 +936,8 @@ class RequerimientosV2PersonalTests(TestCase):
             "norma_tipo": "",
             "desde": "SIN INICIO",
             "hasta": "SIN TERMINO",
+            "hs_catedra": "2",
+            "horas_lun": "2",
         }
         datos.update(cambios)
         return datos
@@ -1235,7 +1239,7 @@ class RequerimientosV2PersonalTests(TestCase):
             "observaciones,horas_lun\n"
             "31000010,\"PEREZ, ANA\",1990-04-15,Soltera,Argentina,123,"
             "ana@example.com,Calle 1,Centro,Ciudad,1000,Provincia,PROF,TIT,"
-            "1,A,M,4,2026-03-01,2026-12-31,Resolución,123,2026,Ministerio,"
+            "1,A,M,2,2026-03-01,2026-12-31,Resolución,123,2026,Ministerio,"
             "POF 1,2026,Alta,88,Regional,Observación,2\n"
         )
 
@@ -1247,7 +1251,7 @@ class RequerimientosV2PersonalTests(TestCase):
         self.assertEqual(persona.email, "ana@example.com")
         designacion = Designacion.objects.get(persona=persona)
         self.assertEqual(designacion.turno, "M")
-        self.assertEqual(designacion.hs_catedra, 4)
+        self.assertEqual(designacion.hs_catedra, 2)
         self.assertEqual(designacion.norma_numero, "123")
         self.assertEqual(designacion.norma_anio, 2026)
         self.assertEqual(designacion.pof, "POF 1")
@@ -1653,3 +1657,284 @@ class MigracionMateriasRepetidasTests(TransactionTestCase):
             ),
             sorted([(materias[0].pk, "Software"), (materias[0].pk, "Gestión")]),
         )
+
+
+# ───────────── Designación: suplencia, plazo indeterminado y horas cátedra ─────────────
+
+class SuplenciaYHorasNombradasTests(TestCase):
+    """
+    La suplencia sale de la situación de revista (Suplente) y el plazo
+    indeterminado de escribir SIN TERMINO: ya no hay casillas aparte ni el
+    campo Especialidad en el formulario (las columnas siguen en la base). El
+    horario semanal tiene que sumar las horas cátedra nombradas.
+    """
+
+    def setUp(self):
+        self.cargo = Cargo.objects.create(codigo="PROF", descripcion="Profesor")
+        self.persona = Persona.objects.create(dni="30123456", apellido_nombre="PEREZ, JUAN")
+
+    def formulario(self, instance=None, **cambios):
+        datos = {
+            "persona": self.persona.pk,
+            "cargo": self.cargo.pk,
+            "situacion_revista": "TIT",
+            "desde": "2026-03-01",
+            "hasta": "",
+            "hs_catedra": "4",
+            "horas_lun": "2",
+            "horas_mie": "2",
+        }
+        datos.update(cambios)
+        return NuevaDesignacionForm(datos, instance=instance)
+
+    def guardar(self, **cambios):
+        form = self.formulario(**cambios)
+        self.assertTrue(form.is_valid(), form.errors)
+        return form.save()
+
+    # ── Campos que ya no están ──
+    def test_el_formulario_no_tiene_especialidad_ni_casillas(self):
+        for campo in ("especialidad", "es_suplencia", "plazo_indeterminado"):
+            self.assertNotIn(campo, NuevaDesignacionForm().fields)
+            self.assertNotIn(campo, DesignacionForm().fields)
+
+    def test_las_pantallas_no_los_muestran(self):
+        cliente = Client()
+        cliente.force_login(get_user_model().objects.create_superuser("admin-horas", password="x"))
+        for respuesta in (
+            cliente.get(reverse("personal:nueva_designacion")),
+            cliente.get(reverse("personal:gestion_legajos"), {"dni": self.persona.dni}),
+        ):
+            for nombre in ("especialidad", "es_suplencia", "plazo_indeterminado"):
+                self.assertNotContains(respuesta, f'name="{nombre}"')
+            self.assertContains(respuesta, 'id="controlHoras"')
+
+    # ── Suplencia y plazo indeterminado ──
+    def test_suplente_con_fecha_de_cese(self):
+        designacion = self.guardar(situacion_revista="SUP", hasta="2026-07-31")
+        self.assertTrue(designacion.es_suplencia)
+        self.assertFalse(designacion.plazo_indeterminado)
+
+    def test_suplente_sin_termino_es_de_plazo_indeterminado(self):
+        designacion = self.guardar(situacion_revista="SUP", hasta="SIN TERMINO")
+        self.assertTrue(designacion.es_suplencia)
+        self.assertTrue(designacion.plazo_indeterminado)
+        self.assertIsNone(designacion.hasta)
+
+    def test_suplente_sin_fecha_de_cese_se_rechaza_con_un_solo_aviso(self):
+        form = self.formulario(situacion_revista="SUP", hasta="")
+        self.assertFalse(form.is_valid())
+        self.assertEqual(len(form.errors["hasta"]), 1)
+        self.assertIn("SIN TERMINO", form.errors["hasta"][0])
+
+    def test_titular_no_es_suplencia(self):
+        designacion = self.guardar(situacion_revista="TIT", hasta="SIN TERMINO")
+        self.assertFalse(designacion.es_suplencia)
+        self.assertFalse(designacion.plazo_indeterminado)
+
+    def test_pasar_de_suplente_a_titular_quita_la_suplencia(self):
+        designacion = self.guardar(situacion_revista="SUP", hasta="SIN TERMINO")
+        form = self.formulario(instance=designacion, situacion_revista="TIT", hasta="SIN TERMINO")
+        self.assertTrue(form.is_valid(), form.errors)
+        designacion = form.save()
+        self.assertFalse(designacion.es_suplencia)
+        self.assertFalse(designacion.plazo_indeterminado)
+
+    def test_solo_un_suplente_reemplaza_a_otra_designacion(self):
+        otra = Persona.objects.create(dni="30123499", apellido_nombre="TITULAR, ANA")
+        titular = Designacion.objects.create(persona=otra, cargo=self.cargo, desde=date(2026, 3, 1))
+        form = self.formulario(situacion_revista="TIT", reemplaza=titular.pk)
+        self.assertFalse(form.is_valid())
+        self.assertIn("reemplaza", form.errors)
+
+    # ── Horas cátedra ──
+    def test_horario_igual_a_las_horas_nombradas_se_guarda(self):
+        designacion = self.guardar()
+        self.assertEqual(designacion.hs_catedra, 4)
+        self.assertEqual(
+            dict(designacion.horarios.values_list("dia", "horas_catedra")), {"LUN": 2, "MIE": 2}
+        )
+
+    def test_horario_que_no_suma_las_horas_nombradas_se_rechaza(self):
+        form = self.formulario(hs_catedra="5")
+        self.assertFalse(form.is_valid())
+        self.assertIn("suma 4 horas", form.errors["hs_catedra"][0])
+        self.assertIn("deben coincidir", form.errors["hs_catedra"][0])
+
+    def test_sin_horas_nombradas_se_rechaza(self):
+        form = self.formulario(hs_catedra="")
+        self.assertFalse(form.is_valid())
+        self.assertIn("Indique las horas cátedra nombradas", form.errors["hs_catedra"][0])
+
+    def test_sin_horario_se_rechaza(self):
+        form = self.formulario(horas_lun="0", horas_mie="0")
+        self.assertFalse(form.is_valid())
+        self.assertIn("suma 0 horas", form.errors["hs_catedra"][0])
+
+    def test_problema_de_horas_de_una_designacion(self):
+        designacion = Designacion.objects.create(
+            persona=self.persona, cargo=self.cargo, desde=date(2026, 3, 1), hs_catedra=4
+        )
+        Horario.objects.create(designacion=designacion, dia="LUN", horas_catedra=3)
+        self.assertIn("suma 3 horas", designacion.problema_de_horas())
+        Horario.objects.create(designacion=designacion, dia="MIE", horas_catedra=1)
+        self.assertIsNone(designacion.problema_de_horas())
+
+    # ── Importación CSV ──
+    def csv(self, texto):
+        return SimpleUploadedFile("personal.csv", texto.encode("utf-8"))
+
+    def test_csv_con_horas_y_horario_distintos_se_rechaza(self):
+        total, rechazadas = _procesar_csv(self.csv(
+            "dni,cargo_codigo,desde,hs_catedra,horas_lun\n30123456,PROF,2026-03-01,4,2\n"
+        ))
+        self.assertEqual((total, rechazadas), (1, 1))
+        self.assertIn("deben coincidir", ImportacionPersonalError.objects.get().motivo_error)
+
+    def test_csv_con_horario_sin_horas_completa_las_horas_nombradas(self):
+        total, rechazadas = _procesar_csv(self.csv(
+            "dni,cargo_codigo,desde,horas_lun,horas_jue\n30123456,PROF,2026-03-01,2,3\n"
+        ))
+        self.assertEqual((total, rechazadas), (1, 0))
+        self.assertEqual(Designacion.objects.get(persona=self.persona).hs_catedra, 5)
+
+    def test_csv_suplente_sin_columna_es_suplencia(self):
+        total, rechazadas = _procesar_csv(self.csv(
+            "dni,cargo_codigo,situacion_revista,desde,hasta\n30123456,PROF,SUP,2026-03-01,2026-07-31\n"
+        ))
+        self.assertEqual((total, rechazadas), (1, 0))
+        self.assertTrue(Designacion.objects.get(persona=self.persona).es_suplencia)
+
+
+class CsvComoLoGuardaExcelTests(TestCase):
+    """RF-06: la importación acepta los archivos tal como los guarda Excel."""
+
+    ENCABEZADO = "dni;nombre_apellido;cargo_codigo;espacio_curricular;situacion_revista;hs_catedra;desde;hasta;horas_lun\n"
+
+    def setUp(self):
+        Cargo.objects.get_or_create(codigo="166", defaults={"descripcion": "Horas cátedra"})
+        carrera = Carrera.objects.create(nombre="Desarrollo de Software")
+        EspacioCurricular.objects.create(nombre="Matemática I").carreras.add(carrera)
+        EspacioCurricular.objects.create(nombre="Inglés").carreras.add(carrera)
+
+    def importar(self, texto, codificacion="utf-8"):
+        return _procesar_csv(SimpleUploadedFile("personal.csv", texto.encode(codificacion)))
+
+    def motivos(self):
+        return [e.motivo_error for e in ImportacionPersonalError.objects.order_by("numero_fila")]
+
+    def test_excel_en_espanol_ansi_con_punto_y_coma_y_fechas_dd_mm_aaaa(self):
+        total, rechazadas = self.importar(
+            "DNI;Nombre y Apellido;Sexo;fecha_nacimiento;cargo_codigo;espacio_curricular;"
+            "situacion_revista;hs_catedra;desde;horas_lun;horas_mie\r\n"
+            "30.123.456;MUÑOZ, José;Masculino;15/04/1990;166;Matemática I;Titular;4;"
+            "01/03/2026;2;2\r\n",
+            codificacion="cp1252",
+        )
+        self.assertEqual((total, rechazadas), (1, 0), self.motivos())
+        persona = Persona.objects.get(pk="30123456")
+        self.assertEqual(persona.apellido_nombre, "MUÑOZ, José")
+        self.assertEqual(persona.sexo, "M")
+        self.assertEqual(persona.fecha_nacimiento, date(1990, 4, 15))
+        designacion = Designacion.objects.get(persona=persona)
+        self.assertEqual(designacion.situacion_revista, Designacion.Situacion.TITULAR)
+        self.assertEqual(designacion.desde, date(2026, 3, 1))
+        self.assertEqual(designacion.hs_catedra, 4)
+
+    def test_numeros_que_excel_guarda_con_decimales(self):
+        total, rechazadas = self.importar(
+            "dni,nombre_apellido,cargo_codigo,espacio_curricular,hs_catedra,desde,horas_lun\n"
+            '30123456.0,"PEREZ, Ana",166.0,Matemática I,4.0,2026-03-01,4.0\n'
+        )
+        self.assertEqual((total, rechazadas), (1, 0), self.motivos())
+        self.assertEqual(Designacion.objects.get(persona_id="30123456").hs_catedra, 4)
+
+    def test_renglones_vacios_y_columnas_sin_titulo_se_ignoran(self):
+        total, rechazadas = self.importar(
+            "dni;nombre_apellido;;\n30123456;PEREZ, Ana;;\n;;;\n\n"
+        )
+        self.assertEqual((total, rechazadas), (1, 0), self.motivos())
+
+    def test_datos_en_una_columna_sin_titulo_rechazan_la_fila(self):
+        total, rechazadas = self.importar("dni;nombre_apellido;\n30123456;PEREZ, Ana;algo\n")
+        self.assertEqual((total, rechazadas), (1, 1))
+        self.assertIn("columna sin título", self.motivos()[0])
+
+    def test_una_coma_sin_comillas_se_explica(self):
+        total, rechazadas = self.importar("dni,nombre_apellido\n30123456,PEREZ, Ana\n")
+        self.assertEqual((total, rechazadas), (1, 1))
+        self.assertIn("coma sin comillas", self.motivos()[0])
+
+    def test_una_fila_corta_vale_como_celdas_vacias(self):
+        total, rechazadas = self.importar('dni,nombre_apellido,email,telefono\n30123456,"PEREZ, Ana"\n')
+        self.assertEqual((total, rechazadas), (1, 0), self.motivos())
+
+    def test_el_renglon_sep_de_excel_indica_el_separador(self):
+        total, rechazadas = self.importar("sep=;\ndni;nombre_apellido\n30123456;PEREZ, Ana\n")
+        self.assertEqual((total, rechazadas), (1, 0), self.motivos())
+
+    def test_el_numero_de_fila_es_el_renglon_del_archivo(self):
+        self.importar("dni;nombre_apellido\n30123456;PEREZ, Ana\n\n12AB;MAL\n")
+        self.assertEqual(ImportacionPersonalError.objects.get().numero_fila, 4)
+
+    def test_mismo_dni_y_mismo_nombre_en_varias_filas(self):
+        total, rechazadas = self.importar(
+            self.ENCABEZADO
+            + "30123456;PEREZ, Ana;166;Matemática I;TIT;2;2026-03-01;;2\n"
+            + "30123456;Ana Pérez;166;Inglés;TIT;3;2026-03-01;;3\n"
+        )
+        self.assertEqual((total, rechazadas), (2, 0), self.motivos())
+        self.assertEqual(Designacion.objects.filter(persona_id="30123456").count(), 2)
+        # El nombre escrito de otra forma no pisa el de la primera fila.
+        self.assertEqual(Persona.objects.get(pk="30123456").apellido_nombre, "PEREZ, Ana")
+
+    def test_mismo_dni_con_otro_nombre_se_rechaza(self):
+        total, rechazadas = self.importar(
+            "dni;nombre_apellido\n30123456;PEREZ, Ana\n30123456;GOMEZ, Luis\n"
+        )
+        self.assertEqual((total, rechazadas), (2, 1))
+        self.assertIn("ya aparece en la fila 2", self.motivos()[0])
+        self.assertEqual(Persona.objects.get(pk="30123456").apellido_nombre, "PEREZ, Ana")
+
+    def test_dni_invalido_se_explica(self):
+        total, rechazadas = self.importar("dni;nombre_apellido\n12AB;PEREZ, Ana\n")
+        self.assertEqual((total, rechazadas), (1, 1))
+        self.assertIn("entre 7 y 10 números", self.motivos()[0])
+
+    def test_sexo_invalido_se_explica(self):
+        self.importar("dni;nombre_apellido;sexo\n30123456;PEREZ, Ana;X\n")
+        self.assertIn("debe ser M o F", self.motivos()[0])
+
+    def test_fecha_con_anio_de_dos_cifras_se_rechaza(self):
+        self.importar("dni;nombre_apellido;fecha_nacimiento\n30123456;PEREZ, Ana;15/04/90\n")
+        self.assertIn("año de 4 cifras", self.motivos()[0])
+
+    def test_situacion_de_revista_invalida_se_explica(self):
+        self.importar(self.ENCABEZADO + "30123456;PEREZ, Ana;166;Matemática I;Contratado;2;2026-03-01;;2\n")
+        self.assertIn("usá TIT, INT o SUP", self.motivos()[0])
+
+    def test_suplente_sin_fecha_de_cese_pide_sin_termino(self):
+        total, rechazadas = self.importar(
+            self.ENCABEZADO + "30123456;PEREZ, Ana;166;Matemática I;Suplente;2;2026-03-01;;2\n"
+        )
+        self.assertEqual((total, rechazadas), (1, 1))
+        self.assertIn("SIN TERMINO", self.motivos()[0])
+
+        total, rechazadas = self.importar(
+            self.ENCABEZADO + "30123457;GOMEZ, Luis;166;Matemática I;Suplente;2;2026-03-01;SIN TERMINO;2\n"
+        )
+        self.assertEqual((total, rechazadas), (1, 0))
+        self.assertTrue(Designacion.objects.get(persona_id="30123457").plazo_indeterminado)
+
+    def test_la_plantilla_usa_punto_y_coma_para_excel_en_espanol(self):
+        usuario = get_user_model().objects.create_user(username="plantilla-csv", password="x")
+        usuario.user_permissions.add(Permission.objects.get(codename="add_persona"))
+        cliente = Client()
+        cliente.force_login(usuario)
+        respuesta = cliente.get(reverse("personal:plantilla_importacion_csv"))
+        encabezado = respuesta.content.decode("utf-8-sig").splitlines()[0]
+        self.assertTrue(encabezado.startswith("dni;nombre_apellido;"))
+
+        # La plantilla, tal cual, se puede volver a importar.
+        total, _ = self.importar(encabezado + "\n")
+        self.assertEqual(total, 0)

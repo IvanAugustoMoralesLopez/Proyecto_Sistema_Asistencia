@@ -57,18 +57,14 @@
                 <div class="col-md-3">{{ form.anio_curso.label_tag }}{{ form.anio_curso }}</div>
                 <div class="col-md-3">{{ form.division_seccion.label_tag }}{{ form.division_seccion }}</div>
                 <div class="col-md-3">{{ form.turno.label_tag }}{{ form.turno }}</div>
-                <div class="col-md-3">{{ form.hs_catedra.label_tag }}{{ form.hs_catedra }}</div>
-                <div class="col-md-3">{{ form.especialidad.label_tag }}{{ form.especialidad }}</div>
                 <div class="col-md-3">
-                    <div class="form-check mt-4">{{ form.es_suplencia }} {{ form.es_suplencia.label_tag }}</div>
-                </div>
-                <div class="col-md-3">
-                    <div class="form-check mt-4">{{ form.plazo_indeterminado }} {{ form.plazo_indeterminado.label_tag }}</div>
+                    {{ form.hs_catedra.label_tag }}{{ form.hs_catedra }}
+                    <div class="form-text">El horario semanal tiene que sumar estas horas.</div>
                 </div>
                 <div class="col-md-6" id="reemplazaDesignacion">
                     {{ form.reemplaza.label_tag }}
                     {{ form.reemplaza }}
-                    <div class="form-text">Opcional: vincule la designación docente que origina la suplencia.</div>
+                    <div class="form-text">Solo para suplentes. Opcional: vincule la designación docente que origina la suplencia.</div>
                     {% for error in form.reemplaza.errors %}
                         <div class="text-danger small">{{ error }}</div>
                     {% endfor %}
@@ -85,6 +81,7 @@
                 <div class="col">{{ form.horas_jue.label_tag }}{{ form.horas_jue }}</div>
                 <div class="col">{{ form.horas_vie.label_tag }}{{ form.horas_vie }}</div>
             </div>
+            <div id="controlHoras" class="small mb-4" aria-live="polite"></div>
             </div>
 
             <div data-wizard-step="4">
@@ -109,7 +106,10 @@
             {% endif %}
             <div class="row g-3 mb-4">
                 <div class="col-md-3">{{ form.desde.label_tag }}{{ form.desde }}</div>
-                <div class="col-md-3">{{ form.hasta.label_tag }}{{ form.hasta }}</div>
+                <div class="col-md-3">
+                    {{ form.hasta.label_tag }}{{ form.hasta }}
+                    <div class="form-text">Suplencia sin fecha de cese: escriba SIN TERMINO (plazo indeterminado).</div>
+                </div>
                 <datalist id="opciones-sin-inicio"><option value="SIN INICIO"></datalist>
                 <datalist id="opciones-sin-termino"><option value="SIN TERMINO"></datalist>
                 <div class="col-md-3">{{ form.pof.label_tag }}{{ form.pof }}</div>
@@ -147,11 +147,35 @@
     const buscador = document.getElementById('buscadorDocente');
     const resultados = document.getElementById('resultadosDocente');
     const persona = document.querySelector('[name="persona"]');
-    const esSuplencia = document.querySelector('[name="es_suplencia"]');
+    // La suplencia sale de la situación de revista: no hay una casilla aparte.
+    const situacion = document.querySelector('[name="situacion_revista"]');
+    const esSuplente = () => situacion.value === 'SUP';
     const reemplaza = document.getElementById('reemplazaDesignacion');
     const alerta = document.getElementById('wizardAlerta');
+    const nombradas = document.querySelector('[name="hs_catedra"]');
+    const diasHorario = ['horas_lun', 'horas_mar', 'horas_mie', 'horas_jue', 'horas_vie']
+        .map(nombre => document.querySelector(`[name="${nombre}"]`));
+    const controlHoras = document.getElementById('controlHoras');
     let actual = 1;
     let temporizador;
+
+    const entero = campo => parseInt(campo.value || '0', 10) || 0;
+    const sumaHorario = () => diasHorario.reduce((total, campo) => total + entero(campo), 0);
+    const problemaDeHoras = () => {
+        const horas = entero(nombradas);
+        const suma = sumaHorario();
+        if (!horas) return 'Indique las horas cátedra nombradas de la designación (paso «Cargo y situación administrativa»).';
+        if (suma !== horas) return `El horario semanal suma ${suma} horas y la designación tiene ${horas} horas cátedra nombradas: deben coincidir.`;
+        return '';
+    };
+    const mostrarControlHoras = () => {
+        const horas = entero(nombradas);
+        const suma = sumaHorario();
+        controlHoras.textContent = horas
+            ? `Horario: ${suma} de ${horas} horas cátedra nombradas.`
+            : `Horario: ${suma} horas. Falta indicar las horas cátedra nombradas.`;
+        controlHoras.className = `small mb-4 fw-semibold ${horas && suma === horas ? 'text-success' : 'text-danger'}`;
+    };
 
     const mostrar = paso => {
         actual = paso;
@@ -165,8 +189,8 @@
     };
 
     const actualizarSuplencia = () => {
-        reemplaza.hidden = !esSuplencia.checked;
-        if (!esSuplencia.checked) {
+        reemplaza.hidden = !esSuplente();
+        if (!esSuplente()) {
             document.querySelector('[name="reemplaza"]').value = '';
         }
     };
@@ -191,18 +215,23 @@
             } else if (materia.value && !carrera.value) {
                 informar('Indique en qué carrera dicta la materia elegida.');
                 valido = false;
+            } else if (!entero(nombradas)) {
+                informar('Indique las horas cátedra nombradas de la designación.');
+                valido = false;
+            }
+        } else if (paso === 3) {
+            const problema = problemaDeHoras();
+            if (problema) {
+                informar(problema);
+                valido = false;
             }
         } else if (paso === 5) {
             const desde = document.querySelector('[name="desde"]');
             if (!desde.value) {
                 informar('Complete la fecha Desde antes de guardar la designación.');
                 valido = false;
-            } else if (
-                document.querySelector('[name="es_suplencia"]').checked
-                && !document.querySelector('[name="plazo_indeterminado"]').checked
-                && !document.querySelector('[name="hasta"]').value
-            ) {
-                informar('Indique la fecha de cese de la suplencia o marque plazo indeterminado.');
+            } else if (esSuplente() && !document.querySelector('[name="hasta"]').value.trim()) {
+                informar('Para una suplencia indique la fecha de cese o escriba SIN TERMINO (plazo indeterminado).');
                 valido = false;
             }
         }
@@ -250,7 +279,9 @@
     document.getElementById('wizardGuardar').addEventListener('click', event => {
         if (!validarPaso(actual)) event.preventDefault();
     });
-    esSuplencia.addEventListener('change', actualizarSuplencia);
+    situacion.addEventListener('change', actualizarSuplencia);
+    [nombradas, ...diasHorario].forEach(campo => campo.addEventListener('input', mostrarControlHoras));
+    mostrarControlHoras();
     if (persona.value) {
         fetch(`{% url 'personal:legajos_autocompletar' %}?q=${encodeURIComponent(persona.value)}`)
             .then(respuesta => respuesta.ok ? respuesta.json() : {resultados: []})

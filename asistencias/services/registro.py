@@ -74,7 +74,9 @@ def guardar_asistencia(
     _validar_periodo_abierto(fecha)
     _validar_jornada_abierta(usuario, fecha, motivo)
     validar_dia_laborable(fecha)
-    _validar_designacion_vigente(designacion, fecha)
+
+    if registro_id is None:
+        _validar_designacion_vigente(designacion, fecha)
 
     marca = datos["marca"]
     observaciones = datos.get("observaciones", "")
@@ -135,6 +137,15 @@ def guardar_asistencia(
 
         if registro.fecha != fecha:
             _validar_jornada_abierta(usuario, registro.fecha, motivo)
+
+        # RF-11: un registro ya cargado se corrige aunque después se haya dado
+        # de baja la designación o el legajo, si la fecha está dentro de su
+        # vigencia. Pasarlo a otra designación sí exige que esa esté activa.
+        _validar_designacion_vigente(
+            designacion,
+            fecha,
+            corrigiendo=designacion.pk == registro.designacion_id,
+        )
 
         antes = _datos_registro(registro)
 

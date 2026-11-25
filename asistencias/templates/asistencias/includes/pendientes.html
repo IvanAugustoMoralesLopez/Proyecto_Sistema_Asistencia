@@ -50,12 +50,22 @@ y Licencias › Pendientes.
                         <div>
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="respuesta" value="formulario" id="r-f-{{ forloop.counter }}" required>
-                                <label class="form-check-label" for="r-f-{{ forloop.counter }}">Llegó el formulario (queda justificada)</label>
+                                <label class="form-check-label" for="r-f-{{ forloop.counter }}">Llegó el formulario</label>
                             </div>
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="respuesta" value="no_llego" id="r-n-{{ forloop.counter }}">
                                 <label class="form-check-label" for="r-n-{{ forloop.counter }}">No llegó (queda injustificada)</label>
                             </div>
+                        </div>
+                        {# RF-09: al recibir el papel la I pasa a la marca del formulario, como en Recepción. #}
+                        <div>
+                            <label class="form-label small mb-0" for="marca-{{ forloop.counter }}">Si llegó, ¿qué formulario es?</label>
+                            <select class="form-select form-select-sm" id="marca-{{ forloop.counter }}" name="nueva_marca">
+                                <option value="">Inasistencia justificada (no cambiar la marca)</option>
+                                <option value="LIC">Licencia médica o especial (LIC)</option>
+                                <option value="LT">Largo tratamiento (LT)</option>
+                                <option value="P">Permiso (P)</option>
+                            </select>
                         </div>
                         <div>
                             <label class="form-label small mb-0" for="nro-{{ forloop.counter }}">N° de formulario (opcional)</label>

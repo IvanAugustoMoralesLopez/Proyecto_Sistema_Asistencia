@@ -251,6 +251,45 @@ def _agrupar_por_agente(filas, valores_agente, errores_agente):
     return agentes
 
 
+def _nombre_de(designacion):
+    if designacion.espacio_curricular_id:
+        return designacion.espacio_curricular.nombre
+    return designacion.cargo.descripcion
+
+
+def _sin_horario_cargado(fecha, texto, agentes):
+    """
+    RF-12: designaciones vigentes del día que no tienen NINGÚN horario
+    cargado. Con «Solo los que dan clase» no aparecen en la lista y, si el
+    docente da otra materia ese día, la marca no las alcanza. No se inventan
+    horas: se avisa para que se cargue el horario en Personal.
+
+    Devuelve ({dni: ["«Bedel»", …]} de los docentes que están en la lista,
+    [personas] que no aparecen en la lista por no tener ningún horario).
+    """
+    en_lista = {agente["persona"].pk for agente in agentes}
+    mostradas = {
+        fila["designacion"].pk
+        for agente in agentes
+        for fila in agente["materias"]
+    }
+    por_agente = {}
+    fuera = {}
+
+    for designacion in _designaciones_del_dia(fecha, texto):
+        if designacion.pk in mostradas or dias_con_clase(designacion):
+            continue
+
+        dni = designacion.persona_id
+
+        if dni in en_lista:
+            por_agente.setdefault(dni, []).append(f"«{_nombre_de(designacion)}»")
+        else:
+            fuera.setdefault(dni, designacion.persona)
+
+    return por_agente, list(fuera.values())
+
+
 def _leer_agentes(post, fecha, marcas_por_pk, *, solo_con_clase, ya_leidas):
     """
     RF-07: interpreta la planilla por agente. Por cada docente con una marca
@@ -583,8 +622,8 @@ def _motivo_de_bloqueo(request, fecha, cierre, jornada_cerrada, no_laborable):
         "asistencias.modificar_jornada_cerrada"
     ):
         return (
-            "La jornada está cerrada: modificarla requiere autorización "
-            "de Secretaría o Subsecretaría."
+            "La jornada está cerrada: modificarla requiere el permiso para "
+            "modificar jornadas cerradas."
         )
 
     return None
@@ -752,6 +791,16 @@ def planilla_rapida(request):
 
     agentes = _agrupar_por_agente(filas, valores_agente, errores_agente)
 
+    # RF-12: aviso de las designaciones sin ningún horario cargado, que con
+    # «Solo los que dan clase» no reciben la marca (con «Todos» sí aparecen).
+    sin_horario_por_agente, fuera_sin_horario = (
+        _sin_horario_cargado(fecha, texto, agentes)
+        if alcance == ALCANCE_CON_CLASE
+        else ({}, [])
+    )
+    for agente in agentes:
+        agente["sin_horario"] = sin_horario_por_agente.get(agente["persona"].pk, [])
+
     # RF-18: aviso visual a quien carga, antes de que se agote el límite
     # anual de inasistencias y permisos. Import local: reportes importa
     # asistencias, no al revés.
@@ -795,6 +844,7 @@ def planilla_rapida(request):
             "alcance_todos": ALCANCE_TODOS,
             "alcance_con_clase": ALCANCE_CON_CLASE,
             "sin_horarios": sin_horarios,
+            "fuera_sin_horario": fuera_sin_horario,
             "ciclo_lectivo": ciclo,
             "fuera_del_ciclo": fecha.year != ciclo,
             "filas": filas,

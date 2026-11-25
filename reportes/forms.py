@@ -81,24 +81,8 @@ class FiltroBitacoraForm(forms.Form):
             .order_by("username")
         )
 
-    def clean_mes(self):
-        texto = (self.cleaned_data.get("mes") or "").strip()
-        if not texto:
-            return None
-        try:
-            anio, mes = (int(parte) for parte in texto.split("-"))
-            return date(anio, mes, 1)
-        except (TypeError, ValueError):
-            raise forms.ValidationError("Elegí un mes válido (AAAA-MM).")
-
     def clean(self):
         datos = super().clean()
-        mes = datos.get("mes")
-        if mes:
-            # RF-17: el mes manda sobre el rango escrito a mano.
-            ultimo = calendar.monthrange(mes.year, mes.month)[1]
-            datos["desde"] = mes
-            datos["hasta"] = date(mes.year, mes.month, ultimo)
         desde, hasta = datos.get("desde"), datos.get("hasta")
         if desde and hasta and desde > hasta:
             raise forms.ValidationError("La fecha «desde» no puede ser posterior a «hasta».")
@@ -258,8 +242,26 @@ class FiltroConsultaForm(forms.Form):
             EspacioCurricular.objects.filter(activo=True).order_by("nombre")
         )
 
+    def clean_mes(self):
+        """«AAAA-MM» (el valor del selector de mes) → primer día del mes, o None."""
+        texto = (self.cleaned_data.get("mes") or "").strip()
+        if not texto:
+            return None
+        try:
+            anio, mes = (int(parte) for parte in texto.split("-"))
+            return date(anio, mes, 1)
+        except (TypeError, ValueError):
+            raise forms.ValidationError("Elegí un mes válido (AAAA-MM).")
+
     def clean(self):
         datos = super().clean()
+        mes = datos.get("mes")
+        if mes:
+            # RF-17: el mes completa Desde y Hasta con su primer y último día,
+            # y manda sobre un rango escrito a mano.
+            ultimo = calendar.monthrange(mes.year, mes.month)[1]
+            datos["desde"] = mes
+            datos["hasta"] = date(mes.year, mes.month, ultimo)
         desde, hasta = datos.get("desde"), datos.get("hasta")
         if desde and hasta and desde > hasta:
             raise forms.ValidationError("La fecha «desde» no puede ser posterior a «hasta».")

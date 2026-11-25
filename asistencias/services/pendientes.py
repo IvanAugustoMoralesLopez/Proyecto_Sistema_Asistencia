@@ -351,19 +351,26 @@ def resolver(
     respuesta,
     nro_formulario="",
     motivo="",
+    nueva_marca="",
 ):
     """
     Responde un pendiente:
 
-    - falta + «formulario»: queda justificada (el número es opcional).
+    - falta + «formulario»: queda justificada (el número es opcional). Con
+      `nueva_marca` ("LIC", "LT" o "P") la I pasa a la marca del formulario
+      (RF-09), igual que en Recepción de formularios. Una LIC o LT todavía
+      no tiene la licencia cargada, así que sigue como «licencia sin
+      completar»; un P queda resuelto.
     - falta + «no_llego»: se confirma como injustificada.
     - licencia + «no_corresponde»: pasa a inasistencia (I) con un motivo y
       sigue el circuito de faltas.
 
     «Era una licencia» y «Completar la licencia» no pasan por acá: abren
     Nueva licencia, que al guardar vincula los registros y los saca de la
-    lista.
+    lista. Devuelve el pendiente, con `marca_nueva` (o None).
     """
+    from .recepcion import MARCAS_AL_RECEPCIONAR
+
     _exigir(usuario, "asistencias.change_registroasistencia")
     _validar_sesion_edicion(usuario, token)
     _validar_motivo_maximo(motivo)
@@ -388,6 +395,22 @@ def resolver(
             f"(al menos {MOTIVO_MINIMO} caracteres)."
         )
 
+    nueva_marca = (nueva_marca or "").strip().upper()
+    marca_nueva = None
+    if nueva_marca:
+        if respuesta != RESPUESTA_FORMULARIO:
+            raise ValidationError(
+                "La marca del formulario solo se elige si llegó el formulario."
+            )
+        if nueva_marca not in MARCAS_AL_RECEPCIONAR:
+            raise ValidationError(
+                "Al recibir el formulario la marca solo puede pasar a "
+                "Licencia (LIC), Largo tratamiento (LT) o Permiso (P)."
+            )
+        marca_nueva = MarcaAsistencia.objects.filter(codigo=nueva_marca).first()
+        if marca_nueva is None:
+            raise ValidationError(f"No existe la marca «{nueva_marca}».")
+
     inasistencia = None
     if respuesta == RESPUESTA_NO_CORRESPONDE:
         inasistencia = MarcaAsistencia.objects.filter(
@@ -408,9 +431,27 @@ def resolver(
             registro.nro_formulario = nro_formulario
             registro.fecha_recepcion = hoy
             registro.recepcionado_por = usuario
-            registro.resuelto_en = ahora
-            registro.resuelto_por = usuario
             texto = "Pendiente resuelto: llegó el formulario"
+
+            if marca_nueva is not None:
+                # RF-09: la I pasa a la marca del formulario.
+                registro.marca = marca_nueva
+                if marca_nueva.requiere_observacion and not registro.observaciones.strip():
+                    registro.observaciones = (
+                        f"{marca_nueva.descripcion} - formulario N° {nro_formulario}"
+                        if nro_formulario
+                        else f"{marca_nueva.descripcion} - formulario recibido"
+                    )
+                texto += f" ({marca_nueva.codigo})"
+
+            if marca_nueva is not None and marca_nueva.codigo in CODIGOS_LICENCIA:
+                # Falta cargar la licencia: queda como «licencia sin
+                # completar», con su propia posibilidad de posponer.
+                registro.pospuesto_en = None
+                registro.pospuesto_por = None
+            else:
+                registro.resuelto_en = ahora
+                registro.resuelto_por = usuario
         elif respuesta == RESPUESTA_NO_LLEGO:
             registro.resuelto_en = ahora
             registro.resuelto_por = usuario
@@ -433,6 +474,7 @@ def resolver(
         registro.save()
         _registrar(registro, usuario, antes, texto)
 
+    pendiente["marca_nueva"] = marca_nueva
     return pendiente
 
 

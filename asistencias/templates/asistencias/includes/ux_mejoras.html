@@ -86,29 +86,75 @@
     });
 
     /* Punto 4: avisar que esta guardando. Antes el boton quedaba mudo y
-       bloqueado 5 segundos y no se sabia si habia pasado algo. */
+       bloqueado 5 segundos y no se sabia si habia pasado algo.
+
+       Un boton desactivado no viaja en el envio. Si el boton apretado tiene
+       nombre (por ejemplo accion=copiar), su valor se pasa a un campo oculto
+       antes de desactivarlo: sin eso, «Copiar lo del dia anterior» llegaba
+       al servidor como «Guardar» y grababa la planilla. */
+    var enEspera = [];
+
+    function seDesactiva(btn) {
+        return btn.tagName === 'BUTTON' && btn.type === 'submit' &&
+            btn.dataset.sinEspera !== '1' && !btn.disabled;
+    }
+
+    function quitarCopias(raiz) {
+        raiz.querySelectorAll('input[data-copia-del-boton]').forEach(function (campo) {
+            campo.remove();
+        });
+    }
+
+    /* Si la pagina no llega a cambiar (por ejemplo, porque el servidor
+       devolvio un error) o se vuelve con «Atras», se recuperan los botones. */
+    function restaurar() {
+        enEspera.forEach(function (item) {
+            item.boton.disabled = false;
+            item.boton.innerHTML = item.texto;
+        });
+        enEspera = [];
+        quitarCopias(document);
+    }
+
     document.querySelectorAll('form').forEach(function (form) {
         form.addEventListener('submit', function (evento) {
             if (evento.defaultPrevented) { return; }
 
-            form.querySelectorAll('button[type="submit"]').forEach(function (btn) {
-                if (btn.dataset.sinEspera === '1') { return; }
+            quitarCopias(form);
+            var apretado = evento.submitter || null;
 
-                var textoOriginal = btn.innerHTML;
+            if (apretado && apretado.name && seDesactiva(apretado)) {
+                var copia = document.createElement('input');
+                copia.type = 'hidden';
+                copia.name = apretado.name;
+                copia.value = apretado.value;
+                copia.setAttribute('data-copia-del-boton', '1');
+                form.appendChild(copia);
+            }
+
+            /* form.elements: los botones del formulario, incluidos los que
+               estan afuera y lo apuntan con el atributo form. */
+            Array.prototype.forEach.call(form.elements, function (btn) {
+                if (!seDesactiva(btn)) { return; }
+
+                enEspera.push({ boton: btn, texto: btn.innerHTML });
                 btn.disabled = true;
-                btn.innerHTML =
-                    '<span class="spinner-border spinner-border-sm me-2"' +
-                    ' aria-hidden="true"></span>' +
-                    (btn.dataset.textoEspera || 'Guardando...');
 
-                /* Si la pagina no llega a cambiar (por ejemplo, porque el
-                   servidor devolvio un error), se recupera el boton. */
-                setTimeout(function () {
-                    btn.disabled = false;
-                    btn.innerHTML = textoOriginal;
-                }, 15000);
+                /* La rueda y el texto, solo en el boton que se apreto. */
+                if (!apretado || btn === apretado) {
+                    btn.innerHTML =
+                        '<span class="spinner-border spinner-border-sm me-2"' +
+                        ' aria-hidden="true"></span>' +
+                        (btn.dataset.textoEspera || 'Guardando...');
+                }
             });
+
+            setTimeout(restaurar, 15000);
         });
+    });
+
+    window.addEventListener('pageshow', function (evento) {
+        if (evento.persisted) { restaurar(); }
     });
 })();
 </script>

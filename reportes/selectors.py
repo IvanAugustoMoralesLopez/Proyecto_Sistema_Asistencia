@@ -264,8 +264,8 @@ def _fila_de_ausencia(registro):
 def buscar_ausencias(filtros=None):
     """
     Ausencias y permisos simples: registros diarios que computan inasistencia
-    (Inasistencia, Presente retirado) y que no están amparados por una
-    licencia otorgada. Las licencias ya se consultan como licencias.
+    (I, P, LIC y LT del catálogo v2.0) y que no están amparados por una
+    licencia otorgada. Las licencias otorgadas se consultan como licencias.
     """
     filtros = filtros or {}
     registros = RegistroAsistencia.objects.filter(
@@ -407,8 +407,8 @@ def calcular_alertas(anio, umbral=UMBRAL_POR_DEFECTO):
     regla de conteo del módulo de licencias. Un docente se evalúa por
     artículo, sumando todas las licencias de ese artículo en el año.
 
-    RN-08: el «año» del tope es el ciclo lectivo que empieza en `anio`
-    (de marzo a febrero, según los parámetros del sistema).
+    RN-08: el «año» del tope es el ciclo lectivo que empieza en `anio`; el
+    mes de inicio sale de los parámetros del sistema (1 = año calendario).
     """
     from licencias.dias import limites_del_ciclo
 
@@ -611,6 +611,43 @@ def calcular_designaciones_por_vencer(dias=DIAS_ANTICIPACION_POR_DEFECTO,
             "dias_restantes": restantes,
             "vencida": restantes < 0,
             "vence_hoy": restantes == 0,
+        })
+    return filas
+
+
+# ───────────── Alertas de horas cátedra ─────────────
+
+def calcular_designaciones_con_horas_sin_cuadrar():
+    """
+    Designaciones activas cuyo horario semanal no suma las horas cátedra
+    nombradas, o que no tienen horas nombradas. La regla es la de personal
+    (`Designacion.problema_de_horas`): acá solo se listan para avisar.
+    """
+    designaciones = (
+        Designacion.objects.filter(activo=True)
+        .select_related("persona", "cargo", "espacio_curricular", "carrera")
+        .prefetch_related("horarios")
+        .order_by("persona__apellido_nombre", "pk")
+    )
+    filas = []
+    for d in designaciones:
+        problema = d.problema_de_horas()
+        if not problema:
+            continue
+        horario = sum(h.horas_catedra for h in d.horarios.all())
+        espacio = d.espacio_curricular
+        filas.append({
+            "pk": d.pk,
+            "dni": d.persona.dni,
+            "docente": d.persona.apellido_nombre,
+            "cargo": str(d.cargo),
+            "materia": espacio.nombre if espacio else "",
+            "carrera": str(d.carrera) if d.carrera_id else "",
+            "situacion": d.get_situacion_revista_display() if d.situacion_revista else "",
+            "nombradas": d.hs_catedra,
+            "horario": horario,
+            "diferencia": horario - (d.hs_catedra or 0),
+            "problema": problema,
         })
     return filas
 

@@ -4,8 +4,9 @@ Este documento lista, requerimiento por requerimiento, qué se cambió en el
 sistema para que cumpla la versión 2.0 tal como está escrita. Los que ya
 cumplían quedan indicados como "sin cambios".
 
-Las pruebas automáticas pasaron de 546 a 607 y pasan todas
-(`python manage.py test`).
+Las pruebas automáticas pasan todas (`python manage.py test`, sobre
+MariaDB): eran 546, 607 al cerrar la v2.0 y 827 al 25/11/2026, con las
+correcciones del final de este documento.
 
 ## Decisiones tomadas
 
@@ -103,7 +104,17 @@ emitidas, agrupadas por número con todas sus materias (RN-11).
 
 ## Qué comprobar a mano después de instalar
 
-1. `python manage.py migrate` termina sin errores sobre MariaDB. Esta versión se probó con SQLite, no con MariaDB.
-2. Cargar `datos_prueba.sql`, entrar como `bedelia1` y abrir *Planilla mensual IL-01 / IL-02* de octubre de 2026. Tocar *Procesar el mes* tiene que generar 14 renglones.
+1. `python manage.py migrate` termina sin errores sobre MariaDB (las pruebas automáticas también corren sobre MariaDB).
+2. Cargar `datos_prueba.sql`, entrar como `bedelia1` y abrir *Planilla mensual IL-01 / IL-02* de octubre de 2026. Tocar *Volver a procesar el mes* tiene que conservar los renglones con sus artículos y disposiciones.
 3. En la planilla rápida de un día con un docente de varias materias, elegir una sola marca y revisar en el historial que se crearon los registros de cada materia.
 4. Cargar un feriado en el calendario y comprobar que ese día se puede cargar asistencia y que aparece el aviso.
+
+## Correcciones posteriores (25/11/2026)
+
+| Módulo | Qué se corrigió |
+|---|---|
+| reportes (RF-17) | El filtro *Mes* de Consultas no filtraba: la lógica estaba en el formulario de la Bitácora. Ahora completa Desde y Hasta con el primer y el último día del mes (también en la exportación CSV). |
+| personal (RF-06) | Importación CSV pensada para archivos reales de Excel: acepta UTF-8 y Windows-1252 («CSV (delimitado por comas)» de Excel en español), separador `;`, `,` o tabulación (y el renglón `sep=;`), encabezados con espacios o tildes («Nombre y Apellido»), columnas sin título vacías, renglones vacíos, filas a las que les faltan las últimas celdas, DNI con puntos, números guardados como `166.0`, fechas dd/mm/aaaa en *fecha_nacimiento*, sexo Masculino/Femenino y situación de revista Titular/Interino/Suplente. Avisa con un mensaje claro un mismo DNI con otro nombre en el mismo archivo, una coma sin comillas, un DNI o una fecha inválidos y una suplencia sin fecha de cese (pide SIN TERMINO). El número de fila rechazada es el renglón del archivo. La plantilla se descarga con `;` para que Excel en español la abra en columnas. |
+| asistencias | Los textos ya no dicen que corregir una jornada o un mes cerrado «requiere autorización de Secretaría»: los tres roles tienen el mismo acceso (RF-19). «Revisado por Secretaría» pasa a «Validado». |
+| reportes | Alertas › Topes ya no dice que se descuentan los feriados (RF-10: no se descuentan). Documentación de roles al día; las pruebas viejas de roles con jerarquía se reemplazaron por pruebas de acceso igual para los tres. Migración `0004`: «Bedelía» con tilde. |
+| licencias | Editar licencia mostraba los mensajes dos veces; el listado tenía texto suelto al final de la plantilla. |

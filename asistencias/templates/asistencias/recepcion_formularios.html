@@ -1,15 +1,15 @@
 {% extends "asistencias/_base_asistencias.html" %}
 {% load asistencias_extras %}
 
-{% block title %}Certificados y justificaciones{% endblock %}
+{% block title %}Recepción de formularios{% endblock %}
 
 {% block content %}
 <div class="asis-cabecera">
     <div class="encabezado-planilla">
         <div>
-            <p class="ruta">Asistencia › Certificados</p>
+            <p class="ruta">Asistencia › Recepción de formularios</p>
             <h1 class="encabezado-planilla__titulo">
-                Certificados y justificaciones
+                Recepción de formularios
                 {% if pendientes %}
                     <span class="badge text-bg-warning">{{ pendientes }} sin certificado</span>
                 {% endif %}
@@ -27,9 +27,16 @@
     </div>
 </div>
 
-<details class="asis-filtros mb-3"{% if querystring %} open{% endif %}>
+{% if filtro_con_error %}
+    <div class="alert alert-danger" role="alert">
+        Hay un filtro con un error (marcado en rojo). Corregilo para ver las
+        faltas: mientras tanto no se muestra nada.
+    </div>
+{% endif %}
+
+<details class="asis-filtros mb-3"{% if hay_filtros or filtro_con_error %} open{% endif %}>
     <summary class="btn btn-filtro px-0">
-        Filtros de búsqueda{% if querystring %} (activos){% endif %}
+        Filtros de búsqueda{% if hay_filtros %} (activos){% endif %}
     </summary>
 
     <form method="get" class="card card-body mt-2">
@@ -112,7 +119,11 @@
             {% empty %}
                 <tr>
                     <td colspan="5" class="text-center py-5 text-secondary">
-                        No hay faltas que coincidan con lo que buscaste.
+                        {% if filtro_con_error %}
+                            Corregí el filtro marcado en rojo para ver las faltas.
+                        {% else %}
+                            No hay faltas que coincidan con lo que buscaste.
+                        {% endif %}
                     </td>
                 </tr>
             {% endfor %}
@@ -128,4 +139,5 @@
 {% block extra_js %}
 {{ block.super }}
 {% include "asistencias/includes/ux_mejoras.html" %}
+{% include "asistencias/includes/completar_fechas.html" %}
 {% endblock %}

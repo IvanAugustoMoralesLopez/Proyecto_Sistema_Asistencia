@@ -233,9 +233,7 @@
                 <div class="col-md-2">{{ designacion_form.horas_jue.label_tag }}{{ designacion_form.horas_jue }}</div>
                 <div class="col-md-2">{{ designacion_form.horas_vie.label_tag }}{{ designacion_form.horas_vie }}</div>
             </div>
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">{{ designacion_form.especialidad.label_tag }}{{ designacion_form.especialidad }}</div>
-            </div>
+            <div id="controlHoras" class="small mb-3" aria-live="polite"></div>
             <div class="row g-3 mb-3">
                 <div class="col-md-3">{{ designacion_form.norma_tipo.label_tag }}{{ designacion_form.norma_tipo }}</div>
                 <div class="col-md-3">{{ designacion_form.norma_numero.label_tag }}{{ designacion_form.norma_numero }}</div>
@@ -244,7 +242,10 @@
             </div>
             <div class="row g-3 mb-3">
                 <div class="col-md-3">{{ designacion_form.desde.label_tag }}{{ designacion_form.desde }}</div>
-                <div class="col-md-3">{{ designacion_form.hasta.label_tag }}{{ designacion_form.hasta }}</div>
+                <div class="col-md-3">
+                    {{ designacion_form.hasta.label_tag }}{{ designacion_form.hasta }}
+                    <div class="form-text">Suplencia sin fecha de cese: SIN TERMINO.</div>
+                </div>
                 <datalist id="opciones-sin-inicio"><option value="SIN INICIO"></datalist>
                 <datalist id="opciones-sin-termino"><option value="SIN TERMINO"></datalist>
                 <div class="col-md-3">{{ designacion_form.pof.label_tag }}{{ designacion_form.pof }}</div>
@@ -316,6 +317,12 @@
                             {% empty %}
                                 {{ designacion.hs_catedra|default:"—" }}
                             {% endfor %}
+                            {% with problema=designacion.problema_de_horas %}
+                                {% if problema and designacion.activo %}
+                                    <div><span class="badge text-bg-warning" title="{{ problema }}">Horas sin cuadrar</span></div>
+                                    <div class="small text-danger">{{ problema }}</div>
+                                {% endif %}
+                            {% endwith %}
                         </td>
                         <td>{{ designacion.desde_texto }} – {{ designacion.hasta_texto }}</td>
                         <td>
@@ -398,10 +405,18 @@
         <h2 class="h5 mb-0">Importación masiva desde CSV</h2>
     </div>
     <div class="card-body">
-        <p class="text-secondary">
-            Codificación UTF-8. Columnas admitidas:
-            La plantilla descargable contiene todas las columnas admitidas. Para importar sólo un legajo, complete <code>dni</code> y <code>nombre_apellido</code> y deje vacías las columnas de designación. También se aceptan archivos anteriores con <code>apellido_nombre</code> o con <code>apellido</code> y <code>nombres</code>. Fechas de vigencia: AAAA-MM-DD, dd/mm/aaaa, <code>SIN INICIO</code> o <code>SIN TERMINO</code>.
+        <p class="text-secondary mb-2">
+            La plantilla descargable trae todas las columnas admitidas. Se puede guardar desde
+            Excel como «CSV UTF-8» o «CSV (delimitado por comas)»; el separador puede ser
+            <code>;</code> o <code>,</code>.
         </p>
+        <ul class="text-secondary small">
+            <li>Una fila por designación: un docente con varias materias va en varias filas con el mismo DNI y el mismo nombre.</li>
+            <li>Para importar sólo un legajo, complete <code>dni</code> y <code>nombre_apellido</code> y deje vacías las columnas de designación. También se aceptan <code>apellido_nombre</code> o <code>apellido</code> y <code>nombres</code>.</li>
+            <li>DNI con o sin puntos. Sexo: M o F. Situación de revista: TIT, INT o SUP (o Titular, Interino, Suplente).</li>
+            <li>Fechas: dd/mm/aaaa o AAAA-MM-DD. En Desde se puede escribir <code>SIN INICIO</code> y en Hasta <code>SIN TERMINO</code> (una suplencia sin fecha de cese lleva SIN TERMINO).</li>
+            <li>Horario: <code>horas_lun</code> a <code>horas_vie</code>. Si también se indica <code>hs_catedra</code>, la suma del horario tiene que coincidir.</li>
+        </ul>
         {% if csv_pendiente %}
             {# RF-06: vista previa. Todavía no se guardó nada. #}
             <div class="alert alert-warning" id="csv-vista-previa">
@@ -541,6 +556,28 @@
             );
         });
     });
+})();
+
+(() => {
+    /* Control de horas: el horario semanal tiene que sumar las horas cátedra
+       nombradas (el servidor no deja guardar si no coinciden). */
+    const nombradas = document.querySelector('[name="hs_catedra"]');
+    const control = document.getElementById('controlHoras');
+    if (!nombradas || !control) return;
+    const dias = ['horas_lun', 'horas_mar', 'horas_mie', 'horas_jue', 'horas_vie']
+        .map(nombre => document.querySelector(`[name="${nombre}"]`))
+        .filter(Boolean);
+    const entero = campo => parseInt(campo.value || '0', 10) || 0;
+    const mostrar = () => {
+        const horas = entero(nombradas);
+        const suma = dias.reduce((total, campo) => total + entero(campo), 0);
+        control.textContent = horas
+            ? `Horario: ${suma} de ${horas} horas cátedra nombradas.`
+            : `Horario: ${suma} horas. Falta indicar las horas cátedra nombradas.`;
+        control.className = `small mb-3 fw-semibold ${horas && suma === horas ? 'text-success' : 'text-danger'}`;
+    };
+    [nombradas, ...dias].forEach(campo => campo.addEventListener('input', mostrar));
+    mostrar();
 })();
 </script>
 {% endblock %}

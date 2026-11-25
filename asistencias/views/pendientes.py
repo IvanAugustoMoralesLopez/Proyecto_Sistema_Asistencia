@@ -38,12 +38,18 @@ def resolver_pendiente_view(request):
                 respuesta=request.POST.get("respuesta", ""),
                 nro_formulario=request.POST.get("nro_formulario", ""),
                 motivo=request.POST.get("motivo", ""),
+                nueva_marca=request.POST.get("nueva_marca", ""),
             )
-            messages.success(
-                request,
+            texto = (
                 f"Se resolvió el pendiente de {pendiente['persona'].apellido_nombre} "
-                f"del {pendiente['fecha']:%d/%m/%Y}.",
+                f"del {pendiente['fecha']:%d/%m/%Y}."
             )
+            marca_nueva = pendiente.get("marca_nueva")
+            if marca_nueva is not None:
+                texto += f" La falta pasó a {marca_nueva.descripcion} ({marca_nueva.codigo})."
+                if marca_nueva.codigo in ("LIC", "LT"):
+                    texto += " Falta cargar la licencia: sigue en Pendientes."
+            messages.success(request, texto)
         else:
             raise ValidationError("Acción no válida.")
     except (ValidationError, PermissionDenied) as exc:

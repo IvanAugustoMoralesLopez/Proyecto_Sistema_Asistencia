@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Horas cátedra sin cuadrar{% endblock %}
+{% block seccion %}reportes-alertas{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Alertas</h1>
+{% include "reportes/_tabs_alertas.html" with tab_alertas="horas" %}
+
+<p class="text-muted small">
+    Designaciones activas cuyo horario semanal no suma las horas cátedra nombradas (o que no tienen horas
+    nombradas). Al cargar o modificar una designación el sistema ya no deja guardarla así; estas son las que
+    vienen de antes o de una importación sin horario.
+    {% if alertas %}<strong class="text-danger">{{ alertas|length }} para corregir.</strong>{% endif %}
+</p>
+
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>DNI</th>
+                <th>Docente</th>
+                <th>Cargo</th>
+                <th>Materia / Carrera</th>
+                <th>Sit. revista</th>
+                <th class="text-end">Horas nombradas</th>
+                <th class="text-end">Horario semanal</th>
+                <th class="text-end">Diferencia</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in alertas %}
+                <tr>
+                    <td>{{ a.dni }}</td>
+                    <td>{{ a.docente }}</td>
+                    <td>{{ a.cargo }}</td>
+                    <td>{{ a.materia|default:"—" }}{% if a.carrera %}<br><span class="text-muted small">{{ a.carrera }}</span>{% endif %}</td>
+                    <td>{{ a.situacion|default:"—" }}</td>
+                    <td class="text-end">{{ a.nombradas|default:"—" }}</td>
+                    <td class="text-end">{{ a.horario }}</td>
+                    <td class="text-end">
+                        <span class="badge {% if a.diferencia > 0 %}text-bg-danger{% else %}text-bg-warning{% endif %}">
+                            {% if a.diferencia > 0 %}+{% endif %}{{ a.diferencia }}
+                        </span>
+                    </td>
+                    <td class="text-nowrap">
+                        {% if perms.personal.change_designacion %}
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'personal:editar_designacion' a.pk %}">Corregir</a>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="9" class="text-center text-muted py-4">Todas las designaciones activas tienen el horario igual a sus horas cátedra nombradas.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

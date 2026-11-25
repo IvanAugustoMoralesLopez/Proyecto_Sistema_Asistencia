@@ -16,6 +16,7 @@ from .models import (
     Persona,
     TipoInstrumentoLegal,
     UnidadEducativa,
+    problema_de_horas,
 )
 
 
@@ -413,7 +414,6 @@ class DesignacionForm(forms.ModelForm):
             "turno",
             "hs_catedra",
             "reemplaza",
-            "especialidad",
             "disp_alta_nro",
             "sello_regional_as",
             "norma_tipo",
@@ -426,9 +426,14 @@ class DesignacionForm(forms.ModelForm):
             "anio_pof",
             "novedad",
             "observaciones",
-            "es_suplencia",
-            "plazo_indeterminado",
+            # Sin «especialidad», «es_suplencia» ni «plazo_indeterminado»: la
+            # suplencia sale de la situación de revista (Suplente) y el plazo
+            # indeterminado de escribir SIN TERMINO en Hasta (ver clean()).
+            # Las columnas siguen en la base y se completan solas.
         ]
+        labels = {
+            "hs_catedra": "Horas cátedra nombradas",
+        }
         widgets = {
             "cargo": forms.Select(attrs={"class": "form-select"}),
             "espacio_curricular": forms.Select(attrs={"class": "form-select"}),
@@ -439,10 +444,9 @@ class DesignacionForm(forms.ModelForm):
             "division_seccion": forms.TextInput(attrs={"class": "form-control"}),
             "turno": forms.TextInput(attrs={"class": "form-control"}),
             "hs_catedra": forms.NumberInput(
-                attrs={"class": "form-control", "min": "0"}
+                attrs={"class": "form-control", "min": "1"}
             ),
             "reemplaza": forms.Select(attrs={"class": "form-select"}),
-            "especialidad": forms.Select(attrs={"class": "form-select"}),
             "disp_alta_nro": forms.TextInput(attrs={"class": "form-control"}),
             "sello_regional_as": forms.TextInput(attrs={"class": "form-control"}),
             "norma_numero": forms.TextInput(attrs={"class": "form-control"}),
@@ -457,12 +461,6 @@ class DesignacionForm(forms.ModelForm):
             "novedad": forms.TextInput(attrs={"class": "form-control"}),
             "observaciones": forms.Textarea(
                 attrs={"class": "form-control", "rows": 3}
-            ),
-            "es_suplencia": forms.CheckboxInput(
-                attrs={"class": "form-check-input"}
-            ),
-            "plazo_indeterminado": forms.CheckboxInput(
-                attrs={"class": "form-check-input"}
             ),
         }
 
@@ -518,24 +516,35 @@ class DesignacionForm(forms.ModelForm):
         cleaned_data = super().clean()
         desde = cleaned_data.get("desde")
         hasta = cleaned_data.get("hasta")
+        sin_termino = hasta == TEXTO_SIN_TERMINO
 
         # RN-09: cadenas especiales. SIN INICIO se guarda con la fecha
         # convenida y la marca `sin_inicio`; SIN TERMINO deja `hasta` vacío.
         self.instance.sin_inicio = desde == TEXTO_SIN_INICIO
         if desde == TEXTO_SIN_INICIO:
             desde = cleaned_data["desde"] = FECHA_SIN_INICIO
-        if hasta == TEXTO_SIN_TERMINO:
+        if sin_termino:
             hasta = cleaned_data["hasta"] = None
-            # Una suplencia SIN TERMINO es de plazo indeterminado.
-            if cleaned_data.get("es_suplencia"):
-                cleaned_data["plazo_indeterminado"] = True
 
-        plazo_indeterminado = cleaned_data.get("plazo_indeterminado")
+        # La suplencia sale de la situación de revista: no hace falta una
+        # marca aparte. Una suplencia SIN TERMINO es de plazo indeterminado.
+        es_suplencia = (
+            cleaned_data.get("situacion_revista") == Designacion.Situacion.SUPLENTE
+        )
+        self.instance.es_suplencia = es_suplencia
+        self.instance.plazo_indeterminado = es_suplencia and sin_termino
+        if es_suplencia and hasta is None and not sin_termino and "hasta" not in self.errors:
+            self.add_error(
+                "hasta",
+                "Para una suplencia indique la fecha de cese o escriba "
+                "SIN TERMINO (plazo indeterminado).",
+            )
+            # El modelo repetiría el mismo aviso con otras palabras.
+            self.instance.plazo_indeterminado = True
+
         reemplaza = cleaned_data.get("reemplaza")
         if desde and hasta and hasta < desde:
             self.add_error("hasta", "La fecha de finalización no puede ser anterior al inicio.")
-        if plazo_indeterminado:
-            cleaned_data["hasta"] = None
         if (
             reemplaza
             and self.instance.reemplaza_id != reemplaza.pk
@@ -546,6 +555,16 @@ class DesignacionForm(forms.ModelForm):
                 "reemplaza",
                 "La designación reemplazada no está vigente al inicio de la suplencia.",
             )
+
+        # Control de horas: el horario semanal tiene que sumar las horas
+        # cátedra nombradas (misma regla que la importación y las alertas).
+        if "hs_catedra" not in self.errors:
+            problema = problema_de_horas(
+                cleaned_data.get("hs_catedra"),
+                [cleaned_data.get(campo) or 0 for campo in self.HORAS_POR_DIA],
+            )
+            if problema:
+                self.add_error("hs_catedra", problema)
         return cleaned_data
 
     @transaction.atomic

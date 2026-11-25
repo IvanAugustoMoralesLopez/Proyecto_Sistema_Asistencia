@@ -98,11 +98,11 @@ python manage.py cargar_nomenclador
 
 ### 6. Cargar datos de prueba (opcional)
 
-El archivo `datos_prueba.sql` carga datos ficticios: 20 docentes, 22 designaciones, 12 licencias, feriados 2026, registros de asistencia de octubre 2026 y 9 usuarios. Antes tenés que haber corrido `migrate` (paso 5).
+El archivo `datos_prueba.sql` carga 90 días de uso simulado del sistema, del 28/08/2026 al 25/11/2026: 60 docentes con el legajo completo, 92 designaciones con horario, unas 2.000 asistencias, licencias, formularios en papel, pendientes, la planilla mensual con sus disposiciones, cierres de jornadas y de meses, la bitácora y 9 usuarios. Todo es ficticio (DNI 99000001 a 99000060). Trae también los 148 artículos del nomenclador oficial: si ya corriste `cargar_nomenclador`, se usan los que hay.
 
-Ejecutalo completo como script SQL sobre la base `asistencia` (por ejemplo con "Execute SQL File" en Navicat o "Execute SQL Script" en DBeaver, no una sentencia suelta). Está pensado para poder volver a ejecutarse sin duplicar datos. El bloque de limpieza al final del archivo sirve para borrarlos.
+Antes tenés que haber corrido `migrate` (paso 5) sobre una base sin datos propios. Ejecutalo completo como script SQL sobre la base `asistencia` (por ejemplo "Archivo → Ejecutar archivo SQL" en HeidiSQL o "Execute SQL Script" en DBeaver, no una sentencia suelta). Va en una sola transacción: si la base ya tiene datos que chocan con los de prueba, se detiene sin guardar nada. Para volver a cargarlo, borrá las tablas de la base y corré `migrate` de nuevo.
 
-Los datos de prueba traen 5 artículos inventados (T-14, T-15, T-20, T-22 y T-25). Para pasar sus licencias a los artículos oficiales y borrarlos, después de cargar el SQL corré `python manage.py cargar_nomenclador --reemplazar-inventados` (muestra qué cambiaría) y, si está bien, lo mismo con `--confirmar`.
+Las fechas están pensadas para el 25/11/2026: ese día la planilla tiene cargado solo el turno mañana y hay pendientes con aviso y uno vencido. Si lo cargás otro día, los pendientes del final aparecen vencidos.
 
 ### 7. Uso mensual (cuadros IL-01 / IL-02)
 

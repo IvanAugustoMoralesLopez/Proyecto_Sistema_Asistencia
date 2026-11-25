@@ -36,9 +36,11 @@ from ._comun import (
     TAMANOS_PAGINA,
     _aplicar_filtros,
     _asegurar_sesion_edicion,
+    celda_csv,
     contexto_sesion,
     _dia_vecino,
     _fecha_pedida,
+    _hay_filtros,
     _id_pedido,
     _ids_pedidos,
     _mensaje_error,
@@ -433,28 +435,21 @@ def historial(request):
     # Si se mira un solo día (por ejemplo, al venir desde «Revisar este día»),
     # el botón «Asistencia del día» vuelve a ese día y no a hoy.
     fecha_unica = None
+    filtro_con_error = form.is_bound and not form.is_valid()
 
-    if form.is_valid():
+    if filtro_con_error:
+        # Un filtro con error (Desde posterior a Hasta, una opción que no
+        # existe) no se ignora: antes se descartaban TODOS los filtros y se
+        # mostraban todas las asistencias como si fueran «los elegidos».
+        registros = registros.none()
+    elif form.is_valid():
+        registros = _filtrar_historial(registros, form.cleaned_data)
         datos = form.cleaned_data
-        registros = _aplicar_filtros(registros, datos)
-
-        if datos.get("estado_justificacion"):
-            registros = registros.filter(
-                estado_justificacion=datos["estado_justificacion"]
-            )
 
         if datos.get("desde") and datos.get("desde") == datos.get("hasta"):
             fecha_unica = datos["desde"]
 
     pagina, querystring = _paginar(request, registros)
-
-    # La página y el tamaño de página viajan en la URL pero no son filtros:
-    # no tienen que marcar los filtros como «activos».
-    hay_filtros = any(
-        valor
-        for clave, valor in request.GET.items()
-        if clave not in ("page", "por_pagina")
-    )
 
     return render(
         request,
@@ -463,11 +458,26 @@ def historial(request):
             "form": form,
             "pagina": pagina,
             "querystring": querystring,
-            "hay_filtros": hay_filtros,
+            # La página y el tamaño de página viajan en la URL pero no son
+            # filtros: no tienen que marcar los filtros como «activos».
+            "hay_filtros": _hay_filtros(request),
+            "filtro_con_error": filtro_con_error,
             "fecha_unica": fecha_unica,
             "tamanos_pagina": TAMANOS_PAGINA,
         },
     )
+
+
+def _filtrar_historial(registros, datos):
+    """Filtros del historial: los comunes más el estado del formulario."""
+    registros = _aplicar_filtros(registros, datos)
+
+    if datos.get("estado_justificacion"):
+        registros = registros.filter(
+            estado_justificacion=datos["estado_justificacion"]
+        )
+
+    return registros
 
 
 @vista_protegida("asistencias.view_registroasistencia")
@@ -570,14 +580,14 @@ def exportar_csv(request):
         .order_by("-fecha", "designacion__persona__apellido_nombre")
     )
 
-    if form.is_valid():
-        datos = form.cleaned_data
-        registros = _aplicar_filtros(registros, datos)
+    filtro_con_error = form.is_bound and not form.is_valid()
 
-        if datos.get("estado_justificacion"):
-            registros = registros.filter(
-                estado_justificacion=datos["estado_justificacion"]
-            )
+    if filtro_con_error:
+        # Igual que la pantalla: con un filtro mal cargado no se exporta
+        # todo como si fuera lo pedido.
+        registros = registros.none()
+    elif form.is_valid():
+        registros = _filtrar_historial(registros, form.cleaned_data)
 
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="asistencias.csv"'
@@ -603,13 +613,15 @@ def exportar_csv(request):
     limite = 5000
     total_registros = registros.count()
 
+    # INC-01: el texto libre pasa por celda_csv para que Excel no lo tome
+    # como fórmula (un nombre o N° de formulario que empiece con =, +, - o @).
     for r in registros[:limite]:
         writer.writerow([
             r.fecha.strftime("%d/%m/%Y"),
-            r.designacion.persona.dni,
-            r.designacion.persona.apellido_nombre,
-            r.designacion.cargo.descripcion,
-            (
+            celda_csv(r.designacion.persona.dni),
+            celda_csv(r.designacion.persona.apellido_nombre),
+            celda_csv(r.designacion.cargo.descripcion),
+            celda_csv(
                 r.designacion.espacio_curricular.nombre
                 if r.designacion.espacio_curricular
                 else ""
@@ -618,14 +630,20 @@ def exportar_csv(request):
             r.horas_inasistidas,
             r.get_estado_registro_display(),
             r.get_estado_justificacion_display(),
-            r.nro_formulario,
-            str(r.actualizado_por or ""),
+            celda_csv(r.nro_formulario),
+            celda_csv(r.actualizado_por or ""),
         ])
 
     if total_registros > limite:
         writer.writerow([
             f"*** Exportación limitada a {limite} de "
             f"{total_registros} registros ***",
+        ])
+
+    if filtro_con_error:
+        writer.writerow([
+            "*** Un filtro tiene un error: corregilo en el Historial y "
+            "volvé a bajar el archivo ***",
         ])
 
     return response

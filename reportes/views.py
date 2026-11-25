@@ -28,6 +28,7 @@ from .models import ParametroSistema
 from .roles import ROLES
 from .selectors import (
     DIAS_ANTICIPACION_POR_DEFECTO,
+    calcular_designaciones_con_horas_sin_cuadrar,
     calcular_designaciones_por_vencer,
     calcular_licencias_por_vencer,
     UMBRAL_POR_DEFECTO,
@@ -298,6 +299,19 @@ def alertas_designaciones(request):
             "alertas": lista,
             "cant_vencidas": sum(1 for a in lista if a["vencida"]),
         },
+    )
+
+
+# ───────────── Alertas de horas cátedra ─────────────
+
+@login_required
+@permission_required("reportes.consultar_licencias", raise_exception=True)
+def alertas_horas(request):
+    """Designaciones activas cuyo horario no suma las horas cátedra nombradas."""
+    return render(
+        request,
+        "reportes/alertas_horas.html",
+        {"alertas": calcular_designaciones_con_horas_sin_cuadrar()},
     )
 
 

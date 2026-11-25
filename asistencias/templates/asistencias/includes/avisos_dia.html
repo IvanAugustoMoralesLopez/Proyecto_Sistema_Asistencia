@@ -34,7 +34,7 @@
 {% elif cierre and cierre.estado == "CERRADO" %}
     <div class="alert alert-warning">
         El mes de este día ya está cerrado: no se puede cambiar nada.
-        Si hace falta corregir algo, pediselo a Secretaría.
+        Si hace falta corregir algo, hay que reabrir el mes desde Cierres.
     </div>
 {% elif jornada_cerrada %}
     <div class="alert alert-secondary">
@@ -44,8 +44,8 @@
             Como tenés autorización podés cargar igual, pero tenés que
             escribir por qué.
         {% else %}
-            Para cambiar algo hace falta autorización de Secretaría o
-            Subsecretaría.
+            Para cambiar algo hace falta el permiso para modificar jornadas
+            cerradas.
         {% endif %}
     </div>
 {% endif %}

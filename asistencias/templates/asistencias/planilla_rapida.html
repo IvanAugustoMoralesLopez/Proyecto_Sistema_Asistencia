@@ -89,9 +89,20 @@
 {% if sin_horarios %}
     <div class="alert alert-info">
         Ningún docente tiene horario cargado para este día, así que se muestran
-        todos. Cuando Secretaría cargue los horarios en
+        todos. Cuando se carguen los horarios en
         <strong>Personal → Legajos</strong>, la lista va a traer solo a quienes
         dan clase, con las horas ya completadas.
+    </div>
+{% endif %}
+
+{% if fuera_sin_horario %}
+    {# RF-12: sin ningún horario cargado no aparecen en «Solo los que dan clase». #}
+    <div class="alert alert-warning">
+        {{ fuera_sin_horario|length }} docente{{ fuera_sin_horario|length|pluralize:"s" }}
+        sin ningún horario cargado no aparece{{ fuera_sin_horario|length|pluralize:"n" }} en esta lista:
+        {% for persona in fuera_sin_horario|slice:":8" %}{{ persona.apellido_nombre }}{% if not forloop.last %}; {% endif %}{% endfor %}{% if fuera_sin_horario|length > 8 %} y {{ fuera_sin_horario|length|add:"-8" }} más{% endif %}.
+        Para cargarlos elegí <strong>Todos los docentes</strong>; para que aparezcan
+        solos, cargá su horario en <strong>Personal → Legajos</strong>.
     </div>
 {% endif %}
 
@@ -161,8 +172,10 @@
                                     <span class="asis-apoyo">
                                         {% if fila.horario %}
                                             · {{ fila.horas_dia|floatformat:"-2" }} hs{% if fila.horario.hora_inicio and fila.horario.hora_fin %} ({{ fila.horario.hora_inicio|time:"H:i" }}–{{ fila.horario.hora_fin|time:"H:i" }}){% endif %}
+                                        {% elif fila.dias_con_clase %}
+                                            · hoy no da clase (da {{ fila.dias_con_clase|join:" " }})
                                         {% else %}
-                                            · hoy no da clase{% if fila.dias_con_clase %} (da {{ fila.dias_con_clase|join:" " }}){% endif %}
+                                            · sin horario cargado
                                         {% endif %}
                                     </span>
                                     {% if fila.registro %}
@@ -174,6 +187,15 @@
                                     {% endif %}
                                 </div>
                             {% endfor %}
+                            {% if agente.sin_horario %}
+                                {# RF-12: no se inventan horas; se avisa para cargar el horario. #}
+                                <div class="asis-apoyo text-warning-emphasis">
+                                    <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                                    {{ agente.sin_horario|join:", " }} no tiene{{ agente.sin_horario|length|pluralize:"n" }}
+                                    horario cargado: no recibe{{ agente.sin_horario|length|pluralize:"n" }} la marca.
+                                    Cargá el horario en Personal o elegí «Todos los docentes».
+                                </div>
+                            {% endif %}
                         </td>
 
                         {% if agente.cargado %}
@@ -431,6 +453,24 @@
             document.getElementById("planilla").dispatchEvent(
                 new Event("change", { bubbles: true })
             );
+        });
+    }
+
+    /* Enter en un campo de la planilla guarda, igual que el botón «Guardar».
+       Sin esto el navegador usaría el primer botón de envío del formulario,
+       que es «Copiar lo del día anterior», y lo marcado se perdería. */
+    var planilla = document.getElementById("planilla");
+    /* La barra de guardado solo aparece si se puede cargar ese día. */
+    var botonGuardar = planilla && planilla.querySelector(".asis-guardar button[type='submit']");
+    if (planilla) {
+        planilla.addEventListener("keydown", function (evento) {
+            if (evento.key !== "Enter" || evento.isComposing) { return; }
+            var campo = evento.target;
+            if (campo.tagName !== "INPUT" || campo.type === "submit" || campo.type === "button") { return; }
+            evento.preventDefault();
+            if (botonGuardar && !botonGuardar.disabled) {
+                planilla.requestSubmit(botonGuardar);
+            }
         });
     }
 

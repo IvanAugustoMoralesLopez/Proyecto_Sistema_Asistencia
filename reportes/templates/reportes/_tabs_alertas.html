@@ -19,4 +19,9 @@
             <i class="bi bi-hourglass-split"></i> Designaciones por vencer
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link {% if tab_alertas == 'horas' %}active{% endif %}" href="{% url 'reportes:alertas_horas' %}">
+            <i class="bi bi-clock-history"></i> Horas cátedra
+        </a>
+    </li>
 </ul>

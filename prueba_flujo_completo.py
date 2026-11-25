@@ -277,7 +277,7 @@ class Recorrido:
 
     def entrar(self, usuario):
         # Cerrar la sesión anterior libera su lugar de carga (el sistema
-        # admite dos personas cargando a la vez).
+        # admite tres personas cargando a la vez).
         self.cliente.post(reverse("logout"))
         self.cliente = Client()
         self.cliente.force_login(usuario)
@@ -639,10 +639,13 @@ def flujo(r):
 
     def designar(dni, cambios):
         f = formulario(r.abrir(url_leg, {"dni": dni}), accion="guardar_designacion")
+        # Las horas cátedra nombradas son las que suma el horario (deben coincidir).
+        horas = sum(int(v) for k, v in cambios.items() if k.startswith("horas_"))
         base = {"cargo": "166", "situacion_revista": "TIT", "desde": ddmmaaaa(desde_designacion),
                 "hasta": "SIN TERMINO", "norma_tipo": "Resolución", "norma_numero": "100",
                 "norma_anio": str(hoy.year), "organismo_emisor": "Ministerio de Educación",
-                "anio_curso": "1°", "division_seccion": "A", "turno": "Noche", "hs_catedra": "4"}
+                "anio_curso": "1°", "division_seccion": "A", "turno": "Noche",
+                "hs_catedra": str(horas or 4)}
         base.update(cambios)
         return r.enviar(f, base)
 
@@ -657,9 +660,12 @@ def flujo(r):
     r.paso("Hasta anterior a Desde se rechaza", lambda: r.debe_rechazar(designar(
         "99100001", {"espacio_curricular": materia["Programación I"],
                      "hasta": ddmmaaaa(desde_designacion - timedelta(days=5))}), "anterior"))
-    r.paso("Suplencia sin cese ni plazo indeterminado se rechaza", lambda: r.debe_rechazar(designar(
+    r.paso("Horario que no suma las horas nombradas se rechaza", lambda: r.debe_rechazar(designar(
+        "99100001", {"espacio_curricular": materia["Programación I"], "horas_lun": "2", "hs_catedra": "5"}),
+        "deben coincidir"))
+    r.paso("Suplente sin fecha de cese ni SIN TERMINO se rechaza", lambda: r.debe_rechazar(designar(
         "99100003", {"espacio_curricular": materia["Ergonomía"], "situacion_revista": "SUP",
-                     "es_suplencia": True, "hasta": ""}), "fecha de cese"))
+                     "hasta": "", "horas_lun": "2"}), "fecha de cese"))
 
     altas = [
         ("99100001", "Programación I", {"horas_lun": "3", "horas_mie": "2", "horas_vie": "2"}),
@@ -680,13 +686,18 @@ def flujo(r):
     r.paso("SIN INICIO se guarda como tal", lambda: exigir(
         Designacion.objects.get(persona_id="99100005").desde_texto == "SIN INICIO", "no quedó SIN INICIO"))
     d_ana = Designacion.objects.filter(persona_id="99100001").first()
-    r.paso("Suplencia válida (Carla reemplaza a Ana, plazo indeterminado)", lambda: r.debe_guardar(designar(
-        "99100003", {"espacio_curricular": materia["Ergonomía"], "situacion_revista": "SUP", "es_suplencia": True,
-                     "plazo_indeterminado": True, "hasta": "", "reemplaza": str(d_ana.pk),
-                     "horas_lun": "2", "horas_vie": "2"})))
+    def suplencia_valida():
+        r.debe_guardar(designar(
+            "99100003", {"espacio_curricular": materia["Ergonomía"], "situacion_revista": "SUP",
+                         "hasta": "SIN TERMINO", "reemplaza": str(d_ana.pk),
+                         "horas_lun": "2", "horas_vie": "2"}))
+        s = Designacion.objects.get(persona_id="99100003", espacio_curricular_id=materia["Ergonomía"])
+        exigir(s.es_suplencia and s.plazo_indeterminado, "Suplente + SIN TERMINO no quedó de plazo indeterminado")
+        return "suplencia de plazo indeterminado sin casillas aparte"
+    r.paso("Suplencia válida (Carla reemplaza a Ana, SIN TERMINO)", suplencia_valida)
     r.paso("Suplencia que se reemplaza a sí misma se rechaza", lambda: r.debe_rechazar(designar(
-        "99100001", {"espacio_curricular": materia["Programación I"], "situacion_revista": "SUP", "es_suplencia": True,
-                     "plazo_indeterminado": True, "hasta": "", "reemplaza": str(d_ana.pk)}), "sí mismo"))
+        "99100001", {"espacio_curricular": materia["Programación I"], "situacion_revista": "SUP",
+                     "hasta": "SIN TERMINO", "reemplaza": str(d_ana.pk), "horas_lun": "2"}), "sí mismo"))
 
     def editar_en_legajo():
         f = formulario(r.abrir(url_leg, {"dni": "99100001", "designacion": d_ana.pk}), accion="guardar_designacion")
@@ -702,7 +713,8 @@ def flujo(r):
         return r.debe_guardar(r.enviar(f, {
             "persona": "99100004", "cargo": "166", "espacio_curricular": materia["Programación I"],
             "situacion_revista": "INT", "desde": ddmmaaaa(desde_designacion), "hasta": "SIN TERMINO",
-            "norma_tipo": "Disposición", "norma_numero": "55", "norma_anio": str(hoy.year), "horas_vie": "2"}))
+            "norma_tipo": "Disposición", "norma_numero": "55", "norma_anio": str(hoy.year),
+            "hs_catedra": "2", "horas_vie": "2"}))
     r.paso("Nueva designación con el asistente (Darío, Programación I)", asistente)
     d_baja = Designacion.objects.filter(persona_id="99100004", espacio_curricular_id=materia["Programación I"]).first()
 

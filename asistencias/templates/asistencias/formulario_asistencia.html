@@ -74,6 +74,80 @@
     aviso.className = "form-text";
     designacion.insertAdjacentElement("afterend", aviso);
 
+    // Combo de licencias: muestra solo las del docente elegido y, si la
+    // marca es de licencia (LIC o LT), elige sola la que cubre el día.
+    // Cada opción trae su designación y su período (data-designacion,
+    // data-desde, data-hasta), así que no hace falta consultar al servidor.
+    var licencias = [];
+    var opcionVacia = null;
+    var avisoLicencia = null;
+
+    if (licencia) {
+        Array.prototype.forEach.call(licencia.options, function (opcion) {
+            if (opcion.value) { licencias.push(opcion); } else { opcionVacia = opcion; }
+        });
+        avisoLicencia = document.createElement("div");
+        avisoLicencia.className = "form-text";
+        licencia.insertAdjacentElement("afterend", avisoLicencia);
+    }
+
+    function textoFecha(iso) {
+        var partes = iso.split("-");
+        return partes.length === 3 ? partes[2] + "/" + partes[1] + "/" + partes[0] : iso;
+    }
+
+    function cubre(opcion, dia) {
+        var hasta = opcion.dataset.hasta;
+        return opcion.dataset.desde <= dia && (!hasta || hasta >= dia);
+    }
+
+    function filtrarLicencias() {
+        if (!licencia) { return; }
+
+        var elegida = licencia.value;
+        var dia = fecha.value;
+        var propias = licencias.filter(function (opcion) {
+            return designacion.value !== "" && opcion.dataset.designacion === designacion.value;
+        });
+
+        licencia.replaceChildren();
+        if (opcionVacia) { licencia.appendChild(opcionVacia); }
+        propias.forEach(function (opcion) { licencia.appendChild(opcion); });
+
+        // Una licencia de otro docente no puede quedar elegida.
+        var sigue = propias.some(function (opcion) { return opcion.value === elegida; });
+        licencia.value = sigue ? elegida : "";
+
+        var cubren = dia ? propias.filter(function (opcion) { return cubre(opcion, dia); }) : [];
+        var actual = licencia.options[licencia.selectedIndex];
+        var actualCubre = !!(actual && actual.value && dia && cubre(actual, dia));
+        var eligio = false;
+
+        if (esDeLicencia() && cubren.length && !actualCubre) {
+            // Vienen de la más nueva a la más vieja: se toma la de inicio
+            // más antiguo, la misma que la ficha muestra como «vigente».
+            licencia.value = cubren[cubren.length - 1].value;
+            eligio = true;
+        }
+
+        actual = licencia.options[licencia.selectedIndex];
+        var mensaje = "";
+
+        if (!designacion.value) {
+            mensaje = "Elegí el docente para ver sus licencias.";
+        } else if (!propias.length) {
+            mensaje = "No hay licencias cargadas para este docente en este cargo o materia.";
+        } else if (actual && actual.value && dia && !cubre(actual, dia)) {
+            mensaje = "La licencia elegida no cubre el " + textoFecha(dia) + ".";
+        } else if (dia && !cubren.length) {
+            mensaje = "Ninguna licencia de este docente cubre el " + textoFecha(dia) + ".";
+        } else if (eligio) {
+            mensaje = "Se eligió la licencia que cubre el " + textoFecha(dia) + ".";
+        }
+
+        avisoLicencia.textContent = mensaje;
+    }
+
     // Recuadro con los datos de la designación elegida.
     var ficha = document.createElement("div");
     ficha.className = "card card-body bg-body-tertiary mt-2 small d-none";
@@ -135,9 +209,10 @@
         return !!(opcion && opcion.dataset.horas === "1");
     }
 
-    function exigeLicencia() {
+    function esDeLicencia() {
         var opcion = opcionMarca();
-        return !!(opcion && opcion.dataset.licencia === "1");
+        return !!(opcion && (opcion.dataset.deLicencia === "1" ||
+                             opcion.dataset.licencia === "1"));
     }
 
     function consultar() {
@@ -184,10 +259,6 @@
 
                 if (datos.licencias.length) {
                     partes.push("Licencia vigente: " + datos.licencias[0].texto);
-
-                    if (licencia && !licencia.value && exigeLicencia()) {
-                        licencia.value = String(datos.licencias[0].id);
-                    }
                 }
 
                 aviso.textContent = partes.join(" · ");
@@ -195,10 +266,15 @@
             .catch(function () { aviso.textContent = ""; });
     }
 
-    designacion.addEventListener("change", consultar);
-    fecha.addEventListener("change", consultar);
-    if (marca) { marca.addEventListener("change", consultar); }
-    consultar();
+    function actualizar() {
+        filtrarLicencias();
+        consultar();
+    }
+
+    designacion.addEventListener("change", actualizar);
+    fecha.addEventListener("change", actualizar);
+    if (marca) { marca.addEventListener("change", actualizar); }
+    actualizar();
 })();
 </script>
 {% endblock %}

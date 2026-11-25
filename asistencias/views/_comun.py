@@ -6,6 +6,7 @@ liberación/renovación manual de sesión.
 """
 
 import functools
+import re
 import uuid
 from datetime import date, timedelta
 
@@ -65,6 +66,21 @@ def _id_pedido(valor):
     return id_admitido(valor)
 
 
+# Caracteres con los que Excel o LibreOffice toman una celda como fórmula
+# (incluye TAB y CR, que algunas versiones ignoran antes del signo).
+_PREFIJOS_FORMULA = ("=", "+", "-", "@", "\t", "\r")
+
+
+def celda_csv(valor):
+    """
+    Texto libre (nombres, N° de formulario, usuario) listo para un CSV: si
+    empieza con = + - @ TAB o CR se le antepone «'», para que Excel no lo
+    ejecute como fórmula al abrir el archivo (INC-01).
+    """
+    texto = "" if valor is None else str(valor)
+    return "'" + texto if texto.startswith(_PREFIJOS_FORMULA) else texto
+
+
 def _ids_pedidos(valores):
     """Ids de base válidos de una lista recibida del navegador, sin repetir."""
     vistos = []
@@ -108,8 +124,9 @@ def contexto_sesion(request):
     """
     Quién está cargando asistencia ahora mismo, para la barra de la pantalla.
 
-    El sistema admite dos personas a la vez; si no se muestra quiénes son, el
-    tercero que entra no entiende por qué no puede trabajar (punto 1).
+    El sistema admite MAX_OPERADORES personas a la vez; si no se muestra
+    quiénes son, la que entra cuando no hay lugar no entiende por qué no
+    puede trabajar (punto 1).
     """
     token = request.session.get("asistencia_token")
     activos = operadores_activos()
@@ -150,18 +167,45 @@ def _url_segura(url):
     return ""
 
 
+def _palabras(texto):
+    """Palabras de una búsqueda por nombre, sin comas ni espacios de más."""
+    return [palabra for palabra in re.split(r"[\s,]+", texto) if palabra]
+
+
+# Parámetros de la URL que no son filtros: no marcan la búsqueda «activa».
+NO_SON_FILTROS = ("page", "por_pagina")
+
+
+def _hay_filtros(request, por_defecto=None):
+    """
+    Si la búsqueda tiene algún filtro con valor. No cuentan la página, el
+    tamaño de página ni los valores que el formulario ya usa por defecto
+    (`por_defecto`, {campo: valor}): buscar con todo vacío no es filtrar.
+    """
+    por_defecto = por_defecto or {}
+    return any(
+        valor and por_defecto.get(clave) != valor
+        for clave, valor in request.GET.items()
+        if clave not in NO_SON_FILTROS
+    )
+
+
 def _aplicar_filtros(registros, datos):
     """Filtros comunes del historial y de la recepción de formularios."""
-    if datos.get("dni"):
+    dni = (datos.get("dni") or "").strip()
+    if dni:
+        # El DNI se guarda solo con dígitos: «30.123.456» o «30 123 456»
+        # buscan lo mismo que «30123456».
         registros = registros.filter(
-            designacion__persona__dni__icontains=datos["dni"]
+            designacion__persona__dni__icontains=re.sub(r"\D", "", dni) or dni
         )
 
-    if datos.get("apellido_nombre"):
+    # Cada palabra tiene que estar en el nombre, en cualquier orden y con o
+    # sin coma: «Acosta María», «María Acosta» y «ACOSTA, María» encuentran
+    # a «ACOSTA, María Laura».
+    for palabra in _palabras(datos.get("apellido_nombre") or ""):
         registros = registros.filter(
-            designacion__persona__apellido_nombre__icontains=(
-                datos["apellido_nombre"]
-            )
+            designacion__persona__apellido_nombre__icontains=palabra
         )
 
     if datos.get("desde"):

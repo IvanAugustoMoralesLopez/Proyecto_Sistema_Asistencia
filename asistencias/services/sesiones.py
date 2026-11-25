@@ -1,10 +1,12 @@
 """
 Concurrencia y sesión de edición.
 
-Solo dos operadores pueden tener una sesión de edición activa a la vez
-(MAX_OPERADORES). `ControlConcurrencia` es la fila que se bloquea con
-`select_for_update()` antes de contar o tocar las sesiones activas, para
-que dos peticiones simultáneas no se pisen.
+Hasta tres operadoras pueden tener una sesión de edición activa a la vez
+(MAX_OPERADORES): las 3 operadoras del documento v2.0 (2 principales y 1
+secundaria) tienen el mismo acceso de carga y modificación (RF-19), así que
+ninguna queda esperando a que otra libere su lugar. `ControlConcurrencia` es
+la fila que se bloquea con `select_for_update()` antes de contar o tocar las
+sesiones activas, para que dos peticiones simultáneas no se pisen.
 """
 
 from datetime import timedelta
@@ -16,7 +18,7 @@ from django.utils import timezone
 from ..models import ControlConcurrencia, SesionEdicion
 
 
-MAX_OPERADORES = 2
+MAX_OPERADORES = 3
 MINUTOS_EXPIRACION_SESION = 15
 
 
@@ -31,7 +33,7 @@ def operadores_activos(excluir_token=None):
     Sesiones de edición vigentes, de la que se libera primero a la última.
 
     La usa la pantalla para decir quién está trabajando y hasta cuándo, en
-    lugar del antiguo «ya hay dos operadores activos» sin más datos.
+    lugar del antiguo «ya hay operadores activos» sin más datos.
     """
     sesiones = (
         SesionEdicion.objects.filter(
@@ -49,7 +51,7 @@ def operadores_activos(excluir_token=None):
 
 
 def _mensaje_sin_lugar(sesiones):
-    """Texto del aviso cuando los dos lugares están ocupados (punto 1)."""
+    """Texto del aviso cuando todos los lugares están ocupados (punto 1)."""
     if not sesiones:
         return (
             "En este momento no hay lugares libres para cargar asistencia. "

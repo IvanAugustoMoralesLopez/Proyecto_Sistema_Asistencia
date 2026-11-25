@@ -114,7 +114,7 @@ def _validar_periodo_abierto(fecha):
         raise ValidationError(
             "El período está cerrado: "
             f"{nombre_del_mes(fecha)} ya no admite cambios. "
-            "Pedile a Secretaría o Subsecretaría que lo reabra."
+            "Para corregirlo hay que reabrirlo desde Asistencia › Cierres."
         )
 
     return cierre
@@ -122,8 +122,9 @@ def _validar_periodo_abierto(fecha):
 
 def _validar_jornada_abierta(usuario, fecha, motivo):
     """
-    RN-06: modificar una jornada cerrada requiere autorización de
-    Secretaría o Subsecretaría y queda justificado con un motivo.
+    Modificar una jornada cerrada requiere el permiso
+    `modificar_jornada_cerrada` (lo tienen los tres roles, RF-19) y queda
+    justificado con un motivo en la bitácora.
     """
     if not CierreDiario.objects.filter(fecha=fecha).exists():
         return
@@ -132,7 +133,7 @@ def _validar_jornada_abierta(usuario, fecha, motivo):
         usuario,
         "asistencias.modificar_jornada_cerrada",
         f"La jornada del {fecha:%d/%m/%Y} está cerrada: modificarla "
-        "requiere autorización de Secretaría o Subsecretaría.",
+        "requiere el permiso para modificar jornadas cerradas.",
     )
 
     if len(motivo.strip()) < MOTIVO_MINIMO:
@@ -233,12 +234,22 @@ def dia_habil_mas_cercano(fecha, sentido=-1, limite=15):
     return None
 
 
-def _validar_designacion_vigente(designacion, fecha):
-    if not designacion.activo:
-        raise ValidationError("La designación está inactiva.")
+def _validar_designacion_vigente(designacion, fecha, *, corrigiendo=False):
+    """
+    La designación tiene que estar vigente en la fecha.
 
-    if not designacion.persona.activa:
-        raise ValidationError("La persona está inactiva.")
+    `corrigiendo=True` es corregir un registro ya cargado de esa misma
+    designación (RF-11): la baja posterior de la designación o del legajo no
+    impide corregir un día que estaba dentro de su vigencia, porque nada se
+    borra y el historial sigue siendo válido (RN-03). Sí se exige que la
+    fecha quede entre su Desde y su Hasta.
+    """
+    if not corrigiendo:
+        if not designacion.activo:
+            raise ValidationError("La designación está inactiva.")
+
+        if not designacion.persona.activa:
+            raise ValidationError("La persona está inactiva.")
 
     if fecha < designacion.desde:
         raise ValidationError(
