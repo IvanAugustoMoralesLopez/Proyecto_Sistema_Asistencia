@@ -32,6 +32,13 @@
         </div>
 
         <div class="encabezado-planilla__acciones">
+            {% if not bloqueo %}
+                {# Para quien no figura en la lista (por ejemplo, sin horario este día). #}
+                <a class="btn btn-filtro" id="btn-nueva-asistencia"
+                   href="{% url 'asistencia:crear_asistencia' %}?fecha={{ fecha_texto }}&amp;volver={{ request.get_full_path|urlencode }}">
+                    Cargar un docente suelto
+                </a>
+            {% endif %}
             <a class="btn btn-filtro"
                href="{% url 'asistencia:registro_diario' %}?fecha={{ fecha_texto }}">
                 Ver lo cargado
@@ -280,6 +287,7 @@
                                        name="agente-horas-{{ agente.persona.dni }}"
                                        value="{{ agente.valores.horas }}"
                                        data-horas-dia="{{ agente.horas_dia|stringformat:'s' }}"
+                                       {% if agente.horas_dia %}max="{{ agente.horas_dia|stringformat:'s' }}"{% endif %}
                                        placeholder="{% if agente.horas_dia %}{{ agente.horas_dia|floatformat:'-2' }} según horario{% else %}Escribí las horas{% endif %}"
                                        aria-label="Horas sin cubrir de {{ agente.persona.apellido_nombre }}"
                                        {% if bloqueo %}disabled{% endif %}>

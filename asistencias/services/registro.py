@@ -13,6 +13,7 @@ from .reglas import (
     _datos_registro,
     _exigir_permiso,
     _validar_designacion_vigente,
+    _validar_horas_maximas,
     _validar_jornada_abierta,
     _validar_licencia,
     _validar_marca_requisitos,
@@ -94,6 +95,7 @@ def guardar_asistencia(
     horas_inasistidas = _validar_marca_requisitos(
         marca, datos.get("horas_inasistidas"), licencia
     )
+    _validar_horas_maximas(designacion, fecha, horas_inasistidas)
 
     if registro_id is None:
         registro = RegistroAsistencia(

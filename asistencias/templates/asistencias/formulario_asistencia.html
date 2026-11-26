@@ -253,8 +253,14 @@
                     if (horas && vacio && exigeHoras()) {
                         horas.value = datos.horas_dia;
                     }
+                    if (horas && parseFloat(datos.horas_dia) > 0) {
+                        horas.max = datos.horas_dia;
+                    } else if (horas) {
+                        horas.removeAttribute("max");
+                    }
                 } else {
                     partes.push("Ese día no tiene horario cargado");
+                    if (horas) { horas.removeAttribute("max"); }
                 }
 
                 if (datos.licencias.length) {

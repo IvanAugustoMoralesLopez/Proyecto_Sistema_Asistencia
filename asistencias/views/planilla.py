@@ -550,6 +550,15 @@ def _leer_planilla(post, fecha, marcas_por_pk):
             errores[pk] = "Las horas deben ser un número mayor o igual a cero."
             continue
 
+        if marca.requiere_horas and horas > Decimal("0"):
+            horas_dia = horas_del_dia(designacion, fecha)
+            if horas_dia > Decimal("0") and horas > horas_dia:
+                errores[pk] = (
+                    f"Las horas ({horas}) superan las "
+                    f"{horas_dia} hs cátedra asignadas este día."
+                )
+                continue
+
         licencia = None
 
         if licencia_texto:

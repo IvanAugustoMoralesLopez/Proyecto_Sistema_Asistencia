@@ -261,6 +261,23 @@ class RegistroAsistenciaForm(forms.ModelForm):
             else:
                 cleaned["horas_inasistidas"] = Decimal("0")
 
+            if (
+                marca.requiere_horas
+                and horas_inasistidas
+                and horas_inasistidas > Decimal("0")
+                and designacion
+                and fecha
+            ):
+                from .services.agenda import horas_del_dia
+
+                horas_dia = horas_del_dia(designacion, fecha)
+                if horas_dia > Decimal("0") and horas_inasistidas > horas_dia:
+                    self.add_error(
+                        "horas_inasistidas",
+                        f"Superan las {horas_dia} hs cátedra que el docente "
+                        "tiene este día según su horario.",
+                    )
+
             if marca.requiere_licencia and not licencia:
                 self.add_error(
                     "licencia",
