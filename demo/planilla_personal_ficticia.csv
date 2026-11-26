@@ -1,0 +1,311 @@
+dni,nombre_apellido,sexo,cargo_codigo,espacio_curricular,carrera,situacion_revista,horas_lun,horas_mar,horas_mie,horas_jue,horas_vie,desde,hasta,norma_tipo,norma_numero,norma_anio,organismo_emisor,pof,anio_pof,es_suplencia,plazo_indeterminado,observaciones
+23997000,"GALEANO, Gonzalo",M,166,Algebra lineal y geometria,Profesorado de Educación Secundaria en Física,TIT,4,,,4,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+23997000,"GALEANO, Gonzalo",M,166,Analisis matematico,Profesorado de Educación Secundaria en Física,TIT,4,,,4,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+23997000,"GALEANO, Gonzalo",M,166,Matematica,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,4,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+23997000,"GALEANO, Gonzalo",M,166,Matematica aplicada,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,3,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+23997000,"GALEANO, Gonzalo",M,166,Matematica I,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,5,,,SIN INICIO,,Resolución,,2025,M.E.C.C. y T.,,,no,no,Vacante
+23997000,"GALEANO, Gonzalo",M,166,Matematica II,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,5,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+23443921,"MEDINA, Claudia",F,166,Desarrollo tecnologico y ambiente,Profesorado de Educación Tecnológica,TIT,,,3,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+23443921,"MEDINA, Claudia",F,166,Politicas de desarrollo cientifico tecnologico,Profesorado de Educación Tecnológica,TIT,,,3,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+23443921,"MEDINA, Claudia",F,166,Tecnologia educativa,Profesorado de Educación Tecnológica,TIT,3,,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+23443921,"MEDINA, Claudia",F,166,Tecnologia de gestion,Profesorado de Educación Tecnológica,TIT,,3,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+23443921,"MEDINA, Claudia",F,166,Aula taller de educacion tecnologica,Profesorado de Educación Tecnológica,TIT,,,,4,,SIN INICIO,,Resolución,2492,2024,M.E.C.C. y T.,,,no,no,Vacante
+23443921,"MEDINA, Claudia",F,166,Fisica,Profesorado de Educación Secundaria en Física,INT,,,2,,2,SIN INICIO,,Disposición,,2024,M.E.C.C. y T.,696,2014,no,no,Vacante
+38675021,"AYALA, Fernando",M,166,Proyecto,Profesorado de Educación Secundaria en Física,TIT,3,3,3,3,,SIN INICIO,,Resolución,,2011,,,,no,no,Vacante
+38675021,"AYALA, Fernando",M,166,Matematica aplicada,Profesorado de Educación Tecnológica,SUP,,2,2,,,SIN INICIO,,Disposición,,2026,M.E.C.C. y T.,,,si,si,"Reemplaza a Pereyra, Fernando"
+38675021,"AYALA, Fernando",M,165,,,INT,4,4,4,4,4,SIN INICIO,,Disposición,76,2026,M.E.C.C. y T.,,,no,no,Vacante
+34800692,"ESPÍNDOLA, María Laura",F,165,,,SUP,4,4,4,4,4,SIN INICIO,,Disposición,,2025,M.E.C.C. y T.,,,si,si,"Reemplaza a Quintana, Paula"
+34800692,"ESPÍNDOLA, María Laura",F,166,Enseñanza mediadas por tic: laboratorios virtuales,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,3,,,SIN INICIO,,Disposición,20,2026,M.E.C.C. y T.,,,no,no,Vacante
+34800692,"ESPÍNDOLA, María Laura",F,166,Sistemas tecnologicos,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,4,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+34800692,"ESPÍNDOLA, María Laura",F,166,Tecnologia de la informacion y de la comunicación en educacion,Profesorado de Educación Tecnológica,TIT,3,,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+34800692,"ESPÍNDOLA, María Laura",F,166,Practica profesional IV: residencia pedagogica,Profesorado de Educación Tecnológica,INT,3,,,,,01/08/2026,SIN TERMINO,Disposición,,2026,M.E.C.C. y T.,,,no,no,Vacante
+34800692,"ESPÍNDOLA, María Laura",F,166,Sociologia de la organizaciones,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,3,,,,SIN INICIO,,Resolución,,2025,M.E.C.C. y T.,,,no,no,Vacante
+23290066,"VERA, María Laura",F,165,,,INT,4,4,4,4,4,SIN INICIO,,,,2025,,,,no,no,Afectación docente. Genera suplente
+23290066,"VERA, María Laura",F,166,Instalaciones electricas,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,SUP,3,,,2,,SIN INICIO,,Disposición,,2025,,,,si,si,"Reemplaza a Arce, Luis"
+23290066,"VERA, María Laura",F,166,Instalaciones electromecanicas,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,SUP,,2,,3,,SIN INICIO,,Disposición,,2025,,,,si,si,"Reemplaza a Coronel, Andrea"
+23290066,"VERA, María Laura",F,166,Estudio y tecnologia de los materiales,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,SUP,,2,,3,,SIN INICIO,,Disposición,,2025,,,,si,si,"Reemplaza a Paredes, Jorge"
+23290066,"VERA, María Laura",F,166,Termodinamica y maquinas termicas,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,3,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+23290066,"VERA, María Laura",F,166,Electromagnetismo y maquinas electricas,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,3,,,,,SIN INICIO,,Disposición,,,,,,no,no,Vacante
+23290066,"VERA, María Laura",F,166,"Diseño, calculo de elementos de máquina y tecnología mecanica",Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,,,4,SIN INICIO,,Resolución,,,M.E.C.C. y T.,,,no,no,Vacante
+37233138,"OJEDA, Carolina",F,166,Disciplina en secciones del taller,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,,,6,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+37233138,"OJEDA, Carolina",F,166,Informatica,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,SUP,3,,,,,SIN INICIO,,Disposición,,2026,M.E.C.C. y T.,,,si,si,"Reemplaza a Acuña, Raúl"
+37233138,"OJEDA, Carolina",F,166,Diseño de arquitectura II,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,3,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+37233138,"OJEDA, Carolina",F,166,Medicina laboral y enfermedades laborales,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,3,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+37233138,"OJEDA, Carolina",F,166,Seguridad I,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,3,,2,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+37233138,"OJEDA, Carolina",F,166,Higiene I,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,,4,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+37233138,"OJEDA, Carolina",F,166,Higiene III,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,4,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+38054456,"ZALAZAR, Hernán",M,166,Medicina laboral y enfermedades laborales,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,,,3,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+38054456,"ZALAZAR, Hernán",M,166,Practica profesional I,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,4,,,,4,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+38054456,"ZALAZAR, Hernán",M,166,Capacitación,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,4,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,"Reemplaza a Lezcano, Analía"
+38054456,"ZALAZAR, Hernán",M,166,Practica profesional II,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,3,2,,,3,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+30368276,"ROMERO, Ricardo",M,166,Practica profesional I,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,2,3,,,3,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+30368276,"ROMERO, Ricardo",M,165,,,INT,4,4,4,4,4,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+30368276,"ROMERO, Ricardo",M,166,Electrotecnica general y aplicada,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,2,,,,6,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+30368276,"ROMERO, Ricardo",M,166,Fisica optica y fenomenos ondulatorios,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,3,,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+35471026,"DOMÍNGUEZ, Carolina",F,166,Fisica,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,,,2,2,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+38604222,"MOLINA, Natalia",F,166,Fisica,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,,,4,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+38604222,"MOLINA, Natalia",F,166,Analisis matematico,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,2,,2,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+38604222,"MOLINA, Natalia",F,166,Quimica,Profesorado de Educación Secundaria en Física,INT,,,4,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+38604222,"MOLINA, Natalia",F,166,Quimica,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,,,5,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+38604222,"MOLINA, Natalia",F,166,Capacitacion e investigaciòn,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,2,,,SIN INICIO,,Resolución,,2026,M.E.C.C. y T.,,,no,no,Vacante
+36990580,"PEREYRA, Rodrigo",M,166,Seguridad III,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,4,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+36990580,"PEREYRA, Rodrigo",M,166,Higiene III,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,4,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+36990580,"PEREYRA, Rodrigo",M,166,Higiene y seguridad,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,4,,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+36990580,"PEREYRA, Rodrigo",M,166,Gestion y administracion economica de la especialidad,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,2,,3,,,SIN INICIO,,Resolución,,2026,M.E.C.C. y T.,,,no,no,"Reemplaza a Cabral, Javier"
+36990580,"PEREYRA, Rodrigo",M,166,Derecho laboral y relaciones de trabajo,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,,,3,,SIN INICIO,,Resolución,,2026,M.E.C.C. y T.,,,no,no,Vacante
+34091725,"PERALTA, Daniela",F,166,Filosofia,Profesorado de Educación Tecnológica,INT,,,,,3,SIN INICIO,,Resolución,,,M.E.C.C. y T.,,,no,no,Vacante
+34091725,"PERALTA, Daniela",F,166,Practica profesional II. curriculo y organizaciones escolares,Profesorado de Educación Tecnológica,INT,,,3,,2,SIN INICIO,,Resolución,,,M.E.C.C. y T.,,,no,no,Vacante
+34091725,"PERALTA, Daniela",F,166,"Formacion en derechos humanos, etica y ciudadania",Profesorado de Educación Secundaria en Física,INT,,2,,2,,SIN INICIO,,Disposición,27,2026,M.E.C.C. y T.,,,no,no,Vacante
+34091725,"PERALTA, Daniela",F,166,Formacion en derechos humanos etica y ciudadnia,Profesorado de Educación Tecnológica,INT,2,,,,2,SIN INICIO,,Resolución,26,2026,M.E.C.C. y T.,,,no,no,Vacante
+34091725,"PERALTA, Daniela",F,166,"Formacion en derechos humanos, etica y ciudadania",Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,2,,,2,SIN INICIO,,Resolución,26,2026,M.E.C.C. y T.,,,no,no,Vacante
+34091725,"PERALTA, Daniela",F,166,Aprendizaje automático I,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,,3,,,,SIN INICIO,,Resolución,,2026,M.E.C.C. y T.,,,no,no,Vacante
+37380767,"ROMERO, Analía",F,150,,,INT,4,4,4,4,4,SIN INICIO,,,,,,,,no,no,Vacante
+37380767,"ROMERO, Analía",F,166,Matemática,Tecnicatura Superior en Desarrollo de Software,TIT,,3,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+37380767,"ROMERO, Analía",F,166,Matematica aplicada,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,4,,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+24328483,"GÓMEZ, Lorena",F,166,Fundamentos de ingenieria de software I,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,4,,,3,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso. Genera suplente
+24328483,"GÓMEZ, Lorena",F,166,Programación I: algoritmos y estructura de datos,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,,3,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso. Genera suplente
+24328483,"GÓMEZ, Lorena",F,166,Programación,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,4,,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso. Genera suplente
+24328483,"GÓMEZ, Lorena",F,166,Practica profesionalizante III:desarrollo de base d datos,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,,,2,2,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso. Genera suplente
+24328483,"GÓMEZ, Lorena",F,166,Practica profesionalizante I,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,2,,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso. Genera suplente
+24328483,"GÓMEZ, Lorena",F,166,Informatica,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,3,,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por enfermedad. Genera suplente
+24328483,"GÓMEZ, Lorena",F,166,Tecnologia de la informacion,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,3,,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por enfermedad. Genera suplente
+23441892,"NÚÑEZ, Claudia",F,166,Sistema de información II (testing de software),Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,3,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por enfermedad. Genera suplente
+23441892,"NÚÑEZ, Claudia",F,166,Informatica,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,3,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por enfermedad. Genera suplente
+23441892,"NÚÑEZ, Claudia",F,166,Analisis y diseño de sistemas I,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,,,,3,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso. Genera suplente
+23441892,"NÚÑEZ, Claudia",F,155,,,TIT,4,4,4,4,4,SIN INICIO,,Resolución,,,M.E.C.C. y T.,,,no,no,Licencia por enfermedad. Genera suplente
+23441892,"NÚÑEZ, Claudia",F,166,Sistema de información II,Tecnicatura Superior en Desarrollo de Software,SUP,,,,,3,SIN INICIO,,Disposición,70,2026,M.E.C.C. y T.,,,si,si,"Reemplaza a Cardozo, Alejandro"
+27681524,"QUINTANA, Florencia",F,165,,,SUP,4,4,4,4,4,SIN INICIO,,Disposición,22,2026,M.E.C.C. y T.,,,si,si,"Reemplaza a Núñez, Raúl"
+27681524,"QUINTANA, Florencia",F,166,Bases de datos,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,,,,4,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso. Genera suplente
+27681524,"QUINTANA, Florencia",F,166,Redes informáticas,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,,1,,3,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso. Genera suplente
+27681524,"QUINTANA, Florencia",F,166,Soporte tecnico I,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,,4,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso. Genera suplente
+27681524,"QUINTANA, Florencia",F,166,Sistemas operativo I,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,,,,4,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso. Genera suplente
+27681524,"QUINTANA, Florencia",F,166,Aplicaciones informáticas,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,,,4,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso. Genera suplente
+27681524,"QUINTANA, Florencia",F,166,Hardware y sistemas operativos,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,2,,2,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+28422379,"DUARTE, Jorge",M,166,Programación I,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,,,,3,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+28422379,"DUARTE, Jorge",M,155,,,INT,4,4,4,4,4,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,"Reemplaza a Duarte, Gonzalo"
+28422379,"DUARTE, Jorge",M,166,Capacitación e investigaciòn -ley 3896 e,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,TIT,,,6,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,
+28422379,"DUARTE, Jorge",M,166,Tecnologia de la informacion y de la comunicación en educacion,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,4,,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Afectación docente. Genera suplente
+28422379,"DUARTE, Jorge",M,166,Educacion tecnologica,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,TIT,,,2,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Afectación docente. Genera suplente
+28422379,"DUARTE, Jorge",M,166,Historia de la tecnologia,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,TIT,,,,,3,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Afectación docente. Genera suplente
+28422379,"DUARTE, Jorge",M,166,Practica docente 1,Profesorado de Educación Secundaria en Física,INT,3,,,2,,SIN INICIO,,Disposición,44,2024,M.E.C.C. y T.,,,no,no,Vacante
+36068979,"CORONEL, Soledad",F,166,Sociologia de la educacion,Profesorado de Educación Tecnológica,TIT,3,,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+36068979,"CORONEL, Soledad",F,166,"Historia y politica de la educacion latioamericana, argentina y chaqueña",Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,4,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+36068979,"CORONEL, Soledad",F,166,Practica docente II,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,2,,4,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+29877557,"RAMÍREZ, Federico",M,166,Practica profesional II,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,,1,4,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+29877557,"RAMÍREZ, Federico",M,166,Higiene I,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,4,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+25027921,"LEZCANO, Rodrigo",M,166,Higieneii,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,4,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+37545236,"MOLINA, Cecilia",F,166,Higieneii,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,2,2,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+37545236,"MOLINA, Cecilia",F,166,Seguridad III,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,2,2,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+37545236,"MOLINA, Cecilia",F,166,Hs capacitación,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,6,,6,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+28727860,"VALDEZ, Daniela",F,166,Etica y deontología profesional,Tecnicatura Superior en Soporte de Infraestructura de TI,INT,3,,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Licencia por enfermedad. Genera suplente
+28727860,"VALDEZ, Daniela",F,166,Mediciones y costos,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,,3,,20/05/2024,SIN TERMINO,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+28727860,"VALDEZ, Daniela",F,166,Diseño asistido por computadora,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,,3,,09/11/2023,SIN TERMINO,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+28727860,"VALDEZ, Daniela",F,166,Gestion y ejercicio d ela profesion,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,2,,3,,,SIN INICIO,SIN TERMINO,Disposición,,,M.E.C.C. y T.,,,no,no,Licencia por ascenso. Genera suplente
+28727860,"VALDEZ, Daniela",F,166,Instalaciones,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,4,,,22/05/2024,SIN TERMINO,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+37155266,"SAUCEDO, Alejandro",M,166,"Centrales, generadores y transporte de energia",Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,,,2,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso
+37155266,"SAUCEDO, Alejandro",M,166,Instalaciones electricas,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,4,,,3,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso
+37155266,"SAUCEDO, Alejandro",M,166,Estudio y tecnologia de materiales,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,,4,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso
+37155266,"SAUCEDO, Alejandro",M,166,Instalaciones electromecanicas,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,4,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Licencia por ascenso
+37155266,"SAUCEDO, Alejandro",M,166,Laboratorio de fisica,Profesorado de Educación Secundaria en Física,TIT,,2,,3,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+38717937,"MONZÓN, Gustavo",M,166,Disciplina en secciones del taller,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,3,,3,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+38717937,"MONZÓN, Gustavo",M,155,,,INT,4,4,4,4,4,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+38717937,"MONZÓN, Gustavo",M,165,,,INT,4,4,4,4,4,SIN INICIO,,Disposición,,,,,,no,no,Afectación docente
+38717937,"MONZÓN, Gustavo",M,166,Practica profesionalizante III:desarrollo de base d datos,Tecnicatura Superior en Soporte de Infraestructura de TI,SUP,,,,,5,22/02/2026,31/12/2026,Disposición,4,2026,M.E.C.C. y T.,,,si,no,"Reemplaza a Figueroa, Pablo"
+34711975,"VALDEZ, Gonzalo",M,166,Practica profesionalizante II,Tecnicatura Superior en Soporte de Infraestructura de TI,INT,,,,,1,22/02/2026,20/11/2026,Disposición,15,2026,M.E.C.C. y T.,,,no,no,Vacante
+34711975,"VALDEZ, Gonzalo",M,166,Base y procesamiento de datos,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,,3,,,,SIN INICIO,SIN TERMINO,Disposición,176,2025,M.E.C.C. y T.,,,no,no,Vacante
+34711975,"VALDEZ, Gonzalo",M,166,Ciencia de datos,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,3,,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+34711975,"VALDEZ, Gonzalo",M,166,Herramientas para el procesamiento de datos,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,3,,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+35197496,"VILLALBA, Esteban",M,166,Cultura y lenguas originarias,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,3,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+35197496,"VILLALBA, Esteban",M,166,Cultura y lenguas originarias,Profesorado de Educación Secundaria en Física,INT,,4,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+35197496,"VILLALBA, Esteban",M,166,Cultura y lenguas originarias,Profesorado de Educación Tecnológica,INT,3,,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+35197496,"VILLALBA, Esteban",M,166,Aplicaciones informáticas,Tecnicatura Superior en Soporte de Infraestructura de TI,SUP,,,,4,,SIN INICIO,,,,,,,,si,si,"Reemplaza a Ledesma, Javier"
+35197496,"VILLALBA, Esteban",M,166,Sistemas operativo I,Tecnicatura Superior en Soporte de Infraestructura de TI,SUP,,,,,4,SIN INICIO,,,,,,,,si,si,"Reemplaza a Silva, Pablo"
+35197496,"VILLALBA, Esteban",M,166,Ecologia-auditoria y gestion ambiental,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,3,,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Afectación docente
+35197496,"VILLALBA, Esteban",M,166,Capacitación /investigación,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,3,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Afectación docente
+26529243,"IBARRA, Esteban",M,166,Electronica analogica,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,,,3,SIN INICIO,,Disposición,,2025,M.E.C.C. y T.,,,no,no,Vacante
+26529243,"IBARRA, Esteban",M,166,Circuitos electricos y redes,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,2,2,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+26529243,"IBARRA, Esteban",M,166,Informatica electronica,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,3,,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+35079187,"BENÍTEZ, Sebastián",M,166,Sistema de telecomunicaciones,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,2,2,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+35079187,"BENÍTEZ, Sebastián",M,166,"Centrales, generadores y transporte de energia",Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,SUP,1,,2,,,SIN INICIO,,Disposición,,2025,M.E.C.C. y T.,,,si,si,"Reemplaza a Rolón, Raúl"
+22787217,"ESCOBAR, Valeria",F,166,Psicologia educacional,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,3,,,SIN INICIO,,Disposición,42,2019,M.E.C.C. y T.,,,no,no,Vacante
+22787217,"ESCOBAR, Valeria",F,166,Psicologia educacional,Profesorado de Educación Secundaria en Física,INT,,,,3,,SIN INICIO,,Disposición,42,2019,M.E.C.C. y T.,,,no,no,Vacante
+22787217,"ESCOBAR, Valeria",F,166,Pedagogia,Profesorado de Educación Tecnológica,INT,4,,,,,SIN INICIO,,Disposición,31,2019,M.E.C.C. y T.,,,no,no,Vacante
+24054009,"ESCOBAR, Silvana",F,166,"Historia y politica de la educacion latioamericana, argentina y chaqueña",Profesorado de Educación Tecnológica,INT,,,,4,,SIN INICIO,,Disposición,27,2020,M.E.C.C. y T.,,,no,no,Vacante
+24054009,"ESCOBAR, Silvana",F,166,Sujeto de la educacion,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,4,,,SIN INICIO,,Disposición,109,2025,M.E.C.C. y T.,,,no,no,Vacante
+24054009,"ESCOBAR, Silvana",F,166,Capacitacion e investigaciòn,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,4,,,SIN INICIO,,Resolución,,2025,M.E.C.C. y T.,,,no,no,Vacante
+24054009,"ESCOBAR, Silvana",F,166,Gestion y administracion economica de la especialidad,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,5,,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+24054009,"ESCOBAR, Silvana",F,166,Didactica especifica,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,2,,,2,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+24054009,"ESCOBAR, Silvana",F,166,Capacitación e investigaciòn -ley 3896 e,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,4,,,4,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+29010587,"MONZÓN, Cecilia",F,166,Practica profesional III: el aula y la practica docente en los distintos contextos,Profesorado de Educación Tecnológica,TIT,5,2,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+29010587,"MONZÓN, Cecilia",F,166,Fundamentos de electricidad y electronica,Tecnicatura Superior en Desarrollo de Software,TIT,,,,3,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+29010587,"MONZÓN, Cecilia",F,166,Ciencias de la tierra (capacitacion e investigacion),Profesorado de Educación Secundaria en Física,TIT,,,4,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+20172171,"GALEANO, Analía",F,166,Quimica(capacitación e investigación ),"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,,3,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+20172171,"GALEANO, Analía",F,166,Ecologia-auditoria y gestion ambiental,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,3,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+20172171,"GALEANO, Analía",F,166,Sistemas de representacion,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,,,5,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+20172171,"GALEANO, Analía",F,166,Electrónica general y aplicada,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,,3,,SIN INICIO,,,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+20172171,"GALEANO, Analía",F,166,Fisica moderna,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,2,,2,2,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+20172171,"GALEANO, Analía",F,166,Electronica digital,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,,,3,SIN INICIO,,Resolución,,,M.E.C.C. y T.,,,no,no,Vacante
+36508408,"VALDEZ, Diego",M,166,Electrotecnica general y aplicada,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,5,,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+36508408,"VALDEZ, Diego",M,166,Ensayos y mediciones,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,3,2,,,SIN INICIO,,Resolución,,2025,M.E.C.C. y T.,,,no,no,Vacante
+36508408,"VALDEZ, Diego",M,166,Electronica industrial,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,3,2,,,SIN INICIO,,Resolución,,2026,M.E.C.C. y T.,,,no,no,Vacante
+36508408,"VALDEZ, Diego",M,166,Algebra,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,SUP,,,,,3,01/07/2026,10/07/2026,Disposición,79,2026,M.E.C.C. y T.,,,si,no,"Reemplaza a Ríos, Analía"
+36508408,"VALDEZ, Diego",M,165,,,INT,4,4,4,4,4,01/07/2026,SIN TERMINO,Disposición,75,2026,M.E.C.C. y T.,,,no,no,Vacante
+24402887,"HERRERA, Lorena",F,165,,,SUP,4,4,4,4,4,26/06/2026,07/07/2026,Disposición,65,2026,M.E.C.C. y T.,,,si,no,"Reemplaza a Ayala, Lucía"
+24402887,"HERRERA, Lorena",F,166,Estudio socio-economico politico y cultural ide la realidad nacional,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,3,,,,,SIN INICIO,,Resolución,442,2026,M.E.C.C. y T.,,,no,no,Vacante
+24402887,"HERRERA, Lorena",F,166,Estudio socio-economico politico y cultural de la realidad nacional,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,,3,,,SIN INICIO,,Disposición,42,2026,M.E.C.C. y T.,,,no,no,Vacante
+24402887,"HERRERA, Lorena",F,166,Derecho laboral y relaciones de trabajo,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,3,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+24541462,"ROLÓN, Paula",F,166,Legislación informática,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,3,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+24541462,"ROLÓN, Paula",F,166,Legislación informática,Tecnicatura Superior en Desarrollo de Software,INT,,1,,,,SIN INICIO,,Resolución,178,2025,M.E.C.C. y T.,,,no,no,Vacante
+24541462,"ROLÓN, Paula",F,166,Legislación informática,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,TIT,,2,,,,SIN INICIO,,Disposición,5084,2026,,,,no,no,Vacante
+24541462,"ROLÓN, Paula",F,166,Idioma extranjera ingles,Profesorado de Educación Tecnológica,INT,,,3,,,SIN INICIO,,Disposición,82,2023,M.E.C.C. y T.,,,no,no,Vacante
+24541462,"ROLÓN, Paula",F,166,Inglés,Tecnicatura Superior en Soporte de Infraestructura de TI,INT,,,3,,,SIN INICIO,,Disposición,78,2023,M.E.C.C. y T.,,,no,no,Vacante
+24541462,"ROLÓN, Paula",F,166,Inglés,Tecnicatura Superior en Desarrollo de Software,INT,,,,3,,SIN INICIO,,Disposición,78,2023,M.E.C.C. y T.,,,no,no,Vacante
+33825739,"LEIVA, Mariana",F,166,Inglés,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,,,,3,SIN INICIO,,Disposición,81,2020,M.E.C.C. y T.,,,no,no,Vacante
+33825739,"LEIVA, Mariana",F,166,Inglés técnico,Tecnicatura Superior en Desarrollo de Software,INT,,,,,2,SIN INICIO,,Disposición,137,2023,M.E.C.C. y T.,,,no,no,Vacante
+33825739,"LEIVA, Mariana",F,166,Inglés técnico,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,,,,2,,SIN INICIO,,Disposición,173,2025,M.E.C.C. y T.,,,no,no,Vacante
+33825739,"LEIVA, Mariana",F,166,Inglés técnico,Tecnicatura Superior en Soporte de Infraestructura de TI,INT,,3,,,,28/04/2026,SIN TERMINO,Disposición,52,2026,M.E.C.C. y T.,1595,2023,no,no,Vacante
+33825739,"LEIVA, Mariana",F,165,,,INT,4,4,4,4,4,SIN INICIO,,Disposición,,,,,,no,no,Vacante
+33825739,"LEIVA, Mariana",F,166,Pedagogia,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,,4,,SIN INICIO,,Disposición,,,,,,no,no,Vacante
+26600059,"LEIVA, María Laura",F,166,Sociologia de la educacion,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,3,,,SIN INICIO,,Disposición,,2016,M.E.C.C. y T.,,,no,no,Vacante
+26600059,"LEIVA, María Laura",F,166,Seguridad II,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,4,,,,,SIN INICIO,,Disposición,,2018,M.E.C.C. y T.,,,no,no,Vacante
+33064350,"LEDESMA, Silvana",F,166,Seguridad II,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,,4,,,SIN INICIO,,Disposición,,2018,M.E.C.C. y T.,,,no,no,Vacante
+33064350,"LEDESMA, Silvana",F,166,Estudio del trabajo y ergonomia,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,3,,,,,SIN INICIO,,Disposición,,2018,M.E.C.C. y T.,,,no,no,Vacante
+33064350,"LEDESMA, Silvana",F,166,Pedagogia,Profesorado de Educación Secundaria en Física,SUP,,4,,,,SIN INICIO,,Disposición,,2026,M.E.C.C. y T.,,,si,si,"Reemplaza a Saucedo, Federico"
+33064350,"LEDESMA, Silvana",F,166,Fisica teorica,Profesorado de Educación Secundaria en Física,INT,,,4,2,,SIN INICIO,,Disposición,,2023,M.E.C.C. y T.,,,no,no,Vacante
+20858399,"BARRIOS, Alejandro",M,166,Fisica I,Profesorado de Educación Secundaria en Física,INT,,,,,5,SIN INICIO,,Disposición,,2023,M.E.C.C. y T.,,,no,no,Vacante
+20858399,"BARRIOS, Alejandro",M,166,Practica docente III,Profesorado de Educación Secundaria en Física,INT,2,2,,3,,SIN INICIO,,Disposición,,2023,M.E.C.C. y T.,,,no,no,Vacante
+20858399,"BARRIOS, Alejandro",M,166,Epistemologia e historia de la fisica,Profesorado de Educación Secundaria en Física,INT,,,3,,,SIN INICIO,,Disposición,,2023,M.E.C.C. y T.,,,no,no,Vacante
+20858399,"BARRIOS, Alejandro",M,166,Residencia pedagogica,Profesorado de Educación Secundaria en Física,INT,3,3,,,2,SIN INICIO,,Disposición,,2023,M.E.C.C. y T.,,,no,no,Vacante
+30189532,"VERA, Luis",M,166,Didactica especifica,Profesorado de Educación Secundaria en Física,INT,2,,,2,,SIN INICIO,,Disposición,,2022,M.E.C.C. y T.,,,no,no,Vacante
+30189532,"VERA, Luis",M,166,Sistemas operativos y redes,Tecnicatura Superior en Desarrollo de Software,TIT,,3,,,,12/05/2025,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Afectación docente
+36695667,"FIGUEROA, Fernando",M,166,Informatica,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,3,,,,,11/11/2025,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Afectación docente
+36695667,"FIGUEROA, Fernando",M,166,Practica profesionalizante III:desarrollo de base d datos,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,3,,,2,,02/03/2026,SIN TERMINO,Resolución,442,2026,M.E.C.C. y T.,,,no,no,Afectación docente
+36695667,"FIGUEROA, Fernando",M,166,Programación de sitios web,Tecnicatura Superior en Desarrollo de Software,TIT,,,4,,,11/11/2025,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+36695667,"FIGUEROA, Fernando",M,166,Direccion y gestion de proyectos informaticos,Tecnicatura Superior en Desarrollo de Software,TIT,4,,,,,12/05/2025,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Afectación docente
+36695667,"FIGUEROA, Fernando",M,166,Gestion de redes,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,2,,,,12/05/2025,,Resolución,2090,2025,,,,no,no,Afectación docente
+36695667,"FIGUEROA, Fernando",M,166,Practica profesionalizante I,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,3,,,2,,11/11/2025,,Resolución,5084,2025,,,,no,no,Afectación docente
+25728869,"CARDOZO, Analía",F,166,Procesos y tecnologias de la comunicación,Profesorado de Educación Tecnológica,INT,,,,,3,SIN INICIO,,Disposición,,,,,,no,no,Vacante
+25728869,"CARDOZO, Analía",F,166,Seguridad e higiene laboral y ambiental,Tecnicatura Superior en Soporte de Infraestructura de TI,INT,3,,,,,SIN INICIO,,Disposición,,2023,M.E.C.C. y T.,,,no,no,Vacante
+25728869,"CARDOZO, Analía",F,166,Programación II,Tecnicatura Superior en Desarrollo de Software,INT,,,4,,,SIN INICIO,,Disposición,,2022,M.E.C.C. y T.,,,no,no,Vacante
+25728869,"CARDOZO, Analía",F,166,Ciencia.tecnología y sociedad (cts),Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,,2,,,,SIN INICIO,,Disposición,,2022,M.E.C.C. y T.,,,no,no,Vacante
+25728869,"CARDOZO, Analía",F,166,"Diseño,elaboración y gestión de proyectos informáticos",Tecnicatura Superior en Desarrollo de Software,INT,,,,3,,23/02/2026,31/12/2026,Disposición,,2023,,,,no,no,Vacante
+25728869,"CARDOZO, Analía",F,166,Programación I,Tecnicatura Superior en Desarrollo de Software,SUP,,4,,,,SIN INICIO,,Disposición,,2025,,,,si,si,Vacante
+26945285,"DOMÍNGUEZ, Claudia",F,166,Informatica,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",SUP,,,,3,,23/02/2026,31/12/2026,Disposición,,2026,,,,si,no,"Reemplaza a Herrera, Martín"
+26945285,"DOMÍNGUEZ, Claudia",F,166,Direccion y gestion de proyectos informaticos,Tecnicatura Superior en Desarrollo de Software,SUP,,1,,,3,23/02/2026,31/12/2026,Disposición,,2026,,,,si,no,"Reemplaza a Duarte, Romina"
+26945285,"DOMÍNGUEZ, Claudia",F,166,Arquitectura de computadoras,Tecnicatura Superior en Desarrollo de Software,SUP,2,,,2,,SIN INICIO,,Disposición,,2026,,,,si,si,"Reemplaza a Godoy, Lucía"
+26945285,"DOMÍNGUEZ, Claudia",F,166,Organización industrial,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,4,,,,,SIN INICIO,,Disposición,,2026,,,,no,no,Vacante
+21517888,"LEZCANO, Patricia",F,166,Matematica aplicada,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,3,,,,SIN INICIO,,Disposición,44,2026,M.E.C.C. y T.,,,no,no,Vacante
+21517888,"LEZCANO, Patricia",F,166,Base de datos I,Tecnicatura Superior en Desarrollo de Software,TIT,,,4,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+35160592,"PEREYRA, Valeria",F,166,Taller de informatica aplicada (practica profesionalizante I 6hs )sin resol despues + 2 hs interinas,Tecnicatura Superior en Desarrollo de Software,TIT,,,,,4,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+35160592,"PEREYRA, Valeria",F,166,Arquitectura de computadoras,Tecnicatura Superior en Soporte de Infraestructura de TI,INT,4,,,,,SIN INICIO,,Resolución,112,2024,M.E.C.C. y T.,,,no,no,Vacante
+35160592,"PEREYRA, Valeria",F,166,Practica profesionalizante III:desarrollo de base d datos,Tecnicatura Superior en Desarrollo de Software,SUP,3,,,3,,11/11/2025,SIN TERMINO,Disposición,164,2025,M.E.C.C. y T.,,,si,no,"Reemplaza a Maidana, Lorena"
+35160592,"PEREYRA, Valeria",F,166,Tecnologia de la información,Tecnicatura Superior en Desarrollo de Software,SUP,,,3,,,01/07/2026,30/07/2026,Disposición,72,2026,,,,si,no,"Reemplaza a Cabral, Mariana"
+35160592,"PEREYRA, Valeria",F,166,Sistemas operativos y redes,Tecnicatura Superior en Desarrollo de Software,SUP,,6,,,,23/02/2026,31/12/2026,Disposición,,2026,,,,si,no,"Reemplaza a Monzón, Lucía"
+33085270,"RAMÍREZ, Esteban",M,166,Electronica general y aplicada,Profesorado de Educación Secundaria en Física,SUP,,3,,,,24/08/2026,31/12/2026,Disposición,,2026,,,,si,no,"Reemplaza a Acuña, Jorge"
+33085270,"RAMÍREZ, Esteban",M,166,Tecnicas de comunicación(base de datos),Tecnicatura Superior en Desarrollo de Software,INT,,,3,,,SIN INICIO,,Disposición,,2022,M.E.C.C. y T.,,,no,no,Vacante
+33085270,"RAMÍREZ, Esteban",M,166,El emprendedor digital y el contexto,Tecnicatura Superior en Desarrollo de Software,INT,3,,,,,SIN INICIO,,Disposición,,2022,M.E.C.C. y T.,,,no,no,Vacante
+33085270,"RAMÍREZ, Esteban",M,166,Introducción a la inteligencia artificial,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,,3,,,,SIN INICIO,,Disposición,,2026,M.E.C.C. y T.,,,no,no,Vacante
+33085270,"RAMÍREZ, Esteban",M,166,Arquitectura de computadoras,Tecnicatura Superior en Desarrollo de Software,INT,2,,,,,SIN INICIO,,Disposición,,2022,M.E.C.C. y T.,,,no,no,Afectación docente
+33085270,"RAMÍREZ, Esteban",M,165,,,SUP,4,4,4,4,4,SIN INICIO,,Disposición,6282,2015,M.E.C.C. y T.,,,si,si,"Reemplaza a Villalba, Ricardo"
+25861789,"TOLEDO, Florencia",F,166,Quimica,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,,,,3,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+25861789,"TOLEDO, Florencia",F,166,Alfabetización academica,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,3,,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+25861789,"TOLEDO, Florencia",F,166,Residencia pedagogica,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,3,,,,5,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+25861789,"TOLEDO, Florencia",F,166,Disciplinas en secciones en taller,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,SUP,,3,,3,,SIN INICIO,,Disposición,33,2026,M.E.C.C. y T.,,,si,si,"Reemplaza a Zalazar, Marcelo"
+25861789,"TOLEDO, Florencia",F,166,Matematica,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,SUP,,2,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,si,si,"Reemplaza a Galeano, Lorena"
+36175007,"VERA, Natalia",F,166,Pedagogia,Profesorado de Educación Secundaria en Física,INT,,4,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+36175007,"VERA, Natalia",F,166,Filosofia,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,SUP,,,,3,,SIN INICIO,,Disposición,,,,,,si,si,"Reemplaza a Ojeda, Carlos Alberto"
+36175007,"VERA, Natalia",F,166,Logica,Tecnicatura Superior en Soporte de Infraestructura de TI,INT,,,,3,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+36175007,"VERA, Natalia",F,166,Probabilidad y estadística,Tecnicatura Superior en Desarrollo de Software,INT,,,,3,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+36175007,"VERA, Natalia",F,166,Sistemas administrativos,Tecnicatura Superior en Desarrollo de Software,INT,,,,3,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+36175007,"VERA, Natalia",F,166,Estructura de las organizaciones,Tecnicatura Superior en Desarrollo de Software,TIT,,,,4,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+27762308,"BENÍTEZ, Carolina",F,155,,,SUP,4,4,4,4,4,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,si,si,"Reemplaza a Ayala, Raúl"
+27762308,"BENÍTEZ, Carolina",F,166,Modelos tecnologicos,Profesorado de Educación Tecnológica,TIT,,,,3,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+27762308,"BENÍTEZ, Carolina",F,166,Tecnologia de los materiales,Profesorado de Educación Tecnológica,TIT,,,,3,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+27762308,"BENÍTEZ, Carolina",F,166,Sociologia de la educacion,Profesorado de Educación Secundaria en Física,INT,,3,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+27762308,"BENÍTEZ, Carolina",F,166,"Historia y politica de la educacion latioamericana, argentina y chaqueña",Profesorado de Educación Secundaria en Física,INT,,,4,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+26122055,"BÁEZ, Ricardo",M,166,Hs capacitación,Profesorado de Educación Secundaria en Física,TIT,,,,2,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,
+26122055,"BÁEZ, Ricardo",M,166,Diseño de arquitectura I,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,,3,,SIN INICIO,,Resolución,,2026,M.E.C.C. y T.,,,no,no,Reubicación
+26122055,"BÁEZ, Ricardo",M,166,Diseño de tecnologia,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,5,,,,,SIN INICIO,,Resolución,,2026,M.E.C.C. y T.,,,no,no,Reubicación
+26122055,"BÁEZ, Ricardo",M,166,Capacitacion e investigacion,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,3,,,6,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+26122055,"BÁEZ, Ricardo",M,166,Mantenimiento de servidores,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,4,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Licencia por enfermedad
+26122055,"BÁEZ, Ricardo",M,166,Sujetos de la educacion,Profesorado de Educación Tecnológica,TIT,4,,,,,SIN INICIO,,Disposición,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+38064992,"AQUINO, Pablo",M,166,Filosofia,Profesorado de Educación Secundaria en Física,INT,,,,4,3,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+38064992,"AQUINO, Pablo",M,166,Fisica-quimica,Profesorado de Educación Tecnológica,INT,4,,,,3,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+38064992,"AQUINO, Pablo",M,166,Practica profesionalizante I,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,,,2,,2,SIN INICIO,,Disposición,175,2025,M.E.C.C. y T.,,,no,no,Vacante
+38064992,"AQUINO, Pablo",M,166,Programaciòn II,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,,,,3,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+38064992,"AQUINO, Pablo",M,166,Practica profesionalizante II,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,,,2,1,2,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+38064992,"AQUINO, Pablo",M,166,Matematica aplicada,Profesorado de Educación Tecnológica,TIT,,,,4,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+29411087,"DUARTE, Analía",F,166,Matematica,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,,,4,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+29411087,"DUARTE, Analía",F,166,Algebra,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,,,,,3,SIN INICIO,,Disposición,,2026,M.E.C.C. y T.,,,no,no,Vacante
+29411087,"DUARTE, Analía",F,166,Probabilidad y estadística,Tecnicatura Superior en Soporte de Infraestructura de TI,INT,,,,2,,SIN INICIO,,Disposición,,2023,M.E.C.C. y T.,,,no,no,Vacante
+29411087,"DUARTE, Analía",F,166,Filosofia,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,,3,,SIN INICIO,,Disposición,,2025,M.E.C.C. y T.,,,no,no,Licencia por enfermedad. Genera suplente
+29411087,"DUARTE, Analía",F,166,Etica y deontologia profesional,Tecnicatura Superior en Desarrollo de Software,INT,3,,,,,SIN INICIO,,Disposición,,2025,M.E.C.C. y T.,,,no,no,Licencia por enfermedad. Genera suplente
+29411087,"DUARTE, Analía",F,166,Disciplina en secciones del taller,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,3,,3,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Afectación docente. Genera suplente
+29411087,"DUARTE, Analía",F,166,Electronica general y aplicada,Profesorado de Educación Secundaria en Física,INT,4,,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Afectación docente. Genera suplente
+27195246,"PERALTA, Paula",F,166,Mecanica de los fluidos,Profesorado de Educación Secundaria en Física,INT,,,3,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+27195246,"PERALTA, Paula",F,166,Energia renovable y desarrollo sustentable,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,2,,3,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+27195246,"PERALTA, Paula",F,166,Energias renovables,Profesorado de Educación Tecnológica,INT,,2,,2,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+27195246,"PERALTA, Paula",F,166,Selección y capacitacion del personal,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,,,3,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+28995966,"MONZÓN, Patricia",F,166,Selección y capacitacion del personal,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,,,3,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+28995966,"MONZÓN, Patricia",F,166,Alfabetizacion academica,Profesorado de Educación Tecnológica,INT,,,,,3,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+28995966,"MONZÓN, Patricia",F,166,Alfabetizacion academica,Profesorado de Educación Secundaria en Física,INT,,3,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+23404289,"TOLEDO, Natalia",F,166,Competencia comunicativas,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,3,,,,SIN INICIO,,Disposición,,2023,M.E.C.C. y T.,,,no,no,Vacante
+25747038,"OJEDA, Silvana",F,166,Competencia comunicativas,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,3,,,,,SIN INICIO,,Disposición,,2023,M.E.C.C. y T.,,,no,no,Vacante
+25747038,"OJEDA, Silvana",F,166,Tecnicas de comunicación,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,2,2,,,,SIN INICIO,,Disposición,,2025,M.E.C.C. y T.,,,no,no,Vacante
+25747038,"OJEDA, Silvana",F,166,Capacitación /investigación,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,TIT,,,,5,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+25747038,"OJEDA, Silvana",F,166,Biotecnologia,Profesorado de Educación Tecnológica,INT,,2,,1,,SIN INICIO,,Disposición,,2025,M.E.C.C. y T.,,,no,no,Vacante
+26224185,"LEZCANO, Natalia",F,166,"Ecologia ,auditoria y gestion ambiental","Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",SUP,,,,3,,SIN INICIO,,Disposición,,2026,M.E.C.C. y T.,,,si,si,"Reemplaza a Ramírez, Fernando"
+26224185,"LEZCANO, Natalia",F,166,Tecnologia de la produccion industrial y agropecuaria,Profesorado de Educación Tecnológica,TIT,2,2,,,,SIN INICIO,,Disposición,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+26224185,"LEZCANO, Natalia",F,166,Capacitacion e investigacion,Profesorado de Educación Tecnológica,TIT,5,6,5,6,6,SIN INICIO,,,,2026,M.E.C.C. y T.,,,no,no,Reubicación
+26224185,"LEZCANO, Natalia",F,166,Soporte tecnico II (sistemas operativos II),Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,,,,4,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+26224185,"LEZCANO, Natalia",F,166,Soporte tecnico II,Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,4,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+26224185,"LEZCANO, Natalia",F,166,Programación (programación III:programación orientada a objeto (poo)),Tecnicatura Superior en Soporte de Infraestructura de TI,TIT,,,,4,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+22144632,"ZALAZAR, Verónica",F,166,Hs semiexclusivas,Tecnicatura Superior en Soporte de Infraestructura de TI,INT,2,,,,4,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+22144632,"ZALAZAR, Verónica",F,166,Practica docente II,Profesorado de Educación Secundaria en Física,INT,,,6,,,SIN INICIO,,Disposición,,2026,M.E.C.C. y T.,,,no,no,Vacante
+22144632,"ZALAZAR, Verónica",F,166,Practica profesional I: instituciones y contextos educactivos,Profesorado de Educación Tecnológica,INT,,,,2,3,SIN INICIO,,Disposición,,2026,M.E.C.C. y T.,,,no,no,Vacante
+28752952,"TOLEDO, Carolina",F,166,Practica docente I,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,5,,,,SIN INICIO,,Disposición,,2026,M.E.C.C. y T.,,,no,no,Vacante
+28752952,"TOLEDO, Carolina",F,165,,,TIT,4,4,4,4,4,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+33812424,"SAUCEDO, Andrea",F,166,Didactica de la educacion. tecnologia I,Profesorado de Educación Tecnológica,TIT,,3,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Licencia por enfermedad
+33812424,"SAUCEDO, Andrea",F,166,Didactica de la educacion. tecnologia II,Profesorado de Educación Tecnológica,TIT,,3,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Licencia por enfermedad
+33812424,"SAUCEDO, Andrea",F,166,Practica profesional IV:residencia y memoria,Profesorado de Educación Tecnológica,TIT,,,6,,2,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Licencia por enfermedad
+33812424,"SAUCEDO, Andrea",F,166,Ingles tecnico,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,,,3,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+33812424,"SAUCEDO, Andrea",F,166,Ingles,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,,3,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+20517744,"GÓMEZ, Natalia",F,166,Ingles tecnico,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,3,,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+20517744,"GÓMEZ, Natalia",F,166,Idioma extranjero: ingles aplicado,Profesorado de Educación Secundaria en Física,TIT,,,,,3,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+20517744,"GÓMEZ, Natalia",F,166,Didactica de la educación tecnológica II,Profesorado de Educación Tecnológica,SUP,,,3,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,si,si,"Reemplaza a Fernández, Natalia"
+23149759,"ARCE, Patricia",F,166,Didactica general,Profesorado de Educación Tecnológica,TIT,,2,,,2,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+23149759,"ARCE, Patricia",F,166,Didactica general,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,4,,,,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+23149759,"ARCE, Patricia",F,166,Didactica general,Profesorado de Educación Secundaria en Física,TIT,,,,,4,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+23149759,"ARCE, Patricia",F,166,Sujeto de la educacion,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,3,,,1,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+23149759,"ARCE, Patricia",F,166,Sociologia y psicologia laboral,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,3,,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+23149759,"ARCE, Patricia",F,166,Estudio del trabajo y ergonomia,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,,3,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+31754346,"GALEANO, Florencia",F,166,Sociologia de la organizaciones,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,3,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+31754346,"GALEANO, Florencia",F,166,Sociologia y psicologia laboral,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,3,,,,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
+31754346,"GALEANO, Florencia",F,166,Psicologia educacional,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",TIT,,,,3,,SIN INICIO,,Resolución,5084,2025,M.E.C.C. y T.,,,no,no,Vacante
+31754346,"GALEANO, Florencia",F,166,Educacion tecnologica,Profesorado de Educación Tecnológica,SUP,,3,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,si,si,"Reemplaza a Coronel, Verónica"
+31754346,"GALEANO, Florencia",F,166,Informatica,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,,,3,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+31754346,"GALEANO, Florencia",F,165,,,INT,4,4,4,4,4,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+27235551,"HERRERA, Florencia",F,165,,,INT,4,4,4,4,4,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+27235551,"HERRERA, Florencia",F,166,Realidad socio productiva laboral de la argentina,Tecnicatura Superior en Soporte de Infraestructura de TI,INT,,,3,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+27235551,"HERRERA, Florencia",F,166,Realidad socio-productiva y laboral de la argentina,Tecnicatura Superior en Desarrollo de Software,INT,,2,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+27235551,"HERRERA, Florencia",F,166,Procedimiento de lenguaje natural,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,,,4,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+27235551,"HERRERA, Florencia",F,166,Mantenimiento de servidores,Tecnicatura Superior en Soporte de Infraestructura de TI,INT,2,,,,,13/08/2026,SIN TERMINO,Disposición,69,2026,M.E.C.C. y T.,,,no,no,Vacante
+24007749,"ARCE, Ricardo",M,166,Gestion de redes,Tecnicatura Superior en Desarrollo de Software,SUP,,,,,2,04/06/2026,31/12/2026,Disposición,56,2026,M.E.C.C. y T.,,,si,no,"Reemplaza a Leiva, Hernán"
+24007749,"ARCE, Ricardo",M,166,Informatica,Tecnicatura Superior en Soporte de Infraestructura de TI,SUP,3,,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,si,si,"Reemplaza a Gómez, Esteban"
+24007749,"ARCE, Ricardo",M,166,Semiexclusivas,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,4,4,4,4,4,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,"Reemplaza a Zalazar, Natalia"
+24007749,"ARCE, Ricardo",M,166,Seguridad I,"Tecnicatura Superior en Seguridad, Higiene y Medio Ambiente del Trabajo",INT,,,5,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+24007749,"ARCE, Ricardo",M,166,Taller: soporte tecnico,Tecnicatura Superior en Soporte de Infraestructura de TI,INT,,,,,3,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+24007749,"ARCE, Ricardo",M,166,Seguridad informática I,Tecnicatura Superior en Desarrollo de Software,INT,,4,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+29963720,"SAUCEDO, Soledad",F,166,Seguridad informatica II,Tecnicatura Superior en Desarrollo de Software,INT,,,,4,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+29963720,"SAUCEDO, Soledad",F,166,Ingenieria de software,Tecnicatura Superior en Desarrollo de Software,SUP,,,,2,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,si,si,Vacante
+29963720,"SAUCEDO, Soledad",F,166,Comunicación y redes,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,INT,,,2,2,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+29963720,"SAUCEDO, Soledad",F,166,Fundamentos de ingenieria de software I,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,SUP,,,3,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,si,si,
+20680151,"NAVARRO, Verónica",F,166,Fundamentos de ingenieria de software I I,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,SUP,,,,,3,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,si,si,
+20680151,"NAVARRO, Verónica",F,166,Practica profesionalizante II,Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial,SUP,3,3,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,si,si,"Reemplaza a Cáceres, Natalia"
+20680151,"NAVARRO, Verónica",F,166,Lenguaje digital y audiovisual,Profesorado de Educación Tecnológica,INT,,,,3,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+25439983,"ESCOBAR, Natalia",F,166,Tecnologia de la informacion y de la comunicación en educacion,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,,2,4,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+25439983,"ESCOBAR, Natalia",F,166,Didactica de la educación tecnológica I,Profesorado de Educación Tecnológica,INT,,3,,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,"Reemplaza a Paredes, Claudia"
+20966172,"DOMÍNGUEZ, Fernando",M,166,Historia de la tecnologia,Profesorado de Educación Tecnológica,SUP,,,2,,4,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,si,si,"Reemplaza a Ayala, Jorge"
+20966172,"DOMÍNGUEZ, Fernando",M,166,Practica docente III,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,3,3,,,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+20966172,"DOMÍNGUEZ, Fernando",M,166,Automatismo y control,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,INT,,,,4,4,SIN INICIO,,Disposición,,,M.E.C.C. y T.,,,no,no,Vacante
+32656133,"ESPÍNDOLA, Esteban",M,166,Energias renovables y desarrollo sustentable,Profesorado de Educación Secundaria de la Modalidad Técnico Profesional,TIT,,,4,4,,SIN INICIO,,Resolución,2090,2025,M.E.C.C. y T.,,,no,no,Vacante
