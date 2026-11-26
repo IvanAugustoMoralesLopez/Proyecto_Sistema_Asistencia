@@ -104,12 +104,21 @@ Antes tenés que haber corrido `migrate` (paso 5) sobre una base sin datos propi
 
 Las fechas están pensadas para el 25/11/2026: ese día la planilla tiene cargado solo el turno mañana y hay pendientes con aviso y uno vencido. Si lo cargás otro día, los pendientes del final aparecen vencidos.
 
+#### Planilla de personal de ejemplo (para probar la importación CSV)
+
+La carpeta `demo/` trae una planilla de personal ficticia para probar la importación por CSV (RF-06): 70 docentes y 310 designaciones con horario, en 7 carreras. Los nombres y DNI son inventados y no chocan con los de `datos_prueba.sql`.
+
+1. Si vas a usar `datos_prueba.sql`, cargalo primero (necesita una base sin datos).
+2. Ejecutá `demo/catalogos_planilla.sql` como script sobre la base: crea las carreras y materias que usa la planilla. Usa `INSERT IGNORE`, así que no duplica las que ya existen.
+3. En **Legajos → Importar CSV**, elegí `demo/planilla_personal_ficticia.csv` y tocá *Validar archivo*: muestra las filas válidas y las rechazadas sin guardar nada. Recién *Confirmar e importar* guarda.
+
 ### 7. Uso mensual (cuadros IL-01 / IL-02)
 
-1. Todos los días se carga la asistencia en la **planilla rápida**, ...
-2. Al recibir el formulario en papel, ...
-3. A fin de mes, ...
-4. Se elige el artículo de cada renglón ...
+1. Todos los días se carga la asistencia en **Cargar asistencia** (planilla rápida): una fila por docente con su marca (PR, P, I, LIC o LT). Una falta sin papel o una licencia avisada sin cargar queda como pendiente, con aviso al día hábil siguiente.
+2. Cuando llega el formulario en papel, en **Recepción de formularios** la inasistencia pasa a LIC, LT o P. Las licencias se cargan en **Nueva licencia**, una vez por docente: el sistema detecta sus materias y marca solo los días en la asistencia. Una licencia sin fecha de fin se marca hasta hoy.
+3. A fin de mes, en **Planilla mensual IL-01 / IL-02**, *Procesar el mes* arma un renglón por docente, período y materia, con las horas afectadas.
+4. Se elige el artículo de cada renglón (solo los de su situación de revista) y se guarda: el renglón pasa a IL-01 o IL-02.
+5. En **Disposiciones del mes a emitir** se revisa la vista previa y se emite (RF-16): cada docente y período recibe un número correlativo, en orden alfabético. Hasta ese momento, las licencias figuran como «Pendiente de numerar». Las licencias sin fecha de fin aparecen en un cuadro propio de la planilla y en **Alertas**.
 
 Para mirar el mes completo, en **Asistencia del día** está la pestaña **Mes**: una fila por docente y una columna por día, como la hoja «ASISTENCIA» del Excel. Se puede filtrar por carrera, exportar a CSV e imprimir. Un «·» marca un día con clase que todavía no se cargó.
 
@@ -151,7 +160,8 @@ asistencias/  registro diario, planilla rápida, cierres, calendario escolar
 licencias/    licencias otorgadas, planilla mensual IL-01/IL-02, disposiciones
 reportes/     consultas, alertas, bitácora, usuarios, parámetros, roles
 templates/    base.html y páginas compartidas (403, 404, 500)
-static/       estilos propios (static/css)
+static/       estilos propios (static/css) 
+demo/         planilla de personal ficticia (CSV) y sus catálogos (SQL)
 ```
 
 ## Equipo
