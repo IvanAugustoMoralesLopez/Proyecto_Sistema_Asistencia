@@ -14,7 +14,7 @@
         </p>
     </div>
 
-    <a href="{% url 'licencias:nueva_licencia_otorgada' %}" class="btn btn-primary">
+    <a href="{% url 'licencias:nueva_licencia' %}" class="btn btn-primary">
         Nueva licencia
     </a>
 </div>
@@ -134,6 +134,12 @@
                                 </td>
                                 <td>
                                     <a
+                                        href="{% url 'licencias:detalle_licencia' licencia.id %}"
+                                        class="btn btn-sm btn-primary me-1"
+                                    >
+                                        Ver
+                                    </a>
+                                    <a
                                         href="{% url 'licencias:editar_licencia_otorgada' licencia.id %}?{{ request.GET.urlencode }}"
                                         class="btn btn-sm btn-outline-primary"
                                         onclick="return confirm('¿Desea ingresar a editar esta licencia?');"
@@ -187,4 +193,3 @@
     </div>
 </div>
 {% endblock %}
-```

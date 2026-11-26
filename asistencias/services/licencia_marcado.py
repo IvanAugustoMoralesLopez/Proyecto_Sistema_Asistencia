@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from ..models import (
     CierreDiario,
@@ -131,6 +132,10 @@ def marcar_licencia(licencia, usuario=None):
       - sin_horario: fechas habiles en que la designacion no da clase.
       - advertencias: problemas de la licencia entera (sin fecha hasta,
         designacion sin horarios).
+
+    RF-14: una licencia sin fecha 'hasta' (tipica del largo tratamiento) se
+    marca hasta hoy. Los dias siguientes los propone la planilla rapida y,
+    cuando se le pone fin (prorrogar o editar), se marca el resto.
     """
     resumen = {
         "marcados": [],
@@ -139,11 +144,24 @@ def marcar_licencia(licencia, usuario=None):
         "advertencias": [],
     }
 
-    if licencia.hasta is None:
+    hasta = licencia.hasta
+
+    if hasta is None:
+        hoy = timezone.localdate()
+
+        if licencia.desde > hoy:
+            resumen["advertencias"].append(
+                "La licencia no tiene fecha 'hasta' y todavia no empezo: "
+                "no se marco ningun dia. La carga diaria la propone cada dia."
+            )
+            return resumen
+
+        hasta = hoy
         resumen["advertencias"].append(
-            "La licencia no tiene fecha 'hasta': no se marco ningun dia."
+            "La licencia no tiene fecha 'hasta': se marco hasta hoy "
+            f"({hoy:%d/%m/%Y}). Los dias siguientes los propone la carga "
+            "diaria; al ponerle fecha de fin se marca el resto."
         )
-        return resumen
 
     designacion = licencia.designacion
     horas_por_dia = {
@@ -171,7 +189,7 @@ def marcar_licencia(licencia, usuario=None):
 
     fecha = licencia.desde
 
-    while fecha <= licencia.hasta:
+    while fecha <= hasta:
         motivo = _motivo_de_omision(designacion, fecha)
         horas = horas_por_dia.get(_DIA_HORARIO.get(fecha.weekday()))
 

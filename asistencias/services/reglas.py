@@ -114,7 +114,7 @@ def _validar_periodo_abierto(fecha):
         raise ValidationError(
             "El período está cerrado: "
             f"{nombre_del_mes(fecha)} ya no admite cambios. "
-            "Pedile a Secretaría o Subsecretaría que lo reabra."
+            "Para corregirlo hay que reabrirlo desde Asistencia › Cierres."
         )
 
     return cierre
@@ -122,8 +122,9 @@ def _validar_periodo_abierto(fecha):
 
 def _validar_jornada_abierta(usuario, fecha, motivo):
     """
-    RN-06: modificar una jornada cerrada requiere autorización de
-    Secretaría o Subsecretaría y queda justificado con un motivo.
+    Modificar una jornada cerrada requiere el permiso
+    `modificar_jornada_cerrada` (lo tienen los tres roles, RF-19) y queda
+    justificado con un motivo en la bitácora.
     """
     if not CierreDiario.objects.filter(fecha=fecha).exists():
         return
@@ -132,7 +133,7 @@ def _validar_jornada_abierta(usuario, fecha, motivo):
         usuario,
         "asistencias.modificar_jornada_cerrada",
         f"La jornada del {fecha:%d/%m/%Y} está cerrada: modificarla "
-        "requiere autorización de Secretaría o Subsecretaría.",
+        "requiere el permiso para modificar jornadas cerradas.",
     )
 
     if len(motivo.strip()) < MOTIVO_MINIMO:
@@ -155,21 +156,41 @@ def _fin_de_semana_habilitado():
     )
 
 
+def dia_del_calendario(fecha):
+    """
+    Feriado, asueto o día inhábil cargado en el calendario escolar para la
+    fecha, o None.
+
+    RF-10: el calendario es visual y organizativo (fondo e indicador en la
+    pantalla diaria). No bloquea la carga ni cambia ningún cómputo: los días
+    se computan según el formulario presentado y los horarios vigentes.
+    """
+    return DiaNoLaborable.objects.filter(fecha=fecha).first()
+
+
+def aviso_del_calendario(fecha):
+    """Texto del indicador visual del día («09/07/2026 es feriado (…)»), o ""."""
+    dia = dia_del_calendario(fecha)
+
+    if dia is None:
+        return ""
+
+    texto = f"{fecha:%d/%m/%Y} es {dia.get_tipo_display().lower()}"
+
+    if dia.descripcion:
+        texto += f" ({dia.descripcion})"
+
+    return texto
+
+
 def motivo_dia_no_laborable(fecha):
     """
-    Devuelve el motivo por el que la fecha no tiene obligación de marcado
-    (feriado, asueto, día inhábil o fin de semana), o None si es hábil.
+    Devuelve el motivo por el que en la fecha no se carga asistencia, o None.
+
+    Solo los fines de semana: los horarios de las designaciones van de lunes
+    a viernes. Los feriados, asuetos y días inhábiles del calendario NO
+    bloquean (RF-10): se informan con `aviso_del_calendario`.
     """
-    dia = DiaNoLaborable.objects.filter(fecha=fecha).first()
-
-    if dia:
-        texto = f"{fecha:%d/%m/%Y} es {dia.get_tipo_display().lower()}"
-
-        if dia.descripcion:
-            texto += f" ({dia.descripcion})"
-
-        return texto
-
     if fecha.weekday() not in DIAS_HABILES and not _fin_de_semana_habilitado():
         return f"{fecha:%d/%m/%Y} es fin de semana"
 
@@ -213,12 +234,22 @@ def dia_habil_mas_cercano(fecha, sentido=-1, limite=15):
     return None
 
 
-def _validar_designacion_vigente(designacion, fecha):
-    if not designacion.activo:
-        raise ValidationError("La designación está inactiva.")
+def _validar_designacion_vigente(designacion, fecha, *, corrigiendo=False):
+    """
+    La designación tiene que estar vigente en la fecha.
 
-    if not designacion.persona.activa:
-        raise ValidationError("La persona está inactiva.")
+    `corrigiendo=True` es corregir un registro ya cargado de esa misma
+    designación (RF-11): la baja posterior de la designación o del legajo no
+    impide corregir un día que estaba dentro de su vigencia, porque nada se
+    borra y el historial sigue siendo válido (RN-03). Sí se exige que la
+    fecha quede entre su Desde y su Hasta.
+    """
+    if not corrigiendo:
+        if not designacion.activo:
+            raise ValidationError("La designación está inactiva.")
+
+        if not designacion.persona.activa:
+            raise ValidationError("La persona está inactiva.")
 
     if fecha < designacion.desde:
         raise ValidationError(

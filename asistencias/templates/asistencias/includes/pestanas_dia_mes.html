@@ -1,0 +1,18 @@
+{% comment %}
+  Pestañas de la pantalla «Asistencia del día»: Día (lo cargado en una fecha)
+  y Mes (la planilla mensual). Espera `pestana` ("dia" o "mes"),
+  `pestana_fecha` (AAAA-MM-DD) y `pestana_mes` (AAAA-MM).
+{% endcomment %}
+<nav class="asis-pestanas asis-no-imprimir" aria-label="Ver la asistencia por día o por mes">
+    <a class="asis-pestanas__item{% if pestana == 'dia' %} asis-pestanas__item--activa{% endif %}"
+       href="{% url 'asistencia:registro_diario' %}?fecha={{ pestana_fecha }}"
+       {% if pestana == 'dia' %}aria-current="page"{% endif %}>
+        <i class="bi bi-calendar-day" aria-hidden="true"></i> Día
+    </a>
+    <a class="asis-pestanas__item{% if pestana == 'mes' %} asis-pestanas__item--activa{% endif %}"
+       id="pestana-mes"
+       href="{% url 'asistencia:planilla_mes' %}?mes={{ pestana_mes }}{% if carrera_valor %}&amp;carrera={{ carrera_valor }}{% endif %}"
+       {% if pestana == 'mes' %}aria-current="page"{% endif %}>
+        <i class="bi bi-table" aria-hidden="true"></i> Mes
+    </a>
+</nav>

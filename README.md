@@ -8,7 +8,7 @@ Pantallas principales:
 
 1. Personal, legajos y designaciones.
 2. Asistencia diaria y calendario escolar.
-3. Licencias, reporte mensual y disposiciones.
+3. Licencias, planilla mensual IL-01 / IL-02 y disposiciones.
 4. Consultas, alertas y bitácora de auditoría.
 
 ## Requisitos
@@ -71,7 +71,14 @@ DB_USER=asistencia
 DB_PASSWORD=la_clave_que_elegiste
 DB_HOST=127.0.0.1
 DB_PORT=3307
+
+# Opcionales
+DJANGO_DEBUG=1
+DJANGO_SECRET_KEY=
+DJANGO_ALLOWED_HOSTS=
 ```
+
+`DJANGO_DEBUG=1` es para desarrollo. Para la puesta en marcha poné `DJANGO_DEBUG=0`, una `DJANGO_SECRET_KEY` propia y el nombre del servidor en `DJANGO_ALLOWED_HOSTS`.
 
 El puerto es **3307**, el mismo que `settings.py` usa por defecto. Si tu MariaDB quedó en otro puerto (por ejemplo 3306), poné el que mostró `SHOW VARIABLES LIKE 'port'`.
 
@@ -82,18 +89,33 @@ El puerto es **3307**, el mismo que `settings.py` usa por defecto. Si tu MariaDB
 ```
 python manage.py migrate
 python manage.py sincronizar_roles
+python manage.py cargar_nomenclador
 ```
 
-`migrate` crea las tablas, las marcas de asistencia (P, I, LIC, LT, PR) y los tres roles. `sincronizar_roles` deja los permisos de cada rol al día.
+`migrate` crea las tablas, las marcas de asistencia y los tres roles. Las marcas siguen el Documento de Requerimientos v2.0: **P = Permiso, I = Inasistencia, LIC = Licencia médica o especial, LT = Largo tratamiento, PR = Presente**. Si tu base ya tenía registros con el significado anterior (P = Presente, PR = Presente retirado), la migración `asistencias 0011` los convierte solos: los P pasan a PR y los PR pasan a I con una nota en las observaciones. También crea el catálogo de tipos de instrumento legal (Resolución y Disposición). `sincronizar_roles` deja los permisos de cada rol al día.
+
+`cargar_nomenclador` carga los 148 artículos del Nomenclador de Licencias oficial (`licencias/data/nomenclador.csv`): sin este paso, el selector de artículos de la planilla mensual queda vacío o con artículos de prueba. Se puede correr las veces que haga falta (crea los códigos nuevos y actualiza los que cambiaron); con `--dry-run` muestra qué haría sin guardar nada.
 
 ### 6. Cargar datos de prueba (opcional)
 
-El archivo `datos_prueba.sql` carga datos ficticios: 20 docentes, 22 designaciones, 12 licencias, feriados 2026, registros de asistencia de octubre 2026 y 9 usuarios. Antes tenés que haber corrido `migrate` (paso 5).
+El archivo `datos_prueba.sql` carga 90 días de uso simulado del sistema, del 28/08/2026 al 25/11/2026: 60 docentes con el legajo completo, 92 designaciones con horario, unas 2.000 asistencias, licencias, formularios en papel, pendientes, la planilla mensual con sus disposiciones, cierres de jornadas y de meses, la bitácora y 9 usuarios. Todo es ficticio (DNI 99000001 a 99000060). Trae también los 148 artículos del nomenclador oficial: si ya corriste `cargar_nomenclador`, se usan los que hay.
 
-Ejecutalo completo como script SQL sobre la base `asistencia` (por ejemplo con "Execute SQL File" en Navicat o "Execute SQL Script" en DBeaver, no una sentencia suelta). Está pensado para poder volver a ejecutarse sin duplicar datos. El bloque de limpieza al final del archivo sirve para borrarlos.
+Antes tenés que haber corrido `migrate` (paso 5) sobre una base sin datos propios. Ejecutalo completo como script SQL sobre la base `asistencia` (por ejemplo "Archivo → Ejecutar archivo SQL" en HeidiSQL o "Execute SQL Script" en DBeaver, no una sentencia suelta). Va en una sola transacción: si la base ya tiene datos que chocan con los de prueba, se detiene sin guardar nada. Para volver a cargarlo, borrá las tablas de la base y corré `migrate` de nuevo.
 
-### 7. Levantar el servidor
+Las fechas están pensadas para el 25/11/2026: ese día la planilla tiene cargado solo el turno mañana y hay pendientes con aviso y uno vencido. Si lo cargás otro día, los pendientes del final aparecen vencidos.
 
+### 7. Uso mensual (cuadros IL-01 / IL-02)
+
+1. Todos los días se carga la asistencia en la **planilla rápida**, ...
+2. Al recibir el formulario en papel, ...
+3. A fin de mes, ...
+4. Se elige el artículo de cada renglón ...
+
+Para mirar el mes completo, en **Asistencia del día** está la pestaña **Mes**: una fila por docente y una columna por día, como la hoja «ASISTENCIA» del Excel. Se puede filtrar por carrera, exportar a CSV e imprimir. Un «·» marca un día con clase que todavía no se cargó.
+
+El detalle de qué cambió para cumplir cada requerimiento está en `CAMBIOS_REQUERIMIENTOS_v2.md`.
+
+### 8. Levantar el servidor
 ```
 python manage.py runserver
 ```
@@ -126,7 +148,7 @@ Tienen que pasar todos antes de integrar cambios a `main`.
 config/       configuración de Django (settings, urls)
 personal/     legajos, designaciones, catálogos, importación CSV
 asistencias/  registro diario, planilla rápida, cierres, calendario escolar
-licencias/    licencias otorgadas, reporte mensual, disposiciones
+licencias/    licencias otorgadas, planilla mensual IL-01/IL-02, disposiciones
 reportes/     consultas, alertas, bitácora, usuarios, parámetros, roles
 templates/    base.html y páginas compartidas (403, 404, 500)
 static/       estilos propios (static/css)

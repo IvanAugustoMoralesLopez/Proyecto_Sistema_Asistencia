@@ -12,7 +12,7 @@ from django.dispatch import receiver
 
 from asistencias.models import EventoAsistencia
 from licencias.models import LicenciaArticulo, LicenciaOtorgada
-from personal.models import Cargo, Carrera, EspacioCurricular
+from personal.models import Cargo, Carrera, EspacioCurricular, TipoInstrumentoLegal
 
 from .auditoria import AccionesReportes, a_json, foto_en_base
 from .roles import crear_grupos
@@ -69,6 +69,7 @@ _AUDITADOS = {
     Cargo: (Accion.CATALOGO_ALTA, Accion.CATALOGO_EDITAR, Accion.CATALOGO_BAJA),
     Carrera: (Accion.CATALOGO_ALTA, Accion.CATALOGO_EDITAR, Accion.CATALOGO_BAJA),
     EspacioCurricular: (Accion.CATALOGO_ALTA, Accion.CATALOGO_EDITAR, Accion.CATALOGO_BAJA),
+    TipoInstrumentoLegal: (Accion.CATALOGO_ALTA, Accion.CATALOGO_EDITAR, Accion.CATALOGO_BAJA),
 }
 
 

@@ -1,16 +1,19 @@
 """
 Calendario escolar (RF-10): feriados, asuetos y días inhábiles.
 
-Junto con los fines de semana, `DiaNoLaborable` define los días sin
-obligación de marcado (ver `reglas.motivo_dia_no_laborable`). Cambiar el
-calendario de un período ya cerrado alteraría después de cerrado qué
-asistencias eran válidas, por eso no se permite.
+El calendario es visual y organizativo: la pantalla diaria muestra el día
+con fondo e indicador (ver `reglas.aviso_del_calendario`), pero no bloquea
+la carga ni cambia el cómputo de días u horas. El calendario de un período
+ya cerrado no se modifica, para que lo que se vio al cerrar no cambie.
+
+RF-20: cada alta, modificación y baja queda en la bitácora con el usuario,
+la fecha y lo que había antes y después.
 """
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from ..models import DiaNoLaborable, RegistroAsistencia
+from ..models import DiaNoLaborable, EventoAsistencia, RegistroAsistencia
 from .reglas import (
     ANIO_MAXIMO,
     ANIO_MINIMO,
@@ -38,6 +41,35 @@ def _obtener_bloqueado(dia_id):
         raise ValidationError("El día del calendario no existe.") from exc
 
 
+def _foto(dia):
+    """Datos del día que se guardan en la bitácora."""
+    return {
+        "fecha": dia.fecha.isoformat(),
+        "tipo": dia.tipo,
+        "descripcion": dia.descripcion,
+    }
+
+
+def _descripcion(dia):
+    """«Feriado 09/07/2026 (Día de la Independencia)», para leer la bitácora."""
+    texto = f"{dia.get_tipo_display()} {dia.fecha:%d/%m/%Y}"
+    if dia.descripcion:
+        texto += f" ({dia.descripcion})"
+    return texto
+
+
+def _registrar(usuario, accion, dia, *, antes=None, despues=None, origen=""):
+    """RF-20: deja el cambio del calendario en la bitácora."""
+    motivo = f"{origen}{_descripcion(dia)}"
+    EventoAsistencia.objects.create(
+        usuario=usuario,
+        accion=accion,
+        motivo=motivo[: EventoAsistencia._meta.get_field("motivo").max_length],
+        antes=antes,
+        despues=despues,
+    )
+
+
 @transaction.atomic
 def guardar_dia_no_laborable(*, usuario, datos, dia_id=None):
     """
@@ -46,6 +78,8 @@ def guardar_dia_no_laborable(*, usuario, datos, dia_id=None):
     El día se vuelve a leer de la base: el formulario ya cambió su
     instancia al validar y no sirve para saber en qué período estaba.
     """
+    antes = None
+
     if dia_id is None:
         _exigir_permiso(
             usuario,
@@ -61,6 +95,7 @@ def guardar_dia_no_laborable(*, usuario, datos, dia_id=None):
         )
         dia = _obtener_bloqueado(dia_id)
         _validar_periodo_abierto(dia.fecha)
+        antes = _foto(dia)
 
     _validar_periodo_abierto(datos["fecha"])
 
@@ -68,6 +103,16 @@ def guardar_dia_no_laborable(*, usuario, datos, dia_id=None):
     dia.tipo = datos["tipo"]
     dia.descripcion = datos.get("descripcion", "")
     dia.save()
+
+    despues = _foto(dia)
+
+    if antes is None:
+        _registrar(usuario, EventoAsistencia.Accion.CALENDARIO_ALTA, dia, despues=despues)
+    elif antes != despues:
+        _registrar(
+            usuario, EventoAsistencia.Accion.CALENDARIO_EDITAR, dia,
+            antes=antes, despues=despues,
+        )
 
     return dia
 
@@ -82,7 +127,9 @@ def eliminar_dia_no_laborable(*, usuario, dia_id):
 
     dia = _obtener_bloqueado(dia_id)
     _validar_periodo_abierto(dia.fecha)
+    antes = _foto(dia)
     dia.delete()
+    _registrar(usuario, EventoAsistencia.Accion.CALENDARIO_BAJA, dia, antes=antes)
 
     return dia
 
@@ -123,12 +170,16 @@ def copiar_calendario(*, usuario, anio_origen, anio_destino):
             omitidos += 1
             continue
 
-        _, created = DiaNoLaborable.objects.get_or_create(
+        nuevo, created = DiaNoLaborable.objects.get_or_create(
             fecha=nueva_fecha,
             defaults={"tipo": dia.tipo, "descripcion": dia.descripcion},
         )
         if created:
             creados += 1
+            _registrar(
+                usuario, EventoAsistencia.Accion.CALENDARIO_ALTA, nuevo,
+                despues=_foto(nuevo), origen=f"Copia del calendario {anio_origen}: ",
+            )
         else:
             omitidos += 1
 
@@ -187,11 +238,15 @@ def cargar_calendario_masivo(*, usuario, texto, tipo):
             )
             continue
 
-        _, created = DiaNoLaborable.objects.get_or_create(
+        nuevo, created = DiaNoLaborable.objects.get_or_create(
             fecha=fecha,
             defaults={"tipo": tipo, "descripcion": descripcion},
         )
         if created:
             creados += 1
+            _registrar(
+                usuario, EventoAsistencia.Accion.CALENDARIO_ALTA, nuevo,
+                despues=_foto(nuevo), origen="Carga masiva: ",
+            )
 
     return creados, errores

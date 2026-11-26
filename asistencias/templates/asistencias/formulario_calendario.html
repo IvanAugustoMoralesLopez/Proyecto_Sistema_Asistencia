@@ -1,9 +1,11 @@
 {% extends "asistencias/_formulario_base.html" %}
 
 {% block antes_form %}
+{# RF-10: el calendario es solo un aviso visual; no bloquea ni descuenta. #}
 <p class="text-secondary">
-    Los días que cargues acá no tienen obligación de
-    marcado: no se podrá registrar asistencia en esa
-    fecha. No se pueden modificar períodos ya cerrados.
+    Los días que cargues acá aparecen como aviso en la carga diaria (con
+    fondo de color). Ese día se puede registrar asistencia igual y no se
+    descuenta nada: ni horas, ni días de licencia, ni el límite anual.
+    No se pueden modificar períodos ya cerrados.
 </p>
 {% endblock %}

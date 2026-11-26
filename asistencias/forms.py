@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django import forms
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.utils import timezone
 
 from personal.models import Designacion, EspacioCurricular
@@ -20,12 +21,14 @@ from .services import (
     TRANSICIONES_JUSTIFICACION,
     validar_dia_laborable,
 )
+from .services.pendientes import CODIGOS_LICENCIA
 
 
 class SelectMarca(forms.Select):
     """
     Combo de marcas que publica en cada opción si la marca exige horas o
-    licencia (`data-horas`, `data-licencia`).
+    licencia (`data-horas`, `data-licencia`) y si es una marca de licencia
+    (`data-de-licencia`: LIC y LT, que se completan con la licencia cargada).
 
     Así la pantalla puede habilitar o completar esos campos sin repetir en
     JavaScript las reglas del catálogo (RF-08), que viven en la base.
@@ -39,6 +42,32 @@ class SelectMarca(forms.Select):
             opcion["attrs"]["data-horas"] = "1" if marca.requiere_horas else "0"
             opcion["attrs"]["data-licencia"] = (
                 "1" if marca.requiere_licencia else "0"
+            )
+            opcion["attrs"]["data-de-licencia"] = (
+                "1" if marca.codigo in CODIGOS_LICENCIA else "0"
+            )
+
+        return opcion
+
+
+class SelectLicencia(forms.Select):
+    """
+    Combo de licencias que publica en cada opción la designación a la que
+    pertenece y su período (`data-designacion`, `data-desde`, `data-hasta`).
+
+    Con eso la pantalla muestra solo las licencias del docente elegido y
+    elige sola la que cubre el día, sin consultar al servidor.
+    """
+
+    def create_option(self, name, value, *args, **kwargs):
+        opcion = super().create_option(name, value, *args, **kwargs)
+        licencia = getattr(value, "instance", None)
+
+        if licencia is not None:
+            opcion["attrs"]["data-designacion"] = str(licencia.designacion_id)
+            opcion["attrs"]["data-desde"] = licencia.desde.isoformat()
+            opcion["attrs"]["data-hasta"] = (
+                licencia.hasta.isoformat() if licencia.hasta else ""
             )
 
         return opcion
@@ -103,8 +132,12 @@ class RegistroAsistenciaForm(forms.ModelForm):
             "observaciones": "Opcional, salvo que la opción elegida la pida.",
         }
         widgets = {
+            # type="date" solo muestra el valor si viene en formato ISO: con
+            # el formato de es-ar (dd/mm/aaaa) el Día aparecía vacío al
+            # editar y no se podía guardar sin volver a elegirlo.
             "fecha": forms.DateInput(
-                attrs={"type": "date", "class": "form-control"}
+                attrs={"type": "date", "class": "form-control"},
+                format="%Y-%m-%d",
             ),
             "horas_inasistidas": forms.NumberInput(
                 attrs={
@@ -117,6 +150,7 @@ class RegistroAsistenciaForm(forms.ModelForm):
                 attrs={"class": "form-control", "rows": 3}
             ),
             "marca": SelectMarca,
+            "licencia": SelectLicencia,
         }
 
     def __init__(self, *args, **kwargs):
@@ -151,16 +185,19 @@ class RegistroAsistenciaForm(forms.ModelForm):
         self.fields["marca"].queryset = marcas_vigentes.distinct()
 
         # El combo de licencias traía todas las licencias del sistema, de
-        # todos los años: se acota a las de designaciones vigentes (más la
-        # del registro que se está editando, para que siga apareciendo).
+        # todos los años: se acota a las de designaciones vigentes (más las
+        # de la designación del registro que se está editando, para que se
+        # puedan elegir aunque esa designación ya se haya dado de baja).
+        # La pantalla, además, muestra solo las del docente elegido.
         licencias = LicenciaOtorgada.objects.filter(
             designacion__activo=True,
             designacion__persona__activa=True,
         )
 
-        if self.instance and self.instance.pk and self.instance.licencia_id:
+        if self.instance and self.instance.pk:
             licencias = licencias | LicenciaOtorgada.objects.filter(
-                pk=self.instance.licencia_id
+                Q(pk=self.instance.licencia_id)
+                | Q(designacion_id=self.instance.designacion_id)
             )
 
         self.fields["licencia"].queryset = (
@@ -276,11 +313,11 @@ class FiltroAsistenciaForm(forms.Form):
     )
     desde = forms.DateField(
         required=False,
-        widget=forms.DateInput(attrs={"type": "date"}),
+        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
     )
     hasta = forms.DateField(
         required=False,
-        widget=forms.DateInput(attrs={"type": "date"}),
+        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
     )
     marca = forms.ModelChoiceField(
         required=False,
@@ -288,12 +325,12 @@ class FiltroAsistenciaForm(forms.Form):
         queryset=MarcaAsistencia.vigentes(),
         empty_label="Cualquiera",
     )
+    # También las materias dadas de baja (al final): sus asistencias siguen
+    # en el historial (RN-03) y tienen que poder buscarse.
     espacio_curricular = forms.ModelChoiceField(
         required=False,
         label="Materia",
-        queryset=EspacioCurricular.objects.filter(activo=True)
-        .select_related("carrera")
-        .order_by("carrera__nombre", "nombre"),
+        queryset=EspacioCurricular.objects.order_by("-activo", "nombre"),
         empty_label="Todas las materias",
     )
     estado_registro = forms.ChoiceField(
@@ -301,13 +338,13 @@ class FiltroAsistenciaForm(forms.Form):
         label="Estado de la carga",
         choices=[
             ("", "Cualquiera"),
-            (RegistroAsistencia.Estado.BORRADOR, "Guardado, falta revisión"),
-            (RegistroAsistencia.Estado.VALIDADO, "Revisado por Secretaría"),
+            (RegistroAsistencia.Estado.BORRADOR, "Guardado, falta validar"),
+            (RegistroAsistencia.Estado.VALIDADO, "Validado"),
         ],
     )
     estado_justificacion = forms.ChoiceField(
         required=False,
-        label="Certificado",
+        label="Formulario",
         choices=[("", "Cualquiera")]
         + RegistroAsistencia.EstadoJustificacion.choices,
     )
@@ -316,6 +353,11 @@ class FiltroAsistenciaForm(forms.Form):
         super().__init__(*args, **kwargs)
         # Mismo vocabulario que la pantalla de carga: «Asistió», «Faltó», …
         self.fields["marca"].label_from_instance = lambda marca: marca.etiqueta
+        self.fields["espacio_curricular"].label_from_instance = (
+            lambda espacio: espacio.nombre
+            if espacio.activo
+            else f"{espacio.nombre} (dada de baja)"
+        )
         _aplicar_clases_bootstrap(self.fields)
 
     def clean(self):
@@ -340,9 +382,9 @@ class FiltroRecepcionForm(FiltroAsistenciaForm):
 
     estado_justificacion = forms.ChoiceField(
         required=False,
-        label="Certificado",
+        label="Formulario",
         choices=[
-            (PENDIENTES, "Pendientes (sin certificado o en trámite)"),
+            (PENDIENTES, "Pendientes (sin formulario o en trámite)"),
             *RegistroAsistencia.EstadoJustificacion.choices[1:],
             (TODAS, "Todas las inasistencias"),
         ],
@@ -361,7 +403,23 @@ class RecepcionFormularioForm(forms.Form):
     fecha_recepcion = forms.DateField(
         required=False,
         label="¿Qué día lo recibiste?",
-        widget=forms.DateInput(attrs={"type": "date"}),
+        # En ISO: con dd/mm/aaaa el navegador no mostraba la fecha de hoy.
+        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+    )
+    # RF-09: al recibir el formulario el registro pasa de I a LIC o P.
+    nueva_marca = forms.ChoiceField(
+        required=False,
+        label="¿Qué formulario presentó?",
+        choices=[
+            ("", "No cambiar la marca"),
+            ("LIC", "Licencia médica o especial (LIC)"),
+            ("LT", "Largo tratamiento (LT)"),
+            ("P", "Permiso (P)"),
+        ],
+        help_text=(
+            "La marca cambia en todas las materias del docente ese día. "
+            "El artículo se elige después, en la planilla mensual."
+        ),
     )
     motivo = forms.CharField(
         required=False,
@@ -373,6 +431,9 @@ class RecepcionFormularioForm(forms.Form):
 
     def __init__(self, *args, registro, **kwargs):
         super().__init__(*args, **kwargs)
+        if registro.marca.codigo != "I":
+            # Ya tiene la marca del formulario: no hay nada que elegir.
+            del self.fields["nueva_marca"]
 
         permitidos = TRANSICIONES_JUSTIFICACION.get(
             registro.estado_justificacion, set()
@@ -412,11 +473,8 @@ class RecepcionFormularioForm(forms.Form):
                     "Indicá el motivo del rechazo "
                     f"(al menos {MOTIVO_MINIMO} caracteres).",
                 )
-        elif not cleaned.get("nro_formulario", "").strip():
-            self.add_error(
-                "nro_formulario",
-                "Indicá el número del formulario recepcionado.",
-            )
+        # Al justificar, el número del formulario es opcional (RF-09 pide
+        # recibir el papel, no registrar su número).
 
         return cleaned
 

@@ -1,6 +1,8 @@
 from django.db import models
 
-# Catálogo cerrado de marcas diarias (RF-08).
+# Catálogo cerrado de marcas diarias (RF-08, documento v2.0):
+# P = Permiso, I = Inasistencia, LIC = Licencia médica o especial,
+# LT = Largo tratamiento, PR = Presente.
 CODIGOS_MARCA = ("P", "I", "LIC", "LT", "PR")
 
 

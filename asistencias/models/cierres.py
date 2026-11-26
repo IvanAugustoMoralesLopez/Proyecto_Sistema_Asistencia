@@ -58,8 +58,8 @@ class CierreMensual(models.Model):
 
 class CierreDiario(models.Model):
     """
-    Jornada cerrada (RN-06): una vez cerrada, modificar sus registros
-    requiere autorización de Secretaría o Subsecretaría.
+    Jornada cerrada: una vez cerrada, modificar sus registros requiere el
+    permiso `modificar_jornada_cerrada` y un motivo, que queda en la bitácora.
     """
     fecha = models.DateField(unique=True)
     cerrado_por = models.ForeignKey(

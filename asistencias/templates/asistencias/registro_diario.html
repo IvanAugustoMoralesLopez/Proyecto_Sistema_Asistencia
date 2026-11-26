@@ -3,6 +3,8 @@
 {% block title %}Asistencia del día{% endblock %}
 
 {% block content %}
+{% include "asistencias/includes/pestanas_dia_mes.html" with pestana="dia" %}
+
 <div class="asis-cabecera">
     <div class="encabezado-planilla">
         <div>
@@ -22,14 +24,14 @@
         <div class="asis-resumen mb-1">
             <span class="asis-resumen__dato"><b>{{ total }}</b> cargado{{ total|pluralize:"s" }}</span>
             <span class="asis-resumen__dato asis-resumen__dato--ok"><b>{{ presentes }}</b> {% if presentes == 1 %}asistió{% else %}asistieron{% endif %}</span>
-            <span class="asis-resumen__dato asis-resumen__dato--falta"><b>{{ inasistencias }}</b> {% if inasistencias == 1 %}faltó o se retiró{% else %}faltaron o se retiraron{% endif %}</span>
+            <span class="asis-resumen__dato asis-resumen__dato--falta"><b>{{ inasistencias }}</b> {% if inasistencias == 1 %}faltó{% else %}faltaron{% endif %}</span>
             {% if pendientes_formulario %}
                 <span class="asis-resumen__dato asis-resumen__dato--esper"><b>{{ pendientes_formulario }}</b> esperan certificado</span>
             {% endif %}
             {% if sin_validar %}
-                <span class="asis-resumen__dato"><b>{{ sin_validar }}</b> sin revisar por Secretaría</span>
+                <span class="asis-resumen__dato"><b>{{ sin_validar }}</b> sin validar</span>
             {% else %}
-                <span class="asis-resumen__dato asis-resumen__dato--ok"><b>✓</b> todo revisado por Secretaría</span>
+                <span class="asis-resumen__dato asis-resumen__dato--ok"><b>✓</b> todo validado</span>
             {% endif %}
         </div>
     {% endif %}
@@ -123,8 +125,7 @@
                 </p>
                 <p class="mb-0 text-secondary">
                     Todavía no hay designaciones vigentes con horario en esta
-                    fecha. Secretaría tiene que cargarlas en
-                    <strong>Personal → Legajos</strong>.
+                    fecha. Se cargan en <strong>Personal → Legajos</strong>.
                 </p>
             </div>
 
@@ -174,10 +175,10 @@
 
                     <td data-rotulo="Estado">
                         {% if registro.estado_registro == "VALIDADO" %}
-                            <span class="badge text-bg-success">Revisado por Secretaría</span>
+                            <span class="badge text-bg-success">Validado</span>
                         {% else %}
                             <span class="badge text-bg-secondary">Guardado</span>
-                            <div class="asis-apoyo">Falta la revisión de Secretaría</div>
+                            <div class="asis-apoyo">Falta validarlo</div>
                         {% endif %}
                         {% if registro.estado_justificacion != "NO_APLICA" %}
                             <div class="mt-1">
@@ -224,15 +225,15 @@
             {% if not registros %}
                 <p class="alert alert-warning mt-2 mb-2">
                     Ojo: todavía no hay <strong>ninguna</strong> asistencia cargada
-                    en este día. Si lo cerrás ahora, después vas a necesitar
-                    autorización para poder cargarla.
+                    en este día. Si lo cerrás ahora, para cargarla después vas a
+                    tener que escribir el motivo.
                 </p>
             {% endif %}
 
             <p class="text-secondary mt-2 mb-2">
-                <strong>Después no vas a poder cambiar nada vos sola</strong>:
-                va a hacer falta que lo autorice Secretaría. No hace falta
-                cerrarlo para que la carga quede guardada.
+                <strong>Después, cada cambio de este día pide un motivo</strong>
+                y queda registrado en la bitácora. No hace falta cerrarlo para
+                que la carga quede guardada.
             </p>
 
             <form method="post" action="{% url 'asistencia:cerrar_jornada' %}"

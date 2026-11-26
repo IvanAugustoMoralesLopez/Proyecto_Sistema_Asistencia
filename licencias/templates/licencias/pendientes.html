@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Pendientes de licencias{% endblock %}
+{% block seccion %}informe-licencias{% endblock %}
+
+{% block content %}
+{# Bedelía carga en la diaria; Licencias controla y cierra. #}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+    <div>
+        <p class="ruta mb-1">Licencias / Pendientes</p>
+        <h1 class="h3 mb-1">Pendientes</h1>
+        <p class="text-secondary mb-0">
+            Faltas sin formulario y licencias avisadas sin completar. Hay 2 días hábiles
+            para resolverlas; vencidas, no dejan cerrar la jornada ni el mes.
+        </p>
+    </div>
+    {% if perms.licencias.add_licenciaotorgada %}
+        <a class="btn btn-primary" href="{% url 'licencias:nueva_licencia' %}?volver={{ volver|urlencode }}">
+            <i class="bi bi-file-earmark-plus"></i> Nueva licencia
+        </a>
+    {% endif %}
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="card border-0 shadow-sm"><div class="card-body py-2">
+        <div class="small text-secondary">Total</div><div class="h4 mb-0">{{ contadores.total }}</div>
+    </div></div></div>
+    <div class="col-6 col-md-3"><div class="card border-0 shadow-sm border-start border-danger border-4"><div class="card-body py-2">
+        <div class="small text-secondary">Vencidos</div><div class="h4 mb-0 text-danger">{{ contadores.vencidos }}</div>
+    </div></div></div>
+    <div class="col-6 col-md-3"><div class="card border-0 shadow-sm border-start border-warning border-4"><div class="card-body py-2">
+        <div class="small text-secondary">Vencen mañana</div><div class="h4 mb-0">{{ contadores.avisos }}</div>
+    </div></div></div>
+    <div class="col-6 col-md-3"><div class="card border-0 shadow-sm"><div class="card-body py-2">
+        <div class="small text-secondary">En plazo</div><div class="h4 mb-0">{{ contadores.en_plazo }}</div>
+    </div></div></div>
+</div>
+
+<form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-12 col-md-3">
+        <label class="form-label small" for="filtro-tipo">Tipo</label>
+        <select class="form-select form-select-sm" id="filtro-tipo" name="tipo">
+            <option value="">Todos</option>
+            <option value="falta" {% if filtro_tipo == "falta" %}selected{% endif %}>Faltas sin formulario</option>
+            <option value="licencia" {% if filtro_tipo == "licencia" %}selected{% endif %}>Licencias sin completar</option>
+        </select>
+    </div>
+    <div class="col-12 col-md-3">
+        <label class="form-label small" for="filtro-estado">Estado</label>
+        <select class="form-select form-select-sm" id="filtro-estado" name="estado">
+            <option value="">Todos</option>
+            <option value="vencido" {% if filtro_estado == "vencido" %}selected{% endif %}>Vencidos</option>
+            <option value="aviso" {% if filtro_estado == "aviso" %}selected{% endif %}>Vencen mañana</option>
+            <option value="en_plazo" {% if filtro_estado == "en_plazo" %}selected{% endif %}>En plazo</option>
+        </select>
+    </div>
+    <div class="col-12 col-md-4">
+        <label class="form-label small" for="filtro-docente">Docente (apellido o DNI)</label>
+        <input class="form-control form-control-sm" id="filtro-docente" name="docente" value="{{ filtro_docente }}">
+    </div>
+    <div class="col-12 col-md-2">
+        <button class="btn btn-sm btn-outline-primary w-100" type="submit">Filtrar</button>
+    </div>
+</form>
+
+{% if lista_pendientes %}
+    {% include "asistencias/includes/pendientes.html" %}
+{% else %}
+    <div class="alert alert-success">No hay pendientes{% if filtro_tipo or filtro_estado or filtro_docente %} con estos filtros{% endif %}.</div>
+{% endif %}
+{% endblock %}

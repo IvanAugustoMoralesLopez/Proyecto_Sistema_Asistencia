@@ -9,3 +9,5 @@ media/
 .pytest_cache/
 .coverage
 planilla_personal.sql
+
+Claude outputs/

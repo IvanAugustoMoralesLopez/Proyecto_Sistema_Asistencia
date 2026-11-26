@@ -79,6 +79,28 @@ class RegistroAsistencia(models.Model):
         related_name="formularios_recepcionados",
     )
 
+    # Seguimiento de pendientes: una falta sin resolver o una licencia sin
+    # completar avisa al día hábil siguiente y vence al segundo
+    # (asistencias/services/pendientes.py). Solo se siguen los registros
+    # cargados después de este cambio: los históricos no tienen seguimiento.
+    seguimiento = models.BooleanField(default=False, db_default=False)
+    pospuesto_en = models.DateTimeField(null=True, blank=True)
+    pospuesto_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="pendientes_pospuestos",
+    )
+    resuelto_en = models.DateTimeField(null=True, blank=True)
+    resuelto_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="pendientes_resueltos",
+    )
+
     creado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -117,14 +139,8 @@ class RegistroAsistencia(models.Model):
                 condition=Q(horas_inasistidas__gte=0),
                 name="ck_asist_horas_no_negativas",
             ),
-            # En trámite o justificada requiere el nº de formulario físico.
-            models.CheckConstraint(
-                condition=(
-                    Q(estado_justificacion__in=["NO_APLICA", "INJUSTIFICADA"])
-                    | ~Q(nro_formulario="")
-                ),
-                name="ck_asist_formulario_requerido",
-            ),
+            # El número de formulario es opcional: el documento pide recibir
+            # el papel (RF-09), no registrar su número.
         ]
         indexes = [
             models.Index(

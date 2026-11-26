@@ -6,12 +6,27 @@ app_name = "asistencia"
 
 urlpatterns = [
     path(
+        "pendientes/resolver/",
+        views.resolver_pendiente_view,
+        name="resolver_pendiente",
+    ),
+    path(
         "",
         views.registro_diario,
         name="registro_diario",
     ),
     path(
-        "crearr/",
+        "mes/",
+        views.planilla_mes,
+        name="planilla_mes",
+    ),
+    path(
+        "mes/csv/",
+        views.planilla_mes_csv,
+        name="planilla_mes_csv",
+    ),
+    path(
+        "crear/",
         views.crear_asistencia,
         name="crear_asistencia",
     ),

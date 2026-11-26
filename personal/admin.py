@@ -12,8 +12,16 @@ from .models import (
     Motivo,
     Persona,
     SituacionRevista,
+    TipoInstrumentoLegal,
     UnidadEducativa,
 )
+
+
+@admin.register(TipoInstrumentoLegal)
+class TipoInstrumentoLegalAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "activo")
+    search_fields = ("nombre",)
+    list_filter = ("activo",)
 
 
 @admin.register(Persona)
@@ -22,6 +30,10 @@ class PersonaAdmin(admin.ModelAdmin):
     search_fields = ("dni", "apellido_nombre", "apellido", "nombres", "email")
     list_filter = ("activa", "sexo", "localidad")
     ordering = ("apellido_nombre",)
+
+    def has_delete_permission(self, request, obj=None):
+        # RN-03: los legajos nunca se eliminan; la baja es lógica (activa).
+        return False
 
 
 @admin.register(Cargo)
@@ -40,10 +52,17 @@ class CarreraAdmin(admin.ModelAdmin):
 
 @admin.register(EspacioCurricular)
 class EspacioCurricularAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "carrera", "activo")
-    search_fields = ("nombre", "carrera__nombre")
-    list_filter = ("activo", "carrera")
-    autocomplete_fields = ("carrera",)
+    list_display = ("nombre", "lista_carreras", "activo")
+    search_fields = ("nombre", "carreras__nombre")
+    list_filter = ("activo", "carreras")
+    filter_horizontal = ("carreras",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("carreras")
+
+    @admin.display(description="Carreras")
+    def lista_carreras(self, obj):
+        return ", ".join(carrera.nombre for carrera in obj.carreras.all())
 
 
 @admin.register(SituacionRevista)
@@ -99,10 +118,15 @@ class HistorialDesignacionInline(admin.TabularInline):
 
 @admin.register(Designacion)
 class DesignacionAdmin(admin.ModelAdmin):
+    def has_delete_permission(self, request, obj=None):
+        # RN-03: al cesar, la designación pasa a inactiva; no se elimina.
+        return False
+
     list_display = (
         "persona",
         "cargo",
         "espacio_curricular",
+        "carrera",
         "situacion_revista",
         "desde",
         "hasta",
@@ -119,6 +143,7 @@ class DesignacionAdmin(admin.ModelAdmin):
         "persona",
         "cargo",
         "espacio_curricular",
+        "carrera",
         "unidad_educativa",
         "especialidad",
         "motivo",

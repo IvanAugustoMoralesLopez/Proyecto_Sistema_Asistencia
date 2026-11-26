@@ -1,7 +1,7 @@
 
 from django.db.models import Q
 from django import forms
-from personal.models import Designacion
+from personal.models import Designacion, TipoInstrumentoLegal
 from .models import LicenciaArticulo, LicenciaOtorgada, ResolucionAdjunta
 from .services import articulos_para_asistente
 from django.utils.dateparse import parse_date
@@ -84,6 +84,8 @@ def _etiqueta_designacion(designacion):
         etiqueta += f" - {designacion.get_situacion_revista_display()}"
     if designacion.espacio_curricular_id:
         etiqueta += f" - {designacion.espacio_curricular.nombre}"
+    if designacion.carrera_id:
+        etiqueta += f" ({designacion.carrera.nombre})"
     return etiqueta
 
 class LicenciaOtorgadaForm(forms.ModelForm):
@@ -127,11 +129,33 @@ class LicenciaOtorgadaForm(forms.ModelForm):
 
         self.fields["designacion"].queryset = (
             designaciones.select_related(
-                "persona", "cargo","espacio_curricular"
+                "persona", "cargo", "espacio_curricular", "carrera"
             ).order_by("persona__apellido_nombre")
         )
         # La opción muestra también la situación de revista de la designación.
         self.fields["designacion"].label_from_instance = _etiqueta_designacion
+
+        # RF-05: el tipo de instrumento sale del catálogo de instrumentos legales.
+        self.fields["disp_tipo"] = forms.ChoiceField(
+            label="Tipo de instrumento",
+            required=False,
+            choices=TipoInstrumentoLegal.opciones(
+                actual=self.instance.disp_tipo or ""
+            ),
+            widget=forms.Select(attrs={"class": "form-select"}),
+        )
+
+        # RN-07 / RN-08: en un alta, Oficina y Año nacen precargados.
+        if not self.instance.pk:
+            from reportes.models import ParametroSistema
+            from .dias import fecha_de_hoy
+
+            self.fields["disp_oficina"].initial = (
+                ParametroSistema.obtener().codigo_oficina
+            )
+            self.fields["disp_anio"].initial = (
+                fecha_desde.year if fecha_desde else fecha_de_hoy().year
+            )
 
     def datos_articulos(self):
         """RF-15: catálogo con su planilla de salida, para el asistente."""
@@ -243,3 +267,124 @@ class ResolucionAdjuntaForm(forms.ModelForm):
             "descripcion": "Descripción",
             "archivo": "Archivo PDF (máximo 5 MB)",
         }
+
+
+class LicenciaDocenteForm(forms.Form):
+    """
+    Licencia por docente: se elige el docente, el artículo y el período; el
+    sistema propone sus materias afectadas (designaciones) y el número de
+    disposición, que se puede cambiar.
+    """
+
+    persona = forms.ModelChoiceField(
+        label="Docente",
+        queryset=None,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    articulo = forms.ModelChoiceField(
+        label="Artículo",
+        queryset=LicenciaArticulo.objects.all().order_by("articulo"),
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    desde = forms.DateField(
+        label="Desde",
+        widget=forms.DateInput(format="%Y-%m-%d", attrs={"class": "form-control", "type": "date"}),
+    )
+    hasta = forms.DateField(
+        label="Hasta",
+        required=False,
+        widget=forms.DateInput(format="%Y-%m-%d", attrs={"class": "form-control", "type": "date"}),
+        help_text="Vacío si es una licencia abierta (por ejemplo, largo tratamiento).",
+    )
+    nro_formulario = forms.CharField(
+        label="N° de formulario (opcional)",
+        required=False,
+        max_length=20,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "F-2026-____"}),
+    )
+    justifica = forms.TypedChoiceField(
+        label="¿Está justificada?",
+        choices=[("", "Sin especificar"), ("True", "Sí"), ("False", "No")],
+        coerce=lambda value: None if value == "" else value == "True",
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    resolucion_excepcion = forms.CharField(
+        label="Resolución de excepción",
+        required=False,
+        max_length=100,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "N° y fecha (solo si supera el tope anual)"}),
+    )
+    observaciones = forms.CharField(
+        label="Observaciones",
+        required=False,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+    )
+    designaciones = forms.MultipleChoiceField(
+        label="Materias y cargos afectados",
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+    disp_tipo = forms.ChoiceField(
+        label="Tipo",
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    disp_oficina = forms.CharField(
+        label="Oficina",
+        required=False,
+        max_length=10,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    disp_numero = forms.CharField(
+        label="Número",
+        required=False,
+        max_length=20,
+        widget=forms.TextInput(attrs={"class": "form-control", "inputmode": "numeric"}),
+    )
+    disp_anio = forms.IntegerField(
+        label="Año",
+        required=False,
+        min_value=2000,
+        max_value=2100,
+        widget=forms.NumberInput(attrs={"class": "form-control"}),
+    )
+
+    def __init__(self, *args, materias=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        from personal.models import Persona
+
+        self.fields["persona"].queryset = (
+            Persona.objects.filter(designaciones__activo=True)
+            .distinct()
+            .order_by("apellido_nombre")
+        )
+        self.fields["persona"].label_from_instance = (
+            lambda persona: f"{persona.apellido_nombre} · DNI {persona.dni}"
+        )
+        self.fields["articulo"].label_from_instance = (
+            lambda articulo: f"{articulo.articulo} - {articulo.tipo_licencia}"
+            + (f" ({articulo.sit_rev})" if articulo.sit_rev else "")
+        )
+        self.fields["disp_tipo"].choices = TipoInstrumentoLegal.opciones(
+            actual=(self.data.get("disp_tipo") if self.is_bound else "") or ""
+        )
+        self.fields["designaciones"].choices = [
+            (str(m["designacion"].pk), m.get("etiqueta", m["materia"]))
+            for m in (materias or [])
+        ]
+
+    def clean_disp_numero(self):
+        numero = (self.cleaned_data.get("disp_numero") or "").strip()
+        if numero and not numero.isdigit():
+            raise forms.ValidationError("El número de disposición es solo números.")
+        return numero
+
+    def clean(self):
+        cleaned = super().clean()
+        desde, hasta = cleaned.get("desde"), cleaned.get("hasta")
+        if desde and hasta and hasta < desde:
+            self.add_error("hasta", "La fecha Hasta no puede ser anterior a la fecha Desde.")
+        if cleaned.get("disp_numero") and not cleaned.get("disp_anio"):
+            self.add_error("disp_anio", "Indicá el año de la disposición.")
+        return cleaned

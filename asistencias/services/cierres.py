@@ -14,6 +14,7 @@ from .reglas import (
     _validar_periodo_abierto,
     motivo_dia_no_laborable,
 )
+from .pendientes import ESTADO_VENCIDO, pendientes as listar_pendientes, validar_sin_vencidos
 from .sesiones import _obtener_control_bloqueado, _validar_sesion_edicion
 
 
@@ -39,6 +40,7 @@ def cerrar_dia(*, usuario, token, fecha):
         raise ValidationError(f"{motivo}: no hay jornada para cerrar.")
 
     _validar_periodo_abierto(fecha)
+    validar_sin_vencidos(fecha, "la jornada")
 
     cierre, creado = CierreDiario.objects.get_or_create(
         fecha=fecha,
@@ -93,6 +95,19 @@ def cerrar_mes(*, usuario, anio, mes, token):
     if pendientes:
         raise ValidationError(
             "No se puede cerrar: hay registros sin validar."
+        )
+
+    # Faltas sin resolver o licencias sin completar del mes con el plazo
+    # vencido: primero hay que responderlas.
+    vencidos_del_mes = [
+        p for p in listar_pendientes()
+        if p["estado"] == ESTADO_VENCIDO
+        and p["fecha"].year == anio and p["fecha"].month == mes
+    ]
+    if vencidos_del_mes:
+        raise ValidationError(
+            "No se puede cerrar: hay pendientes vencidos sin respuesta en el "
+            "mes (faltas sin resolver o licencias sin completar)."
         )
 
     cierre.estado = CierreMensual.Estado.CERRADO

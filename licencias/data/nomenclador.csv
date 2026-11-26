@@ -1,0 +1,149 @@
+codigo,agrupacion,motivo,articulo,sit_rev,goce_haberes,autoridad,plazo,tope_dias_anual,clase,categoria
+1-1-1,1,Enfermedad o lesión común,309 B 1,Titular,Con goce de haberes,Director,45 días corridos o no por año,45,Licencia,Enfermedad común
+1-1-3,1,Enfermedad o lesión común,331-A,Interino,Con goce de haberes,Director,30 días por año con antigüedad > 4 meses; 10 días en otros casos,30,Licencia,Enfermedad común
+1-1-4,1,Enfermedad o lesión común,340-A,Suplente,Con goce de haberes,Director,30 días por año con antigüedad > 4 meses; 10 días en otros casos,30,Licencia,Enfermedad común
+1-2-1,1,"Largo tratamiento, lesión grave o profilaxis",309 B-2),Titular,Con goce de haberes,Director,2 años,,Licencia,Largo tratamiento
+1-2-2,1,"Largo tratamiento, lesión grave o profilaxis",309 B-2),Titular,Con 50% de haberes,Director,1 año,,Licencia,Largo tratamiento
+1-2-5,1,"Largo tratamiento, lesión grave o profilaxis",331 B),Interino,Con goce de haberes,Director,2 años (desde 6 meses de antigüedad en el sistema),,Licencia,Largo tratamiento
+1-2-6,1,"Largo tratamiento, lesión grave o profilaxis",331 B),Interino,Con 50% de haberes,Director,1 año,,Licencia,Largo tratamiento
+1-2-7,1,"Largo tratamiento, lesión grave o profilaxis",340 B),Suplente,Con goce de haberes,Director,2 años,,Licencia,Largo tratamiento
+1-2-8,1,"Largo tratamiento, lesión grave o profilaxis",340 B),Suplente,Con 50% de haberes,Director,1 año,,Licencia,Largo tratamiento
+1-3-1,1,Enfermedad ocupacional o accidente de trabajo,309 B-3),Titular,Con goce de haberes,Ministro,2 años,,Licencia,Accidente de trabajo
+1-3-2,1,Enfermedad ocupacional o accidente de trabajo,309 B-3),Titular,Con 50% de haberes,Ministro,1 año,,Licencia,Accidente de trabajo
+1-3-5,1,Enfermedad ocupacional o accidente de trabajo,331-C,Interino,Con goce de haberes,Ministro,2 años,,Licencia,Accidente de trabajo
+1-3-6,1,Enfermedad ocupacional o accidente de trabajo,331-C,Interino,Con 50% de haberes,Ministro,1 año,,Licencia,Accidente de trabajo
+1-3-7,1,Enfermedad ocupacional o accidente de trabajo,340-C,Suplente,Con goce de haberes,Ministro,2 años,,Licencia,Accidente de trabajo
+1-3-8,1,Enfermedad ocupacional o accidente de trabajo,340-C,Suplente,Con 50% de haberes,Ministro,1 año,,Licencia,Accidente de trabajo
+1-4-1,1,Gravidez y maternidad,309-C,Titular,Con goce de haberes,Director,180 días corridos,,Licencia,Maternidad
+1-4-2,1,Gravidez y maternidad,309-C,Titular,Con goce de haberes,Director,30 días corridos (prórroga),,Licencia,Maternidad
+1-4-5,1,Gravidez y maternidad,331-D,Interino,Con goce de haberes,Director,180 días corridos,,Licencia,Maternidad
+1-4-6,1,Gravidez y maternidad,331-D,Interino,Con goce de haberes,Director,30 días corridos (prórroga),,Licencia,Maternidad
+1-4-7,1,Gravidez y maternidad,340-D,Suplente,Con goce de haberes,Director,180 días corridos,,Licencia,Maternidad
+1-4-8,1,Gravidez y maternidad,340-D,Suplente,Con goce de haberes,Director,30 días corridos (prórroga),,Licencia,Maternidad
+1-5-1,1,Enfermedad de un miembro del grupo familiar,309-D,Titular,Con goce de haberes,Director,28 días por año,28,Licencia,Enfermedad familiar
+1-5-2,1,Enfermedad de un miembro del grupo familiar,309-D,Titular,Con goce de haberes,Director,30 días por año (prórroga),30,Licencia,Enfermedad familiar
+1-5-5,1,Enfermedad de un miembro del grupo familiar,331-E,Interino,Con goce de haberes,Director,"10 días por año, antigüedad > 4 meses en el cargo y establecimiento",10,Licencia,Enfermedad familiar
+1-5-6,1,Enfermedad de un miembro del grupo familiar,340-E,Suplente,Con goce de haberes,Director,"10 días por año, antigüedad > 4 meses en el cargo y establecimiento",10,Licencia,Enfermedad familiar
+1-6-1,1,Prórroga de licencia por razones de salud,347,Titular,Con goce de haberes,Ministro,"Según prescripción médica, por período escolar",,Licencia,Largo tratamiento
+1-6-2,1,Prórroga de licencia por razones de salud,347,Titular,Con 50% de haberes,Ministro,"Según prescripción médica, por período escolar",,Licencia,Largo tratamiento
+1-6-3,1,Prórroga de licencia por razones de salud,347,Titular,Con 25% de haberes,Ministro,"Según prescripción médica, por período escolar",,Licencia,Largo tratamiento
+1-6-4,1,Prórroga de licencia por razones de salud,347,Titular,Sin goce de haberes,Ministro,"Según prescripción médica, por período escolar",,Licencia,Largo tratamiento
+1-6-5,1,Prórroga de licencia por razones de salud,347,Interino,Con goce de haberes,Ministro,"Según prescripción médica, por período escolar",,Licencia,Largo tratamiento
+1-6-6,1,Prórroga de licencia por razones de salud,347,Interino,Con 50% de haberes,Ministro,"Según prescripción médica, por período escolar",,Licencia,Largo tratamiento
+1-6-7,1,Prórroga de licencia por razones de salud,347,Interino,Con 25% de haberes,Ministro,"Según prescripción médica, por período escolar",,Licencia,Largo tratamiento
+1-6-8,1,Prórroga de licencia por razones de salud,347,Interino,Sin goce de haberes,Ministro,"Según prescripción médica, por período escolar",,Licencia,Largo tratamiento
+1-6-9,1,Prórroga de licencia por razones de salud,347,Suplente,Con goce de haberes,Ministro,"Según prescripción médica, por período escolar",,Licencia,Largo tratamiento
+1-6-10,1,Prórroga de licencia por razones de salud,347,Suplente,Con 50% de haberes,Ministro,"Según prescripción médica, por período escolar",,Licencia,Largo tratamiento
+1-6-11,1,Prórroga de licencia por razones de salud,347,Suplente,Con 25% de haberes,Ministro,"Según prescripción médica, por período escolar",,Licencia,Largo tratamiento
+1-6-12,1,Prórroga de licencia por razones de salud,347,Suplente,Sin goce de haberes,Ministro,"Según prescripción médica, por período escolar",,Licencia,Largo tratamiento
+1-7-1,1,Tareas pasivas,7-D,Titular,Con goce de haberes,Director Regional,Según prescripción médica,,Licencia,Tareas pasivas
+1-7-2,1,Tareas pasivas,7-D,Interino,Con goce de haberes,Director Regional,Según prescripción médica,,Licencia,Tareas pasivas
+1-7-3,1,Tareas pasivas,7-D,Suplente,Con goce de haberes,Director Regional,Según prescripción médica,,Licencia,Tareas pasivas
+1-8-1,1,Traslado transitorio (razones de salud),30,Titular,Con goce de haberes,,,,Licencia,Traslado por salud
+2-1-1,2,Licencia anual,309-A,Titular,Con goce de haberes,Director,60 días corridos por año,60,Licencia,Licencia anual
+2-1-3,2,Licencia anual,330,Interino,Con goce de haberes,Director,60 días corridos por año,60,Licencia,Licencia anual
+2-1-4,2,Licencia anual,339,Suplente,Con goce de haberes,Director,60 días corridos por año,60,Licencia,Licencia anual
+2-2-1,2,Adopción,309-E,Titular,Con goce de haberes,Director,100 días corridos por un niño de hasta 8 años,,Licencia,Adopción
+2-2-7,2,Adopción,331-F,Interino,Con goce de haberes,Director,100 días corridos por un niño de hasta 8 años,,Licencia,Adopción
+2-2-10,2,Adopción,340-F,Suplente,Con goce de haberes,Director,100 días corridos por un niño de hasta 8 años,,Licencia,Adopción
+2-2-2,2,Adopción,309-E,Titular,Con goce de haberes,Director,90 días corridos por un niño mayor de 8 años,,Licencia,Adopción
+2-2-8,2,Adopción,331-F,Interino,Con goce de haberes,Director,90 días corridos por un niño mayor de 8 años,,Licencia,Adopción
+2-2-11,2,Adopción,340-F,Suplente,Con goce de haberes,Director,90 días corridos por un niño mayor de 8 años,,Licencia,Adopción
+2-2-3,2,Adopción,309-E,Titular,Con goce de haberes,Director,180 días corridos por un niño menor de 2 años o prematuro débil,,Licencia,Adopción
+2-2-9,2,Adopción,331-F,Interino,Con goce de haberes,Director,180 días corridos por un niño menor de 2 años o prematuro débil,,Licencia,Adopción
+2-2-12,2,Adopción,340-F,Suplente,Con goce de haberes,Director,180 días corridos por un niño menor de 2 años o prematuro débil,,Licencia,Adopción
+2-3-1,2,Asuntos particulares,318-A,Titular,Sin goce de haberes,Supervisor,1 año por decenio de trabajo,,Licencia,Razones particulares
+2-4-1,2,Causa de fuerza mayor o grave asunto de familia,318-B,Titular,Sin goce de haberes,Supervisor,90 días por año (continuos o discontinuos),90,Licencia,Razones particulares
+2-5-1,2,Estudio o perfeccionamiento docente,318-C,Titular,Con goce de haberes,Subsecretario,3 años (Regional: 1 año),,Licencia,Estudio
+2-5-2,2,Estudio o perfeccionamiento docente,333-A,Interino,Con goce de haberes,Director Regional,20 días por año,20,Licencia,Estudio
+2-5-3,2,Estudio o perfeccionamiento docente,342-A,Suplente,Con goce de haberes,Director Regional,10 días por año,10,Licencia,Estudio
+2-6-1,2,"Representación gremial, mutual o docente",318-D,Titular,Con goce de haberes,Ministro,Según mandato,,Licencia,Representación gremial
+2-6-2,2,"Representación gremial, mutual o docente",318-D,Titular,Sin goce de haberes,Ministro,Según mandato,,Licencia,Representación gremial
+2-7-1,2,Cargo electoral o representación política,318-E,Titular,Sin goce de haberes,Ministro/Subsecretario,"Mientras dure el cargo (en la jurisdicción otorga el Ministro; fuera, el Subsecretario)",,Licencia,Cargo político
+2-7-2,2,Cargo electoral o representación política,333-F,Interino,Sin goce de haberes,Ministro/Subsecretario,"Mientras dure el cargo (en la jurisdicción otorga el Ministro; fuera, el Subsecretario)",,Licencia,Cargo político
+2-7-3,2,Cargo electoral o representación política,342-D,Suplente,Sin goce de haberes,Ministro/Subsecretario,"Mientras dure el cargo (en la jurisdicción otorga el Ministro; fuera, el Subsecretario)",,Licencia,Cargo político
+2-8-1,2,Matrimonio,318-F,Titular,Con goce de haberes,Director,10 días hábiles,,Licencia,Matrimonio
+2-8-2,2,Matrimonio,333-B,Interino,Con goce de haberes,Director,10 días hábiles,,Licencia,Matrimonio
+2-8-3,2,Matrimonio,342-B,Suplente,Con goce de haberes,Director,2 días hábiles,,Licencia,Matrimonio
+2-9-1,2,Exámenes,318-H,Titular,Con goce de haberes,Director,30 días laborables por año,30,Licencia,Examen
+2-9-2,2,Exámenes,333-D,Interino,Con goce de haberes,Director,16 días laborables por año,16,Licencia,Examen
+2-10-1,2,Incompatibilidad,318-I,Titular,Sin goce de haberes,Supervisor,3 años en toda la carrera docente,,Licencia,Incompatibilidad
+2-11-1,2,Ascenso de jerarquía,319,Titular,Sin goce de haberes,Superior inmediato,Según designación,,Licencia,Ascenso
+2-11-2,2,Ascenso de jerarquía,333-E,Interino,Sin goce de haberes,Superior inmediato,Según designación,,Licencia,Ascenso
+2-11-3,2,Ascenso de jerarquía,342-E,Suplente,Sin goce de haberes,Superior inmediato,Según designación,,Licencia,Ascenso
+2-13-1,2,Inasistencias,323,Titular,Con goce de haberes,Director,10 días por año,10,Inasistencia,Inasistencia justificada
+2-13-2,2,Inasistencias,323,Titular,Sin goce de haberes,Director,4 días por año,4,Inasistencia,Inasistencia justificada
+2-13-3,2,Inasistencias,336,Interino,Con goce de haberes,Director,5 días por año,5,Inasistencia,Inasistencia justificada
+2-13-4,2,Inasistencias,345,Suplente,Con goce de haberes,Director,3 días por año,3,Inasistencia,Inasistencia justificada
+2-14-1,2,Cambio de funciones por gravidez,311-312,Titular,Con goce de haberes,Director,Según prescripción médica,,Licencia,Cambio de funciones
+2-14-2,2,Cambio de funciones por gravidez,332,Interino,Con goce de haberes,Director,Según prescripción médica,,Licencia,Cambio de funciones
+2-14-3,2,Cambio de funciones por gravidez,341,Suplente,Con goce de haberes,Director,Según prescripción médica,,Licencia,Cambio de funciones
+2-15-1,2,Donación de órganos,318-J,Titular,Con goce de haberes,Director,Según prescripción médica; sin requisitos de antigüedad ni situación de revista,,Licencia,Donación
+2-15-2,2,Donación de órganos,318-J,Interino,Con goce de haberes,Director,Según prescripción médica; sin requisitos de antigüedad ni situación de revista,,Licencia,Donación
+2-15-3,2,Donación de órganos,318-J,Suplente,Con goce de haberes,Director,Según prescripción médica; sin requisitos de antigüedad ni situación de revista,,Licencia,Donación
+2-16-1,2,"Licencia extraordinaria (Papanicolau, colposcopía, mamografía)",318-G,Titular,Con goce de haberes,Director,1 día; certificado médico dentro de las 48 h,,Licencia,Estudios médicos
+2-16-2,2,"Licencia extraordinaria (Papanicolau, colposcopía, mamografía)",333-C,Interino,Con goce de haberes,Director,1 día; certificado médico dentro de las 48 h,,Licencia,Estudios médicos
+2-16-3,2,"Licencia extraordinaria (Papanicolau, colposcopía, mamografía)",342-C,Suplente,Con goce de haberes,Director,1 día; certificado médico dentro de las 48 h,,Licencia,Estudios médicos
+2-17-1,2,Licencias especiales,Res. 1280/00,Titular,Sin goce de haberes,,Según designación,,Licencia,Licencia especial
+2-17-2,2,Licencias especiales,Res. 1280/00,Interino,Sin goce de haberes,,Según designación,,Licencia,Licencia especial
+2-18-1,2,Licencia especial deportiva,Res. 5128/07,Titular,Con goce de haberes,Director Regional,,,Licencia,Deportiva
+2-18-2,2,Licencia especial deportiva,Res. 5128/07,Titular,Sin goce de haberes,Director Regional,,,Licencia,Deportiva
+2-18-3,2,Licencia especial deportiva,Res. 5128/07,Interino,Con goce de haberes,Director Regional,,,Licencia,Deportiva
+2-18-4,2,Licencia especial deportiva,Res. 5128/07,Interino,Sin goce de haberes,Director Regional,,,Licencia,Deportiva
+2-18-5,2,Licencia especial deportiva,Res. 5128/07,Suplente,Con goce de haberes,Director Regional,,,Licencia,Deportiva
+2-18-6,2,Licencia especial deportiva,Res. 5128/07,Suplente,Sin goce de haberes,Director Regional,,,Licencia,Deportiva
+2-19-1,2,Comité Provincial de Prevención de la Tortura,318-K,Titular,Con goce de haberes,Ministro,Según designación; no más de 5 afectaciones,,Licencia,Comisión de servicio
+2-19-2,2,Comité Provincial de Prevención de la Tortura,333-G,Interino,Con goce de haberes,Ministro,Según designación; no más de 5 afectaciones,,Licencia,Comisión de servicio
+2-19-3,2,Comité Provincial de Prevención de la Tortura,342-F,Suplente,Con goce de haberes,Ministro,Según designación; no más de 5 afectaciones,,Licencia,Comisión de servicio
+2-20-1,2,Violencia de género,318-L,Titular,Con goce de haberes,Director,Hasta que pueda retomar el cargo,,Licencia,Violencia de género
+2-20-2,2,Violencia de género,333-H,Interino,Con goce de haberes,Director,Hasta que pueda retomar el cargo,,Licencia,Violencia de género
+2-20-3,2,Violencia de género,342-G,Suplente,Con goce de haberes,Director,Hasta que pueda retomar el cargo,,Licencia,Violencia de género
+2-21-1,2,Certificación de servicios prestados y aportes,318-M,Titular,Con goce de haberes,Subsecretario,Desde los 60 días del trámite hasta el instrumento de baja,,Licencia,Jubilación
+2-21-2,2,Certificación de servicios prestados y aportes,333-I,Interino,Con goce de haberes,Subsecretario,Desde los 60 días del trámite hasta el instrumento de baja,,Licencia,Jubilación
+2-21-3,2,Certificación de servicios prestados y aportes,324-H,Suplente,Con goce de haberes,Subsecretario,Desde los 60 días del trámite hasta el instrumento de baja,,Licencia,Jubilación
+2-23-1,2,Donación de plasma sanguíneo,318-N,Titular,Con goce de haberes,Director,,,Licencia,Donación
+2-23-2,2,Donación de plasma sanguíneo,333-J,Interino,Con goce de haberes,Director,,,Licencia,Donación
+2-23-3,2,Donación de plasma sanguíneo,342-I,Suplente,Con goce de haberes,Director,,,Licencia,Donación
+3-1-1,3,Nacimiento de hijo,320-A,Titular,Con goce de haberes,Director,15 días hábiles por un hijo,,Permiso,Nacimiento
+3-1-2,3,Nacimiento de hijo,320-A,Titular,Con goce de haberes,Director,30 días hábiles por prematuro o nacimiento múltiple,,Permiso,Nacimiento
+3-1-3,3,Nacimiento de hijo,334-A,Interino,Con goce de haberes,Director,15 días hábiles por un hijo; 30 por prematuro o múltiple,,Permiso,Nacimiento
+3-1-4,3,Nacimiento de hijo,343-A,Suplente,Con goce de haberes,Director,15 días hábiles por un hijo; 30 por prematuro o múltiple,,Permiso,Nacimiento
+3-2-1,3,"Adopción (cónyuge, permiso)",320-B,Titular,Con goce de haberes,Director,10 días hábiles; 30 para adoptado con tratamiento prolongado,,Permiso,Adopción
+3-2-2,3,"Adopción (cónyuge, permiso)",334-G,Interino,Con goce de haberes,Director,5 días hábiles,,Permiso,Adopción
+3-2-3,3,"Adopción (cónyuge, permiso)",343-F,Suplente,Con goce de haberes,Director,5 días hábiles,,Permiso,Adopción
+3-3-1,3,Matrimonio de hijo,320-E,Titular,Con goce de haberes,Director,5 días hábiles,,Permiso,Matrimonio
+3-3-2,3,Matrimonio de hijo,334-D,Interino,Con goce de haberes,Director,5 días hábiles,,Permiso,Matrimonio
+3-3-3,3,Matrimonio de hijo,343-D,Suplente,Con goce de haberes,Director,5 días hábiles,,Permiso,Matrimonio
+3-4-1,3,Duelo,320-F,Titular,Con goce de haberes,Director,8 días laborables por familiar de 1er grado,,Permiso,Duelo
+3-4-2,3,Duelo,320-F,Titular,Con goce de haberes,Director,2 días laborables por familiar de 2do grado,,Permiso,Duelo
+3-4-3,3,Duelo,320-F,Titular,Con goce de haberes,Director,1 días laborables por familiar de 3er grado,,Permiso,Duelo
+3-4-4,3,Duelo,334-E,Interino,Con goce de haberes,Director,8 días laborables por familiar de 1er grado,,Permiso,Duelo
+3-4-5,3,Duelo,334-E,Interino,Con goce de haberes,Director,2 días laborables por familiar de 2do grado,,Permiso,Duelo
+3-4-6,3,Duelo,334-E,Interino,Con goce de haberes,Director,1 días laborables por familiar de 3er grado,,Permiso,Duelo
+3-4-7,3,Duelo,343-E,Suplente,Con goce de haberes,Director,8 días laborables por familiar de 1er grado,,Permiso,Duelo
+3-4-8,3,Duelo,343-E,Suplente,Con goce de haberes,Director,2 días laborables por familiar de 2do grado,,Permiso,Duelo
+3-4-9,3,Duelo,343-E,Suplente,Con goce de haberes,Director,1 días laborables por familiar de 3er grado,,Permiso,Duelo
+3-5-1,3,Candidato,321,Titular,Con goce de haberes,Director,Desde 24 h de oficializada la lista hasta 5 días después de las elecciones,,Permiso,Cargo político
+3-5-2,3,Candidato,334-F,Interino,Con goce de haberes,Director,Desde 24 h de oficializada la lista hasta 5 días después de las elecciones,,Permiso,Cargo político
+3-5-3,3,Candidato,343-I,Suplente,Con goce de haberes,Director,Desde 24 h de oficializada la lista hasta 5 días después de las elecciones,,Permiso,Cargo político
+3-6-1,3,Acompañar alumnos a excursiones,324,Titular,Con goce de haberes,Director,,,Permiso,Comisión de servicio
+3-6-2,3,Acompañar alumnos a excursiones,337,Interino,Con goce de haberes,Director,,,Permiso,Comisión de servicio
+3-6-3,3,Acompañar alumnos a excursiones,346,Suplente,Con goce de haberes,Director,,,Permiso,Comisión de servicio
+3-7-1,3,Credo no católico,325,Titular,Con goce de haberes,Director,,,Permiso,Credo
+3-7-2,3,Credo no católico,337,Interino,Con goce de haberes,Director,,,Permiso,Credo
+3-7-3,3,Credo no católico,346,Suplente,Con goce de haberes,Director,,,Permiso,Credo
+3-8-1,3,Donación de sangre,320-C,Titular,Con goce de haberes,Director,1 día,,Permiso,Donación
+3-8-2,3,Donación de sangre,334-B,Interino,Con goce de haberes,Director,1 día,,Permiso,Donación
+3-8-3,3,Donación de sangre,343-B,Suplente,Con goce de haberes,Director,1 día,,Permiso,Donación
+3-9-1,3,Lactancia,320-D,Titular,Con goce de haberes,Director,"60 minutos durante 3 meses, prorrogable 3 más con prescripción médica",,Permiso,Lactancia
+3-9-2,3,Lactancia,334-C,Interino,Con goce de haberes,Director,"60 minutos durante 3 meses, prorrogable 3 más con prescripción médica",,Permiso,Lactancia
+3-9-3,3,Lactancia,343-C,Suplente,Con goce de haberes,Director,"60 minutos durante 3 meses, prorrogable 3 más con prescripción médica",,Permiso,Lactancia
+3-10-1,3,Examen de antígeno prostático específico (PSA),320-G,Titular,Con goce de haberes,Director,,,Permiso,Estudios médicos
+3-10-2,3,Examen de antígeno prostático específico (PSA),334-H,Interino,Con goce de haberes,Director,,,Permiso,Estudios médicos
+3-10-3,3,Examen de antígeno prostático específico (PSA),343-G,Suplente,Con goce de haberes,Director,,,Permiso,Estudios médicos
+3-11-1,3,Natalicio,320-H,Titular,Con goce de haberes,Director,,,Permiso,Natalicio
+3-11-2,3,Natalicio,334-I,Interino,Con goce de haberes,Director,,,Permiso,Natalicio
+3-11-3,3,Natalicio,343-H,Suplente,Con goce de haberes,Director,,,Permiso,Natalicio
+3-12-1,3,Citación judicial,320-I,Titular,Con goce de haberes,Director,,,Permiso,Citación judicial
+3-12-2,3,Citación judicial,334-J,Interino,Con goce de haberes,Director,,,Permiso,Citación judicial
+3-12-3,3,Citación judicial,343-J,Suplente,Con goce de haberes,Director,,,Permiso,Citación judicial

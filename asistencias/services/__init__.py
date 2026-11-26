@@ -26,6 +26,8 @@ leer y navegar:
   inhábiles (RF-10).
 - `agenda`: qué docentes dan clase cada día y con cuántas horas; es lo
   que permite autocompletar la carga diaria.
+- `planilla_mes`: planilla mensual de consulta (una fila por docente y
+  una columna por día), como la hoja «ASISTENCIA» del Excel.
 
 Todo lo que antes se importaba con `from asistencias.services import X`
 se sigue importando igual: este archivo reexporta la misma API pública.
@@ -59,7 +61,35 @@ from .recepcion import (
     validar_asistencia,
     validar_multiples,
 )
-from .registro import PlanillaConErrores, guardar_asistencia, guardar_planilla
+from .pendientes import (
+    ESTADO_AVISO,
+    ESTADO_EN_PLAZO,
+    ESTADO_VENCIDO,
+    TIPO_FALTA,
+    TIPO_LICENCIA,
+    avisos_del_dia,
+    iniciar_seguimiento,
+    pendientes,
+    posponer as posponer_pendiente,
+    resolver as resolver_pendiente,
+    confirmar_injustificadas,
+    validar_sin_vencidos,
+)
+from .planilla_mes import (
+    COLUMNAS_TOTALES,
+    SIN_CARRERA,
+    carreras_del_mes,
+    mes_pedido,
+    mes_vecino,
+    nombre_mes,
+    planilla_del_mes,
+)
+from .registro import (
+    PlanillaConErrores,
+    aplicar_al_agente,
+    guardar_asistencia,
+    guardar_planilla,
+)
 from .reglas import (
     DIA_HORARIO,
     DIAS_HABILES,
@@ -70,6 +100,8 @@ from .reglas import (
     fecha_admitida,
     id_admitido,
     dia_habil_mas_cercano,
+    aviso_del_calendario,
+    dia_del_calendario,
     motivo_dia_no_laborable,
     nombre_del_mes,
     validar_dia_laborable,
@@ -114,8 +146,11 @@ __all__ = [
     "renovar_sesion_edicion",
     "liberar_sesion_edicion",
     "motivo_dia_no_laborable",
+    "aviso_del_calendario",
+    "dia_del_calendario",
     "validar_dia_laborable",
     "guardar_asistencia",
+    "aplicar_al_agente",
     "guardar_planilla",
     "recepcionar_formulario",
     "validar_asistencia",
@@ -131,4 +166,11 @@ __all__ = [
     "cargar_calendario_masivo",
     "validar_multiples",
     "inasistencias_del_periodo",
+    "COLUMNAS_TOTALES",
+    "SIN_CARRERA",
+    "carreras_del_mes",
+    "mes_pedido",
+    "mes_vecino",
+    "nombre_mes",
+    "planilla_del_mes",
 ]

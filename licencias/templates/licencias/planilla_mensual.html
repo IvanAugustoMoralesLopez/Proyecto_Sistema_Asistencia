@@ -1,0 +1,447 @@
+{% extends "base.html" %}
+
+{% block title %}Planilla mensual IL-01 / IL-02{% endblock %}
+{% block seccion %}informe-licencias{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+    <div>
+        <p class="ruta mb-1">Administración / Licencias / Planilla mensual</p>
+        <h1 class="h3 mb-1">Planilla mensual · {{ nombre_mes }} de {{ anio }}</h1>
+        <p class="text-secondary mb-0">
+            Se genera desde la asistencia diaria: un renglón por cada materia o cargo
+            que el docente tenía en los días de la novedad.
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-primary btn-sm"
+           href="{% url 'licencias:planilla_mensual' mes_anterior.anio mes_anterior.mes %}">&laquo; Mes anterior</a>
+        <a class="btn btn-outline-primary btn-sm"
+           href="{% url 'licencias:planilla_mensual' mes_siguiente.anio mes_siguiente.mes %}">Mes siguiente &raquo;</a>
+    </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mb-4">
+    {% if puede_modificar %}
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="procesar">
+            <button type="submit" class="btn btn-primary" id="btn-procesar-mes">
+                {% if hay_renglones %}Volver a procesar el mes{% else %}Procesar el mes{% endif %}
+            </button>
+        </form>
+    {% endif %}
+    {% if hay_renglones %}
+        <a class="btn btn-outline-secondary"
+           href="{% url 'licencias:planilla_mensual_csv' anio mes %}">Exportar CSV</a>
+    {% endif %}
+</div>
+
+{% if sin_fin %}
+{% comment %}
+Licencias sin fecha de fin que empezaron este mes: se marcan en la diaria
+solo hasta hoy. Se las muestra acá para cargarles la fecha de fin con
+Prorrogar.
+{% endcomment %}
+<div class="card border-warning shadow-sm mb-4" id="licencias-sin-fin">
+    <div class="card-header bg-warning-subtle">
+        <h2 class="h5 mb-0">Licencias sin fecha de fin que empezaron este mes ({{ sin_fin|length }})</h2>
+    </div>
+    <div class="card-body">
+        <p class="mb-3">
+            Estas licencias todavía no tienen fecha de fin: en la asistencia diaria se marcan solo
+            hasta hoy, así que en los cuadros de abajo figuran hasta hoy. Cuando se sepa hasta
+            cuándo, cargala con <strong>Poner fecha de fin</strong> y después tocá
+            <strong>Volver a procesar el mes</strong>.
+        </p>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Docente</th>
+                        <th>Artículo</th>
+                        <th>Desde</th>
+                        <th>Materias</th>
+                        <th>Disposición</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pedido in sin_fin %}
+                        <tr>
+                            <td>{{ pedido.docente.apellido_nombre }}<br><small class="text-secondary">DNI {{ pedido.docente.dni }}</small></td>
+                            <td>{{ pedido.articulo.articulo }} · {{ pedido.articulo.tipo_licencia }}<br><small class="text-secondary">código {{ pedido.articulo.cod_licencia }}</small></td>
+                            <td class="text-nowrap">{{ pedido.desde|date:"d/m/Y" }}</td>
+                            <td>
+                                {% for materia in pedido.materias %}<div>{{ materia }}</div>{% endfor %}
+                            </td>
+                            <td class="text-nowrap">{% if pedido.licencia.disp_numero %}{{ pedido.licencia.disp_numero }}/{{ pedido.licencia.disp_anio }}{% else %}<span class="badge text-bg-warning">Pendiente de numerar</span>{% endif %}</td>
+                            <td class="text-end">
+                                <a class="btn btn-sm btn-outline-warning text-dark"
+                                   href="{% url 'licencias:detalle_licencia' pedido.licencia.pk %}?volver={{ request.get_full_path|urlencode }}#prorrogar">
+                                    Poner fecha de fin
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if not hay_renglones %}
+    <div class="alert alert-info">
+        Todavía no hay renglones para este mes. Tocá <strong>Procesar el mes</strong>
+        para generarlos a partir de las inasistencias, permisos y licencias cargados
+        en la asistencia diaria.
+    </div>
+{% else %}
+{% if sin_formulario %}
+{# Bandeja de pendientes: faltas que esperan el papel (RF-09). #}
+<div class="card border-danger shadow-sm mb-4" id="faltas-sin-formulario">
+    <div class="card-header bg-danger text-white">
+        <h2 class="h5 mb-0">Faltas sin formulario ({{ sin_formulario|length }})</h2>
+    </div>
+    <div class="card-body">
+        <p class="mb-3">
+            Estas inasistencias todavía no tienen el papel. Según lo que traiga el docente,
+            registralo con el botón que corresponda y después tocá <strong>Volver a procesar el mes</strong>.
+            Si el papel nunca llega, la falta queda como inasistencia en el cuadro IL-02.
+        </p>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Docente</th>
+                        <th>Día</th>
+                        <th>Materias afectadas</th>
+                        <th>Permiso o licencia de 1 día</th>
+                        <th>Licencia de varios días</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for falta in sin_formulario %}
+                        <tr>
+                            <td>{{ falta.docente.apellido_nombre }}<br><small class="text-secondary">DNI {{ falta.docente.dni }}</small></td>
+                            <td class="text-nowrap">{{ falta.fecha|date:"d/m/Y" }}</td>
+                            <td>
+                                {% for r in falta.renglones %}
+                                    <div>{% if r.designacion.espacio_curricular %}{{ r.designacion.espacio_curricular.nombre }}{% else %}{{ r.designacion.cargo.descripcion }}{% endif %} <span class="text-secondary small">· {{ r.horas|floatformat:"-2" }} hs</span></div>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {% if falta.registro %}
+                                    <a class="btn btn-sm btn-outline-danger"
+                                       href="{% url 'asistencia:recepcionar_formulario' falta.registro.pk %}?volver={{ request.get_full_path|urlencode }}">
+                                        Recibir formulario
+                                    </a>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {# La licencia es del docente: un solo botón, el sistema busca sus materias. #}
+                                <a class="btn btn-sm btn-outline-secondary mb-1"
+                                   href="{% url 'licencias:nueva_licencia' %}?persona={{ falta.docente.pk }}&amp;desde={{ falta.fecha|date:'Y-m-d' }}&amp;volver={{ request.get_full_path|urlencode }}">
+                                    Cargar licencia
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<form method="post" id="form-planilla">
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="guardar">
+
+    {% for cuadro in cuadros %}
+        {% if cuadro.filas or cuadro.planilla != "PENDIENTE" %}
+        <div class="card shadow-sm border-0 mb-4" data-cuadro="{{ cuadro.planilla }}">
+            <div class="card-header {% if cuadro.planilla == 'PENDIENTE' %}bg-warning{% else %}bg-dark text-white{% endif %}">
+                <h2 class="h5 mb-0">{{ cuadro.titulo }}</h2>
+            </div>
+            <div class="card-body">
+                {% if cuadro.filas %}
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Disp. N°</th>
+                                <th>Docente</th>
+                                <th>Materia / cargo</th>
+                                <th>Sit. rev.</th>
+                                <th>Marca</th>
+                                <th style="min-width: 15rem;">Artículo</th>
+                                <th>Cód. lic.</th>
+                                <th>Desde</th>
+                                <th>Hasta</th>
+                                <th class="text-end">Días</th>
+                                <th class="text-end">Horas</th>
+                                <th>Oficina</th>
+                                <th>Año</th>
+                                <th>Resolución (M.E.C.C. y T.)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in cuadro.filas %}
+                            <tr data-bloque="{{ r.designacion.persona_id }}-{{ r.desde|date:'Ymd' }}-{{ r.hasta|date:'Ymd' }}"
+                                class="{% if r.desactualizado %}table-warning{% endif %}">
+                                <td class="text-nowrap">
+                                    {% if r.disp_numero %}{{ r.disp_numero }}/{{ r.disp_anio }}{% else %}<span class="text-secondary">—</span>{% endif %}
+                                    {% if r.desactualizado %}<div class="small text-danger">Revisar: cambió la diaria</div>{% endif %}
+                                </td>
+                                <td>
+                                    {{ r.designacion.persona.apellido_nombre }}
+                                    <br><small class="text-secondary">DNI {{ r.designacion.persona.dni }}</small>
+                                </td>
+                                <td>
+                                    {% if r.designacion.espacio_curricular %}{{ r.designacion.espacio_curricular.nombre }}{% else %}{{ r.designacion.cargo.descripcion }}{% endif %}
+                                    {% if r.designacion.carrera %}<br><small class="text-secondary">{{ r.designacion.carrera.nombre }}</small>{% endif %}
+                                </td>
+                                <td>{{ r.designacion.situacion_revista|default:"—" }}</td>
+                                <td>{{ r.marca }}</td>
+                                <td>
+                                    {# RF-15: selector de artículos; al elegir se autocompleta el código. #}
+                                    {% if r.marca == "I" and not r.nro_formulario %}
+                                        {# I sin papel: no se encuadra en un artículo. O espera el formulario o es injustificada. #}
+                                        <select class="form-select form-select-sm js-articulo"
+                                                name="articulo-{{ r.pk }}"
+                                                aria-label="Artículo de {{ r.designacion.persona.apellido_nombre }}"
+                                                {% if not puede_modificar %}disabled{% endif %}>
+                                            <option value="" data-cod="" data-articulo="" {% if not r.injustificada %}selected{% endif %}>— esperando el formulario —</option>
+                                            <option value="injustificada" data-cod="" data-articulo="" {% if r.injustificada %}selected{% endif %}>No corresponde (injustificada)</option>
+                                        </select>
+                                        {% if r.injustificada %}
+                                            <div class="small text-secondary">Sin artículo ni disposición: solo para el descuento</div>
+                                        {% else %}
+                                            <div class="small text-danger">Sin formulario (ver cuadro rojo)</div>
+                                        {% endif %}
+                                    {% else %}
+                                        {# RF-15: selector de artículos; al elegir se autocompleta el código. #}
+                                        <select class="form-select form-select-sm js-articulo"
+                                                name="articulo-{{ r.pk }}"
+                                                aria-label="Artículo de {{ r.designacion.persona.apellido_nombre }}"
+                                                {% if not puede_modificar %}disabled{% endif %}>
+                                            <option value="" data-cod="" data-articulo="">— elegí el artículo —</option>
+                                            {% for a in r.articulos %}
+                                                <option value="{{ a.pk }}" data-cod="{{ a.cod_licencia }}" data-articulo="{{ a.articulo }}"
+                                                        {% if a.pk == r.articulo_id %}selected{% endif %}>
+                                                    {{ a.articulo }} - {{ a.tipo_licencia }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                    {% endif %}
+                                </td>
+                                <td><output class="fw-semibold js-cod">{{ r.cod_licencia|default:"—" }}</output></td>
+                                <td class="text-nowrap">{{ r.desde|date:"d/m/Y" }}</td>
+                                <td class="text-nowrap">{{ r.hasta|date:"d/m/Y" }}</td>
+                                <td class="text-end">{{ r.dias }}</td>
+                                <td class="text-end">{{ r.horas|floatformat:"-2" }}</td>
+                                <td>
+                                    <input class="form-control form-control-sm" style="width: 5rem;"
+                                           name="oficina-{{ r.pk }}" value="{{ r.oficina }}" maxlength="10"
+                                           aria-label="Oficina" {% if not puede_modificar %}disabled{% endif %}>
+                                </td>
+                                <td>
+                                    <input class="form-control form-control-sm" style="width: 5rem;" type="number"
+                                           name="anio-{{ r.pk }}" value="{{ r.anio_planilla }}" min="2000" max="2100"
+                                           aria-label="Año" {% if not puede_modificar %}disabled{% endif %}>
+                                </td>
+                                <td>
+                                    <input class="form-control form-control-sm"
+                                           name="resolucion-{{ r.pk }}" value="{{ r.resolucion }}" maxlength="100"
+                                           placeholder="Si corresponde"
+                                           aria-label="Resolución" {% if not puede_modificar %}disabled{% endif %}>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-light fw-semibold">
+                                <td colspan="10" class="text-end">Subtotal de horas afectadas</td>
+                                <td class="text-end">{{ cuadro.total_horas|floatformat:"-2" }}</td>
+                                <td colspan="3"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                {% else %}
+                    <div class="alert alert-info mb-0">No hay renglones de este cuadro en el mes.</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    {% endfor %}
+
+    {% if puede_modificar %}
+        <button type="submit" class="btn btn-primary mb-4">Guardar artículos, oficina, año y resoluciones</button>
+    {% endif %}
+</form>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-dark text-white">
+        <h2 class="h5 mb-0">Disposiciones del mes a emitir</h2>
+    </div>
+    <div class="card-body">
+        <p class="text-secondary">
+            Licencias, faltas con formulario y permisos se numeran juntos a fin de mes (RF-16):
+            una sola disposición por docente y período, correlativas y en orden alfabético por
+            apellido. Las licencias sin fecha de fin se numeran con el mes en que empiezan.
+        </p>
+        {% if por_emitir %}
+            <ul class="mb-3">
+                {% for numero, bloque in por_emitir %}
+                    <li>
+                        <strong>N° {{ numero }}/{{ anio }}</strong> —
+                        {{ bloque.docente.apellido_nombre }},
+                        {% if bloque.hasta %}
+                            {{ bloque.desde|date:"d/m/Y" }} al {{ bloque.hasta|date:"d/m/Y" }}
+                            ({{ bloque.renglones|length }} materia{{ bloque.renglones|length|pluralize }})
+                        {% else %}
+                            licencia desde el {{ bloque.desde|date:"d/m/Y" }}, sin fecha de fin
+                            ({{ bloque.materias|length }} materia{{ bloque.materias|length|pluralize }})
+                        {% endif %}
+                        {% if bloque.renglones.0.marca == "LIC" or bloque.renglones.0.marca == "LT" or not bloque.hasta %}
+                            <span class="badge text-bg-primary">Licencia</span>
+                        {% elif bloque.renglones.0.marca == "P" %}
+                            <span class="badge text-bg-secondary">Permiso</span>
+                        {% else %}
+                            <span class="badge text-bg-warning">Inasistencia</span>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+            {% if puede_modificar %}
+            <form method="post"
+                  onsubmit="return confirm('Se van a emitir {{ por_emitir|length }} disposiciones. ¿Confirma?');">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="emitir">
+                <button type="submit" class="btn btn-primary">Emitir disposiciones</button>
+            </form>
+            {% endif %}
+        {% else %}
+            <p class="text-muted mb-0">No hay disposiciones pendientes de emitir en este mes.</p>
+        {% endif %}
+    </div>
+</div>
+
+{# RN-11: disposiciones del mes, agrupadas por número. Número y oficina editables. #}
+<div class="card shadow-sm border-0 mb-4" id="disposiciones-del-mes">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h2 class="h5 mb-0">Disposiciones del mes</h2>
+        {% if puede_modificar and emitidas %}<span class="badge text-bg-warning">Editables</span>{% endif %}
+    </div>
+    <div class="card-body">
+        {% if emitidas %}
+            <p class="text-secondary small">
+                Las de licencias se generan al guardar cada licencia. Acá se pueden corregir el
+                número y la oficina; si un número ya existe en la oficina y el año, el sistema avisa.
+            </p>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="disposiciones">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>N°</th>
+                                <th>Oficina</th>
+                                <th>Docente</th>
+                                <th>Desde</th>
+                                <th>Hasta</th>
+                                <th>Materias / cargos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for disp in emitidas %}
+                                <tr>
+                                    <td class="text-nowrap">
+                                        {% if puede_modificar %}
+                                            <div class="input-group input-group-sm" style="width: 8rem;">
+                                                <input class="form-control" type="text" inputmode="numeric" maxlength="20"
+                                                       name="disp-numero-{{ disp.anio|default:0 }}-{{ disp.numero }}" value="{{ disp.numero }}"
+                                                       aria-label="Número de la disposición {{ disp.numero }}">
+                                                {% if disp.anio %}<span class="input-group-text">/{{ disp.anio }}</span>{% endif %}
+                                            </div>
+                                        {% else %}
+                                            <span class="fw-semibold">{{ disp.numero }}{% if disp.anio %}/{{ disp.anio }}{% endif %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if puede_modificar %}
+                                            <input class="form-control form-control-sm" style="width: 6rem;" type="text" maxlength="10"
+                                                   name="disp-oficina-{{ disp.anio|default:0 }}-{{ disp.numero }}" value="{{ disp.renglones.0.oficina }}"
+                                                   aria-label="Oficina de la disposición {{ disp.numero }}">
+                                        {% else %}{{ disp.renglones.0.oficina }}{% endif %}
+                                    </td>
+                                    <td>{{ disp.renglones.0.designacion.persona.apellido_nombre }}</td>
+                                    <td class="text-nowrap">{{ disp.renglones.0.desde|date:"d/m/Y" }}</td>
+                                    <td class="text-nowrap">{{ disp.renglones.0.hasta|date:"d/m/Y" }}</td>
+                                    <td>
+                                        {% for r in disp.renglones %}
+                                            <div>
+                                                {% if r.designacion.espacio_curricular %}{{ r.designacion.espacio_curricular.nombre }}{% else %}{{ r.designacion.cargo.descripcion }}{% endif %}
+                                                <span class="text-secondary small">· {{ r.planilla|default:"pendiente" }} · {{ r.horas|floatformat:"-2" }} hs{% if r.cod_licencia %} · {{ r.cod_licencia }}{% endif %}</span>
+                                                {% if r.licencia_id %}<a class="small" href="{% url 'licencias:detalle_licencia' r.licencia_id %}">Ver licencia</a>{% endif %}
+                                            </div>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if puede_modificar %}
+                    <button class="btn btn-primary mt-3" type="submit">Guardar cambios en disposiciones</button>
+                {% endif %}
+            </form>
+        {% else %}
+            <p class="text-muted mb-0">Todavía no hay disposiciones en este mes.</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+(function () {
+    /* RF-15: al seleccionar el ARTÍCULO se autocompleta el COD.LIC. Si otras
+       materias del mismo período todavía no tienen artículo, toman el mismo. */
+    var selects = document.querySelectorAll("select.js-articulo");
+
+    function mostrarCodigo(select) {
+        var opcion = select.options[select.selectedIndex];
+        var salida = select.closest("tr").querySelector(".js-cod");
+        if (salida) { salida.textContent = (opcion && opcion.dataset.cod) || "—"; }
+    }
+
+    selects.forEach(function (select) {
+        select.addEventListener("change", function () {
+            mostrarCodigo(select);
+            var opcion = select.options[select.selectedIndex];
+            var bloque = select.closest("tr").dataset.bloque;
+            if (!opcion || !opcion.dataset.articulo) { return; }
+
+            selects.forEach(function (otro) {
+                if (otro === select || otro.value) { return; }
+                if (otro.closest("tr").dataset.bloque !== bloque) { return; }
+                for (var i = 0; i < otro.options.length; i += 1) {
+                    if (otro.options[i].dataset.articulo === opcion.dataset.articulo) {
+                        otro.selectedIndex = i;
+                        mostrarCodigo(otro);
+                        break;
+                    }
+                }
+            });
+        });
+    });
+})();
+</script>
+{% endblock %}

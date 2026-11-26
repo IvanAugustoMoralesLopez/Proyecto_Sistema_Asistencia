@@ -1,0 +1,32 @@
+{# Designación: la lista de carreras muestra solo las de la materia elegida. #}
+{# Necesita antes: {{ form.carreras_por_materia|json_script:"carreras-por-materia" }} #}
+<script>
+(() => {
+    const datos = document.getElementById('carreras-por-materia');
+    const carrera = document.querySelector('select[name="carrera"]');
+    if (!datos || !carrera || !carrera.form) return;
+    const materia = carrera.form.querySelector('select[name="espacio_curricular"]');
+    if (!materia) return;
+    const mapa = JSON.parse(datos.textContent);
+
+    const actualizar = () => {
+        const permitidas = (mapa[materia.value] || []).map(String);
+        const filtrar = materia.value !== '' && permitidas.length > 0;
+        [...carrera.options].forEach(opcion => {
+            if (!opcion.value) return;
+            const visible = !filtrar || permitidas.includes(opcion.value);
+            opcion.hidden = !visible;
+            opcion.disabled = !visible;
+        });
+        if (filtrar && carrera.value && !permitidas.includes(carrera.value)) {
+            carrera.value = '';
+        }
+        if (filtrar && permitidas.length === 1) {
+            carrera.value = permitidas[0];
+        }
+    };
+
+    materia.addEventListener('change', actualizar);
+    actualizar();
+})();
+</script>

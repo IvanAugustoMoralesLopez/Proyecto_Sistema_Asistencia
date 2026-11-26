@@ -2,6 +2,20 @@
 
 {% block title %}Cargar asistencia{% endblock %}
 
+{% block extra_css %}
+{{ block.super }}
+<style>
+/* Sí / No del formulario: casillas cuadradas grandes. */
+.casilla-form { min-width: 6.5rem; min-height: 44px; display: inline-flex; align-items: center; gap: .5rem; font-weight: 600; }
+.casilla-form .bi-check-square-fill { display: none; }
+.btn-check:checked + .casilla-form .bi-square { display: none; }
+.btn-check:checked + .casilla-form .bi-check-square-fill { display: inline; }
+/* Fechas del aviso de LIC pendiente. */
+.plazo-dia { width: 4.5rem; flex-shrink: 0; text-align: center; padding: .35rem 0; border-radius: .4rem; font-weight: 700; font-size: .85rem; line-height: 1.2; }
+.plazo-dia small { font-weight: 400; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="asis-cabecera">
     <div class="encabezado-planilla">
@@ -70,6 +84,9 @@
 
 {% include "asistencias/includes/avisos_dia.html" %}
 
+{# Faltas sin resolver y licencias sin completar de días anteriores. #}
+{% include "asistencias/includes/pendientes.html" %}
+
 {% if cantidad_errores %}
     <div class="alert alert-danger">
         Revisá las filas marcadas en rojo: hay {{ cantidad_errores }} para corregir.
@@ -79,9 +96,20 @@
 {% if sin_horarios %}
     <div class="alert alert-info">
         Ningún docente tiene horario cargado para este día, así que se muestran
-        todos. Cuando Secretaría cargue los horarios en
+        todos. Cuando se carguen los horarios en
         <strong>Personal → Legajos</strong>, la lista va a traer solo a quienes
         dan clase, con las horas ya completadas.
+    </div>
+{% endif %}
+
+{% if fuera_sin_horario %}
+    {# RF-12: sin ningún horario cargado no aparecen en «Solo los que dan clase». #}
+    <div class="alert alert-warning">
+        {{ fuera_sin_horario|length }} docente{{ fuera_sin_horario|length|pluralize:"s" }}
+        sin ningún horario cargado no aparece{{ fuera_sin_horario|length|pluralize:"n" }} en esta lista:
+        {% for persona in fuera_sin_horario|slice:":8" %}{{ persona.apellido_nombre }}{% if not forloop.last %}; {% endif %}{% endfor %}{% if fuera_sin_horario|length > 8 %} y {{ fuera_sin_horario|length|add:"-8" }} más{% endif %}.
+        Para cargarlos elegí <strong>Todos los docentes</strong>; para que aparezcan
+        solos, cargá su horario en <strong>Personal → Legajos</strong>.
     </div>
 {% endif %}
 
@@ -117,151 +145,179 @@
     {% endif %}
 
     <div class="planilla">
+        {# RF-07: una fila por agente y jornada; las materias son solo informativas. #}
         <table class="table table-hover align-middle asis-planilla asis-tarjetas">
             <thead>
                 <tr>
                     <th>Docente</th>
-                    <th>Cargo y materia</th>
-                    <th>Horario de hoy</th>
+                    <th>Materias y cargos de hoy</th>
                     <th>¿Asistió?</th>
                     <th>Horas sin cubrir</th>
-                    <th>Licencia</th>
                     <th>Nota</th>
                 </tr>
             </thead>
             <tbody>
-                {% for fila in filas %}
-                    <tr class="{% if fila.error %}table-danger{% elif fila.valores.origen %}asis-propuesto{% endif %}">
+                {% for agente in agentes %}
+                    <tr class="{% if agente.error %}table-danger{% elif agente.valores.origen %}asis-propuesto{% endif %}">
                         <td data-rotulo="Docente">
-                            {% if fila.primera_del_docente %}
-                                <div class="asis-principal">{{ fila.designacion.persona.apellido_nombre }}</div>
-                                <div class="asis-apoyo">DNI {{ fila.designacion.persona.dni }}</div>
-                            {% else %}
-                                <div class="asis-apoyo">↳ mismo docente, otro cargo</div>
+                            <div class="asis-principal">{{ agente.persona.apellido_nombre }}</div>
+                            <div class="asis-apoyo">DNI {{ agente.persona.dni }}</div>
+                            {% if agente.alerta %}
+                                {# RF-18: alerta visual de agotamiento del límite anual. #}
+                                <span class="badge {% if agente.alerta.estado == 'agotado' %}text-bg-danger{% else %}text-bg-warning{% endif %}"
+                                      title="Inasistencias y permisos acumulados en el año">
+                                    {% if agente.alerta.estado == "agotado" %}Límite agotado{% else %}Próximo al límite{% endif %}:
+                                    {{ agente.alerta.total }} de {{ agente.alerta.limite }}
+                                </span>
                             {% endif %}
                         </td>
 
-                        <td data-rotulo="Cargo y materia">
-                            {{ fila.designacion.cargo.descripcion }}
-                            {% if fila.designacion.espacio_curricular %}
-                                <div class="asis-apoyo">{{ fila.designacion.espacio_curricular.nombre }}</div>
+                        <td data-rotulo="Materias y cargos de hoy">
+                            {% for fila in agente.materias %}
+                                <div>
+                                    {% if fila.designacion.espacio_curricular %}{{ fila.designacion.espacio_curricular.nombre }}{% else %}{{ fila.designacion.cargo.descripcion }}{% endif %}
+                                    <span class="asis-apoyo">
+                                        {% if fila.horario %}
+                                            · {{ fila.horas_dia|floatformat:"-2" }} hs{% if fila.horario.hora_inicio and fila.horario.hora_fin %} ({{ fila.horario.hora_inicio|time:"H:i" }}–{{ fila.horario.hora_fin|time:"H:i" }}){% endif %}
+                                        {% elif fila.dias_con_clase %}
+                                            · hoy no da clase (da {{ fila.dias_con_clase|join:" " }})
+                                        {% else %}
+                                            · sin horario cargado
+                                        {% endif %}
+                                    </span>
+                                    {% if fila.registro %}
+                                        <span class="badge text-bg-success">{{ fila.registro.marca.etiqueta }}</span>
+                                        <a class="asis-apoyo" href="{% url 'asistencia:detalle_asistencia' fila.registro.pk %}">Ver</a>
+                                        {% if perms.asistencias.change_registroasistencia %}
+                                            <a class="asis-apoyo" href="{% url 'asistencia:editar_asistencia' fila.registro.pk %}?volver={{ request.get_full_path|urlencode }}">Corregir</a>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                            {% if agente.sin_horario %}
+                                {# RF-12: no se inventan horas; se avisa para cargar el horario. #}
+                                <div class="asis-apoyo text-warning-emphasis">
+                                    <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                                    {{ agente.sin_horario|join:", " }} no tiene{{ agente.sin_horario|length|pluralize:"n" }}
+                                    horario cargado: no recibe{{ agente.sin_horario|length|pluralize:"n" }} la marca.
+                                    Cargá el horario en Personal o elegí «Todos los docentes».
+                                </div>
                             {% endif %}
                         </td>
 
-                        <td data-rotulo="Horario de hoy" class="text-nowrap">
-                            {% if fila.horario %}
-                                <span class="asis-principal">{{ fila.horas_dia|floatformat:"-2" }} hs</span>
-                                {% if fila.horario.hora_inicio and fila.horario.hora_fin %}
-                                    <div class="asis-apoyo">{{ fila.horario.hora_inicio|time:"H:i" }}–{{ fila.horario.hora_fin|time:"H:i" }}{% if fila.designacion.turno %} · {{ fila.designacion.turno }}{% endif %}</div>
-                                {% endif %}
-                            {% else %}
-                                <span class="asis-apoyo">Hoy no da clase{% if fila.dias_con_clase %} · da {{ fila.dias_con_clase|join:" " }}{% endif %}</span>
-                            {% endif %}
-                        </td>
-
-                        {% if fila.registro %}
-                            
-                            <td data-rotulo="¿Asistió?">
+                        {% if agente.cargado %}
+                            <td data-rotulo="¿Asistió?" colspan="3">
                                 <span class="badge text-bg-success">Ya cargado</span>
-                                <span class="asis-principal ms-1">{{ fila.registro.marca.etiqueta }}</span>
-                            </td>
-
-                            <td data-rotulo="Horas sin cubrir">
-                                {% if fila.registro.horas_inasistidas %}
-                                    {{ fila.registro.horas_inasistidas|floatformat:"-2" }} hs
-                                {% else %}
-                                    <span class="asis-apoyo">—</span>
-                                {% endif %}
-                            </td>
-
-                            <td data-rotulo="Licencia">
-                                {% if fila.registro.licencia %}
-                                    {{ fila.registro.licencia.articulo.articulo }}
-                                {% else %}
-                                    <span class="asis-apoyo">—</span>
-                                {% endif %}
-                            </td>
-
-                            <td data-rotulo="Nota" class="text-nowrap">
-                                <a class="btn btn-sm btn-outline-primary"
-                                   href="{% url 'asistencia:detalle_asistencia' fila.registro.pk %}">Ver</a>
-                                {% if perms.asistencias.change_registroasistencia %}
-                                    <a class="btn btn-sm btn-outline-secondary"
-                                       href="{% url 'asistencia:editar_asistencia' fila.registro.pk %}?volver={{ request.get_full_path|urlencode }}">Corregir</a>
-                                {% endif %}
+                                <span class="asis-apoyo ms-1">Para cambiarlo usá «Corregir».</span>
                             </td>
                         {% else %}
                             <td data-rotulo="¿Asistió?">
                                 <select class="form-select"
-                                        name="marca-{{ fila.designacion.pk }}"
-                                        data-persona="{{ fila.designacion.persona_id }}"
-                                        aria-label="Asistencia de {{ fila.designacion.persona.apellido_nombre }}"
+                                        name="agente-marca-{{ agente.persona.dni }}"
+                                        aria-label="Asistencia de {{ agente.persona.apellido_nombre }}"
                                         {% if bloqueo %}disabled{% endif %}>
                                     <option value="">— elegí —</option>
                                     {% for marca in marcas %}
                                         <option value="{{ marca.pk }}"
+                                                data-codigo="{{ marca.codigo }}"
                                                 data-horas="{{ marca.requiere_horas|yesno:'1,0' }}"
-                                                data-licencia="{{ marca.requiere_licencia|yesno:'1,0' }}"
-                                                {% if fila.valores.marca == marca.pk|stringformat:"s" %}selected{% endif %}>
+                                                {% if agente.valores.marca == marca.pk|stringformat:"s" %}selected{% endif %}>
                                             {{ marca.etiqueta }} ({{ marca.codigo }})
                                         </option>
                                     {% endfor %}
                                 </select>
-                                {% if fila.valores.origen == "licencia" %}
+                                {% if agente.parcial %}
+                                    <div class="asis-apoyo">Vale para las materias que faltan cargar</div>
+                                {% elif agente.valores.origen == "licencia" %}
                                     <div class="asis-apoyo text-primary">Tiene licencia este día</div>
-                                {% elif fila.valores.origen == "copia" %}
+                                {% elif agente.valores.origen == "copia" %}
                                     <div class="asis-apoyo text-primary">Traído del día anterior</div>
-                                {% elif fila.valores.origen == "presente" %}
+                                {% elif agente.valores.origen == "presente" %}
                                     <div class="asis-apoyo">Propuesto por el sistema</div>
+                                {% endif %}
+
+                                {% if not bloqueo %}
+                                    {# Apartado de inasistencia: ¿llegó el formulario? #}
+                                    <div class="mt-2 p-2 border border-warning rounded d-none" data-panel="falta">
+                                        <div class="small fw-semibold">¿Se recibió el formulario?</div>
+                                        {# Sí / No como casillas cuadradas grandes (radios con estilo de botón). #}
+                                        <div class="d-flex gap-2 mt-1">
+                                            <input class="btn-check" type="radio" id="form-si-{{ agente.persona.dni }}" name="agente-form-{{ agente.persona.dni }}" value="si" data-form-si {% if agente.valores.formulario == "si" %}checked{% endif %}>
+                                            <label class="btn btn-outline-primary casilla-form" for="form-si-{{ agente.persona.dni }}">
+                                                <i class="bi bi-square" aria-hidden="true"></i><i class="bi bi-check-square-fill" aria-hidden="true"></i> Sí
+                                            </label>
+                                            <input class="btn-check" type="radio" id="form-no-{{ agente.persona.dni }}" name="agente-form-{{ agente.persona.dni }}" value="no" {% if agente.valores.formulario == "no" %}checked{% endif %}>
+                                            <label class="btn btn-outline-primary casilla-form" for="form-no-{{ agente.persona.dni }}">
+                                                <i class="bi bi-square" aria-hidden="true"></i><i class="bi bi-check-square-fill" aria-hidden="true"></i> No
+                                            </label>
+                                        </div>
+                                        <input class="form-control form-control-sm mt-1 d-none" type="text" maxlength="30"
+                                               name="agente-nroform-{{ agente.persona.dni }}" value="{{ agente.valores.nro_formulario|default:'' }}"
+                                               placeholder="N° de formulario (opcional)" data-nro
+                                               aria-label="Número de formulario de {{ agente.persona.apellido_nombre }}">
+                                        <div class="asis-apoyo">Si no llegó, queda como falta sin resolver: el día hábil siguiente aparece el aviso y vence al segundo.</div>
+                                    </div>
+
+                                    {% if not agente.tiene_licencia %}
+                                        {# Licencia avisada pero sin cargar: cargarla ahora o dejarla pendiente. #}
+                                        <div class="mt-2 p-2 border border-warning rounded d-none" data-panel="licencia">
+                                            <div class="small fw-semibold">{{ agente.persona.apellido_nombre }} no tiene una licencia cargada para este día.</div>
+                                            <div class="d-flex flex-wrap gap-2 mt-1" data-opciones-licencia>
+                                                <a class="btn btn-primary" data-cargar-licencia
+                                                   href="{% url 'licencias:nueva_licencia' %}?persona={{ agente.persona.dni }}&amp;desde={{ fecha_texto }}&amp;volver={{ volver|urlencode }}">
+                                                    Cargar licencia ahora →
+                                                </a>
+                                                <button class="btn btn-outline-secondary" type="button"
+                                                        data-continuar-sin-cargar data-nombre="{{ agente.persona.apellido_nombre }}">
+                                                    Continuar sin cargar
+                                                </button>
+                                            </div>
+                                            <div class="asis-apoyo mt-1" data-opciones-licencia>Guardá la lista antes de ir a cargar la licencia, así no se pierde lo marcado.</div>
+                                            {# Después de «Entendido, continuar» en el aviso. #}
+                                            <span class="badge text-bg-warning fs-6 d-none" data-lic-pendiente>
+                                                LIC pendiente · vence {{ plazo_vence|date:"D d/m" }}
+                                            </span>
+                                        </div>
+                                    {% endif %}
                                 {% endif %}
                             </td>
 
-                            <td data-rotulo="Horas sin cubrir" style="width: 8rem;">
+                            <td data-rotulo="Horas sin cubrir" style="width: 9rem;">
                                 <input class="form-control" type="number" min="0" step="0.5"
-                                       name="horas-{{ fila.designacion.pk }}"
-                                       value="{{ fila.valores.horas }}"
-                                       data-horas-dia="{{ fila.horas_dia|stringformat:'s' }}"
-                                       {% if fila.horas_dia %}max="{{ fila.horas_dia|stringformat:'s' }}"{% endif %}
-                                       aria-label="Horas sin cubrir de {{ fila.designacion.persona.apellido_nombre }}"
+                                       name="agente-horas-{{ agente.persona.dni }}"
+                                       value="{{ agente.valores.horas }}"
+                                       data-horas-dia="{{ agente.horas_dia|stringformat:'s' }}"
+                                       {% if agente.horas_dia %}max="{{ agente.horas_dia|stringformat:'s' }}"{% endif %}
+                                       placeholder="{% if agente.horas_dia %}{{ agente.horas_dia|floatformat:'-2' }} según horario{% else %}Escribí las horas{% endif %}"
+                                       aria-label="Horas sin cubrir de {{ agente.persona.apellido_nombre }}"
                                        {% if bloqueo %}disabled{% endif %}>
-                            </td>
-
-                            <td data-rotulo="Licencia">
-                                <select class="form-select"
-                                        name="licencia-{{ fila.designacion.pk }}"
-                                        aria-label="Licencia de {{ fila.designacion.persona.apellido_nombre }}"
-                                        {% if bloqueo or not fila.licencias %}disabled{% endif %}>
-                                    <option value="">{% if fila.licencias %}—{% else %}No tiene{% endif %}</option>
-                                    {% for licencia in fila.licencias %}
-                                        <option value="{{ licencia.pk }}"
-                                                {% if fila.valores.licencia == licencia.pk|stringformat:"s" %}selected{% endif %}>
-                                            {{ licencia.articulo.articulo }} · desde el {{ licencia.desde|date:"d/m/Y" }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
                             </td>
 
                             <td data-rotulo="Nota">
                                 <input class="form-control" type="text" maxlength="200"
-                                       name="obs-{{ fila.designacion.pk }}"
-                                       value="{{ fila.valores.obs }}" placeholder="Opcional"
-                                       aria-label="Nota sobre {{ fila.designacion.persona.apellido_nombre }}"
+                                       name="agente-obs-{{ agente.persona.dni }}"
+                                       value="{{ agente.valores.obs }}" placeholder="Opcional"
+                                       aria-label="Nota sobre {{ agente.persona.apellido_nombre }}"
                                        {% if bloqueo %}disabled{% endif %}>
-                                {% if fila.error %}
-                                    <div class="text-danger fw-semibold asis-apoyo">{{ fila.error }}</div>
+                                {% if agente.error %}
+                                    <div class="text-danger fw-semibold asis-apoyo">{{ agente.error }}</div>
                                 {% endif %}
                             </td>
                         {% endif %}
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center py-5 text-secondary">
+                        <td colspan="5" class="text-center py-5 text-secondary">
                             No hay docentes para mostrar en este día.
                         </td>
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
+        <p class="asis-apoyo">
+            Se carga una sola vez por docente: el sistema reparte la novedad entre
+            sus materias del día con las horas de cada horario.
+        </p>
     </div>
 
     {% if not bloqueo and pendientes %}
@@ -290,6 +346,39 @@
         </div>
     {% endif %}
 </form>
+{# Aviso al tocar «Continuar sin cargar»: la LIC queda pendiente 2 días hábiles. #}
+<div class="modal fade" id="modal-lic-pendiente" tabindex="-1" aria-labelledby="titulo-lic-pendiente" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content overflow-hidden">
+            <div class="modal-header bg-warning-subtle">
+                <i class="bi bi-clock-history fs-3 text-warning-emphasis me-2" aria-hidden="true"></i>
+                <div>
+                    <h2 class="modal-title h5 mb-0" id="titulo-lic-pendiente">La licencia queda pendiente</h2>
+                    <div class="small text-warning-emphasis"><span data-modal-nombre></span> · LIC · {{ fecha|date:"l d/m" }}</div>
+                </div>
+            </div>
+            <div class="modal-body">
+                <p>Se guarda la asistencia con la marca <strong>LIC</strong>, pero sin artículo ni código. Hay <strong>2 días hábiles</strong> para completar la licencia:</p>
+                <div class="d-flex gap-3 mb-2">
+                    <span class="plazo-dia bg-body-secondary">Hoy<br><small>{{ fecha|date:"D d/m" }}</small></span>
+                    <div>Queda en <strong>Licencias › Pendientes</strong>, en plazo.</div>
+                </div>
+                <div class="d-flex gap-3 mb-2">
+                    <span class="plazo-dia bg-warning-subtle text-warning-emphasis">Aviso<br><small>{{ plazo_aviso|date:"D d/m" }}</small></span>
+                    <div>Aparece el cartel naranja en la carga diaria. Se puede pasar a mañana <strong>una sola vez</strong>.</div>
+                </div>
+                <div class="d-flex gap-3">
+                    <span class="plazo-dia bg-danger-subtle text-danger-emphasis">Vence<br><small>{{ plazo_vence|date:"D d/m" }}</small></span>
+                    <div>Obligatorio: completar la licencia o pasarla a inasistencia. Mientras no se resuelva, <strong>no se puede cerrar la jornada ni el mes</strong>.</div>
+                </div>
+            </div>
+            <div class="modal-footer bg-body-tertiary">
+                <button class="btn btn-outline-primary" type="button" data-modal-cargar>← Mejor la cargo ahora</button>
+                <button class="btn btn-dark" type="button" data-modal-continuar>Entendido, continuar</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -298,37 +387,50 @@
 <script>
 (function () {
     var presente = "{{ marca_presente.pk|default:'' }}";
-    var selects = document.querySelectorAll("select[name^='marca-']");
+    /* RF-07: un selector por agente (no por materia). */
+    var selects = document.querySelectorAll("select[name^='agente-marca-']");
     var contador = document.getElementById("contador-pendientes");
 
-    /* Habilita horas y licencia solo cuando la opcion elegida las pide, y
-       completa las horas con las del horario del docente. */
+    /* Con «Asistió» (o sin elegir) el campo de horas queda deshabilitado y
+       vacío. Con una marca que pide horas se habilita y trae las horas de
+       las designaciones del docente ese día. */
     function sincronizar(select) {
         var opcion = select.options[select.selectedIndex];
         var fila = select.closest("tr");
-        var horas = fila.querySelector("input[name^='horas-']");
-        var licencia = fila.querySelector("select[name^='licencia-']");
+        var horas = fila.querySelector("input[name^='agente-horas-']");
         var usaHoras = opcion && opcion.dataset.horas === "1";
-        var usaLicencia = opcion && opcion.dataset.licencia === "1";
+        var codigo = (opcion && opcion.dataset.codigo) || "";
 
-        if (horas) {
-            horas.readOnly = !usaHoras;
+        if (horas && !select.disabled) {
+            horas.disabled = !usaHoras;
             if (!usaHoras) {
                 horas.value = "";
             } else if (!horas.value) {
-                var delDia = parseFloat(horas.dataset.horasDia || "0");
-                if (delDia > 0) { horas.value = String(delDia); }
+                var horasDia = parseFloat(horas.dataset.horasDia) || 0;
+                if (horasDia > 0) { horas.value = horasDia; }
             }
         }
-        if (licencia && licencia.options.length > 1) {
-            licencia.disabled = !usaLicencia;
-            if (!usaLicencia) {
-                licencia.value = "";
-            } else if (!licencia.value) {
-                licencia.selectedIndex = 1;
-            }
-        }
+
+        /* Apartados: inasistencia (¿llegó el formulario?) y licencia sin cargar. */
+        var falta = fila.querySelector("[data-panel='falta']");
+        var licencia = fila.querySelector("[data-panel='licencia']");
+        if (falta) { falta.classList.toggle("d-none", codigo !== "I"); }
+        if (licencia) { licencia.classList.toggle("d-none", codigo !== "LIC" && codigo !== "LT"); }
+        sincronizarFormulario(fila);
     }
+
+    /* El número de formulario se pide solo si llegó el papel. */
+    function sincronizarFormulario(fila) {
+        var si = fila.querySelector("[data-form-si]");
+        var nro = fila.querySelector("[data-nro]");
+        if (si && nro) { nro.classList.toggle("d-none", !si.checked); }
+    }
+
+    document.querySelectorAll("input[name^='agente-form-']").forEach(function (radio) {
+        radio.addEventListener("change", function () {
+            sincronizarFormulario(radio.closest("tr"));
+        });
+    });
 
     /* Cuantos quedan sin elegir: se actualiza mientras se carga. */
     function actualizarContador() {
@@ -340,18 +442,8 @@
 
     selects.forEach(function (select) {
         sincronizar(select);
-
         select.addEventListener("change", function () {
             sincronizar(select);
-
-            /* Si el docente tiene varios cargos, lo que pasa vale para todos. */
-            selects.forEach(function (otro) {
-                if (otro !== select && !otro.value &&
-                    otro.dataset.persona === select.dataset.persona) {
-                    otro.value = select.value;
-                    sincronizar(otro);
-                }
-            });
             actualizarContador();
         });
     });
@@ -372,6 +464,24 @@
         });
     }
 
+    /* Enter en un campo de la planilla guarda, igual que el botón «Guardar».
+       Sin esto el navegador usaría el primer botón de envío del formulario,
+       que es «Copiar lo del día anterior», y lo marcado se perdería. */
+    var planilla = document.getElementById("planilla");
+    /* La barra de guardado solo aparece si se puede cargar ese día. */
+    var botonGuardar = planilla && planilla.querySelector(".asis-guardar button[type='submit']");
+    if (planilla) {
+        planilla.addEventListener("keydown", function (evento) {
+            if (evento.key !== "Enter" || evento.isComposing) { return; }
+            var campo = evento.target;
+            if (campo.tagName !== "INPUT" || campo.type === "submit" || campo.type === "button") { return; }
+            evento.preventDefault();
+            if (botonGuardar && !botonGuardar.disabled) {
+                planilla.requestSubmit(botonGuardar);
+            }
+        });
+    }
+
     var botonLimpiar = document.getElementById("btn-limpiar");
     if (botonLimpiar) {
         botonLimpiar.addEventListener("click", function () {
@@ -383,6 +493,38 @@
             document.getElementById("planilla").dispatchEvent(
                 new Event("change", { bubbles: true })
             );
+        });
+    }
+
+    /* «Continuar sin cargar»: abre el aviso de los 2 días hábiles. Con
+       «Entendido» la fila muestra «LIC pendiente»; con «Mejor la cargo
+       ahora» va a cargar la licencia. */
+    var modalLic = document.getElementById("modal-lic-pendiente");
+    var panelActual = null;
+    if (modalLic && window.bootstrap) {
+        var dialogo = bootstrap.Modal.getOrCreateInstance(modalLic);
+
+        document.querySelectorAll("[data-continuar-sin-cargar]").forEach(function (boton) {
+            boton.addEventListener("click", function () {
+                panelActual = boton.closest("[data-panel='licencia']");
+                modalLic.querySelector("[data-modal-nombre]").textContent = boton.dataset.nombre;
+                dialogo.show();
+            });
+        });
+
+        modalLic.querySelector("[data-modal-continuar]").addEventListener("click", function () {
+            if (panelActual) {
+                panelActual.querySelectorAll("[data-opciones-licencia]").forEach(function (el) {
+                    el.classList.add("d-none");
+                });
+                panelActual.querySelector("[data-lic-pendiente]").classList.remove("d-none");
+            }
+            dialogo.hide();
+        });
+
+        modalLic.querySelector("[data-modal-cargar]").addEventListener("click", function () {
+            var enlace = panelActual && panelActual.querySelector("[data-cargar-licencia]");
+            if (enlace) { window.location.href = enlace.href; }
         });
     }
 

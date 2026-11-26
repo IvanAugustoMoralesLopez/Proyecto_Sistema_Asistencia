@@ -39,12 +39,37 @@
 </form>
 
 {% if alertas_licencias %}
-<div class="alert alert-info" role="alert">
-    <strong>{{ alertas_licencias|length }} licencia(s) vencen en los próximos 30 días.</strong>
-    {% for licencia in alertas_licencias %}
-        <div>{{ licencia.designacion.persona.apellido_nombre }} — {{ licencia.designacion.cargo.descripcion }} — vence {{ licencia.hasta }}</div>
-    {% endfor %}
-</div>
+<section class="alert alert-info" aria-labelledby="titulo-licencias-por-vencer">
+    <h2 class="h6 mb-2" id="titulo-licencias-por-vencer">
+        {{ alertas_licencias|length }} licencia{{ alertas_licencias|length|pluralize }} vence{{ alertas_licencias|length|pluralize:"n" }} en los próximos 30 días
+    </h2>
+    <div class="d-flex flex-column gap-2">
+        {% for a in alertas_licencias %}
+            {# Una tarjeta por licencia del docente; el botón lleva a prorrogarla. #}
+            <div class="bg-white rounded p-2 px-3 d-flex align-items-center gap-3 flex-wrap {% if a.vence_hoy %}border border-2 border-danger{% endif %}">
+                <div class="flex-grow-1">
+                    <div><strong>{{ a.docente }}</strong> <span class="text-secondary">· {{ a.tipo_licencia }}{% if a.cod_licencia %} · {{ a.cod_licencia }}{% endif %}</span></div>
+                    <div class="small text-secondary">
+                        {{ a.cargo }} · {{ a.materias|join:", " }} ({{ a.cantidad_materias }} materia{{ a.cantidad_materias|pluralize }}) · desde {{ a.desde|date:"d/m/Y" }}
+                    </div>
+                </div>
+                {% if a.vence_hoy %}
+                    <span class="badge text-bg-danger">Vence hoy · {{ a.hasta|date:"d/m" }}</span>
+                {% elif a.dias_restantes <= 7 %}
+                    <span class="badge text-bg-warning">Vence en {{ a.dias_restantes }} día{{ a.dias_restantes|pluralize }} · {{ a.hasta|date:"d/m" }}</span>
+                {% else %}
+                    <span class="badge text-bg-light border">Vence en {{ a.dias_restantes }} días · {{ a.hasta|date:"d/m" }}</span>
+                {% endif %}
+                {% if perms.licencias.view_licenciaotorgada %}
+                    <a class="btn {% if a.vence_hoy %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                       href="{% url 'licencias:detalle_licencia' a.pk %}?volver={{ request.get_full_path|urlencode }}#prorrogar">
+                        Ver / prorrogar →
+                    </a>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+</section>
 {% endif %}
 
 {% if alertas_designaciones %}
@@ -68,7 +93,7 @@
             <fieldset class="border-0 p-0 m-0" {% if not puede_guardar_persona %}disabled{% endif %}>
             <div class="row g-3">
                 {% for field in persona_form %}
-                    <div class="{% if field.name == 'apellido_nombre' %}col-md-6{% elif field.name == 'domicilio_calle' %}col-md-6{% elif field.name == 'dni' or field.name == 'sexo' or field.name == 'fecha_nacimiento' or field.name == 'estado_civil' or field.name == 'nacionalidad' or field.name == 'nro_dgi' or field.name == 'nro_dgr' or field.name == 'apellido' or field.name == 'nombres' or field.name == 'barrio' or field.name == 'localidad' or field.name == 'codigo_postal' or field.name == 'provincia' or field.name == 'telefono' or field.name == 'email' %}col-md-3{% else %}col-12{% endif %}">
+                    <div class="{% if field.name == 'apellido_nombre' %}col-md-6{% elif field.name == 'domicilio_calle' %}col-md-6{% elif field.name == 'dni' or field.name == 'sexo' or field.name == 'fecha_nacimiento' or field.name == 'estado_civil' or field.name == 'nacionalidad' or field.name == 'nro_dgi' or field.name == 'nro_dgr' or field.name == 'barrio' or field.name == 'localidad' or field.name == 'codigo_postal' or field.name == 'provincia' or field.name == 'telefono' or field.name == 'email' %}col-md-3{% else %}col-12{% endif %}">
                         {% if field.name == "activa" %}
                             <div class="form-check mt-4">
                                 {{ field }}{{ field.label_tag }}
@@ -101,6 +126,69 @@
             </div>
             </fieldset>
         </form>
+
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h2 class="h5 mb-0">Listado de agentes</h2>
+                <span class="text-secondary small">{{ agentes.paginator.count }} agente(s)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>DNI</th>
+                            <th>Nombre y Apellido</th>
+                            <th>Estado</th>
+                            <th>Legajo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for agente in agentes %}
+                            <tr>
+                                <td>{{ agente.dni }}</td>
+                                <td>{{ agente.apellido_nombre }}</td>
+                                <td>
+                                    {% if agente.activa %}
+                                        <span class="badge text-bg-success">Activo</span>
+                                    {% else %}
+                                        <span class="badge text-bg-secondary">Inactivo</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a class="btn btn-sm btn-outline-secondary"
+                                       href="{% url 'personal:gestion_legajos' %}?dni={{ agente.dni|urlencode }}">
+                                        Consultar
+                                    </a>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="text-center py-4">No hay agentes que coincidan con los filtros.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if agentes.has_other_pages %}
+                <div class="card-footer d-flex justify-content-between align-items-center">
+                    {% if agentes.has_previous %}
+                        <a class="btn btn-sm btn-outline-secondary"
+                           href="?dni={{ filtro.dni.value|urlencode }}&amp;cargo={{ filtro.cargo.value|urlencode }}&amp;espacio_curricular={{ filtro.espacio_curricular.value|urlencode }}&amp;pagina={{ agentes.previous_page_number }}">
+                            Anterior
+                        </a>
+                    {% else %}
+                        <span></span>
+                    {% endif %}
+                    <span class="small">Página {{ agentes.number }} de {{ agentes.paginator.num_pages }}</span>
+                    {% if agentes.has_next %}
+                        <a class="btn btn-sm btn-outline-secondary"
+                           href="?dni={{ filtro.dni.value|urlencode }}&amp;cargo={{ filtro.cargo.value|urlencode }}&amp;espacio_curricular={{ filtro.espacio_curricular.value|urlencode }}&amp;pagina={{ agentes.next_page_number }}">
+                            Siguiente
+                        </a>
+                    {% else %}
+                        <span></span>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
     </div>
 </div>
 
@@ -128,6 +216,7 @@
             <div class="row g-3 mb-3">
                 <div class="col-md-3">{{ designacion_form.cargo.label_tag }}{{ designacion_form.cargo }}</div>
                 <div class="col-md-3">{{ designacion_form.espacio_curricular.label_tag }}{{ designacion_form.espacio_curricular }}</div>
+                <div class="col-md-3">{{ designacion_form.carrera.label_tag }}{{ designacion_form.carrera }}</div>
                 <div class="col-md-3">{{ designacion_form.unidad_educativa.label_tag }}{{ designacion_form.unidad_educativa }}</div>
                 <div class="col-md-3">{{ designacion_form.situacion_revista.label_tag }}{{ designacion_form.situacion_revista }}</div>
             </div>
@@ -144,9 +233,7 @@
                 <div class="col-md-2">{{ designacion_form.horas_jue.label_tag }}{{ designacion_form.horas_jue }}</div>
                 <div class="col-md-2">{{ designacion_form.horas_vie.label_tag }}{{ designacion_form.horas_vie }}</div>
             </div>
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">{{ designacion_form.especialidad.label_tag }}{{ designacion_form.especialidad }}</div>
-            </div>
+            <div id="controlHoras" class="small mb-3" aria-live="polite"></div>
             <div class="row g-3 mb-3">
                 <div class="col-md-3">{{ designacion_form.norma_tipo.label_tag }}{{ designacion_form.norma_tipo }}</div>
                 <div class="col-md-3">{{ designacion_form.norma_numero.label_tag }}{{ designacion_form.norma_numero }}</div>
@@ -155,7 +242,12 @@
             </div>
             <div class="row g-3 mb-3">
                 <div class="col-md-3">{{ designacion_form.desde.label_tag }}{{ designacion_form.desde }}</div>
-                <div class="col-md-3">{{ designacion_form.hasta.label_tag }}{{ designacion_form.hasta }}</div>
+                <div class="col-md-3">
+                    {{ designacion_form.hasta.label_tag }}{{ designacion_form.hasta }}
+                    <div class="form-text">Suplencia sin fecha de cese: SIN TERMINO.</div>
+                </div>
+                <datalist id="opciones-sin-inicio"><option value="SIN INICIO"></datalist>
+                <datalist id="opciones-sin-termino"><option value="SIN TERMINO"></datalist>
                 <div class="col-md-3">{{ designacion_form.pof.label_tag }}{{ designacion_form.pof }}</div>
                 <div class="col-md-3">{{ designacion_form.anio_pof.label_tag }}{{ designacion_form.anio_pof }}</div>
             </div>
@@ -183,6 +275,8 @@
             {% endif %}
             </fieldset>
         </form>
+        {{ designacion_form.carreras_por_materia|json_script:"carreras-por-materia" }}
+        {% include "personal/_carrera_por_materia.html" %}
     </div>
 </div>
 
@@ -213,7 +307,7 @@
                         <td>
                             {% if designacion.espacio_curricular %}
                                 {{ designacion.espacio_curricular.nombre }}<br>
-                                <span class="small text-secondary">{{ designacion.espacio_curricular.carrera.nombre }}</span>
+                                <span class="small text-secondary">{{ designacion.carrera.nombre|default:"" }}</span>
                             {% else %}—{% endif %}
                         </td>
                         <td>{{ designacion.get_situacion_revista_display|default:"—" }}</td>
@@ -223,8 +317,14 @@
                             {% empty %}
                                 {{ designacion.hs_catedra|default:"—" }}
                             {% endfor %}
+                            {% with problema=designacion.problema_de_horas %}
+                                {% if problema and designacion.activo %}
+                                    <div><span class="badge text-bg-warning" title="{{ problema }}">Horas sin cuadrar</span></div>
+                                    <div class="small text-danger">{{ problema }}</div>
+                                {% endif %}
+                            {% endwith %}
                         </td>
-                        <td>{{ designacion.desde|date:"d/m/Y" }} – {{ designacion.hasta|date:"d/m/Y"|default:"Sin término" }}</td>
+                        <td>{{ designacion.desde_texto }} – {{ designacion.hasta_texto }}</td>
                         <td>
                             {% if designacion.activo %}
                                 <span class="badge text-bg-success">Activa</span>
@@ -284,9 +384,12 @@
                         <td>{{ resultado.persona.dni }}</td>
                         <td>{{ resultado.persona.apellido_nombre }}</td>
                         <td>{{ resultado.cargo.descripcion }}</td>
-                        <td>{{ resultado.espacio_curricular|default:"—" }}</td>
+                        <td>
+                            {{ resultado.espacio_curricular|default:"—" }}
+                            {% if resultado.carrera %}<div class="small text-secondary">{{ resultado.carrera.nombre }}</div>{% endif %}
+                        </td>
                         <td>{{ resultado.get_situacion_revista_display|default:"—" }}</td>
-                        <td>{{ resultado.desde|date:"d/m/Y" }} – {{ resultado.hasta|date:"d/m/Y"|default:"Sin término" }}</td>
+                        <td>{{ resultado.desde_texto }} – {{ resultado.hasta_texto }}</td>
                         <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'personal:gestion_legajos' %}?dni={{ resultado.persona.dni|urlencode }}">Ver legajo</a></td>
                     </tr>
                 {% empty %}
@@ -302,12 +405,86 @@
         <h2 class="h5 mb-0">Importación masiva desde CSV</h2>
     </div>
     <div class="card-body">
-        <p class="text-secondary">
-            Codificación UTF-8. Columnas admitidas:
-            <code>dni,apellido,nombres,apellido_nombre,sexo,telefono,email,localidad,domicilio_calle,cargo_codigo,espacio_curricular,situacion_revista,desde,hasta,norma_tipo,norma_numero,organismo_emisor,es_suplencia,plazo_indeterminado,reemplaza_id</code>.
-            Para importar sólo datos personales, deje vacía la columna de cargo. Las designaciones requieren una fecha <code>desde</code> en formato AAAA-MM-DD y un cargo ya registrado. Las suplencias deben incluir <code>hasta</code> o indicar plazo indeterminado; <code>reemplaza_id</code> es opcional.
+        <p class="text-secondary mb-2">
+            La plantilla descargable trae todas las columnas admitidas. Se puede guardar desde
+            Excel como «CSV UTF-8» o «CSV (delimitado por comas)»; el separador puede ser
+            <code>;</code> o <code>,</code>.
         </p>
+        <ul class="text-secondary small">
+            <li>Una fila por designación: un docente con varias materias va en varias filas con el mismo DNI y el mismo nombre.</li>
+            <li>Para importar sólo un legajo, complete <code>dni</code> y <code>nombre_apellido</code> y deje vacías las columnas de designación. También se aceptan <code>apellido_nombre</code> o <code>apellido</code> y <code>nombres</code>.</li>
+            <li>DNI con o sin puntos. Sexo: M o F. Situación de revista: TIT, INT o SUP (o Titular, Interino, Suplente).</li>
+            <li>Fechas: dd/mm/aaaa o AAAA-MM-DD. En Desde se puede escribir <code>SIN INICIO</code> y en Hasta <code>SIN TERMINO</code> (una suplencia sin fecha de cese lleva SIN TERMINO).</li>
+            <li>Horario: <code>horas_lun</code> a <code>horas_vie</code>. Si también se indica <code>hs_catedra</code>, la suma del horario tiene que coincidir.</li>
+        </ul>
+        {% if csv_pendiente %}
+            {# RF-06: vista previa. Todavía no se guardó nada. #}
+            <div class="alert alert-warning" id="csv-vista-previa">
+                <h3 class="h6">Revise antes de confirmar: {{ csv_pendiente.nombre }}</h3>
+                <p class="mb-2">
+                    El archivo tiene <strong>{{ csv_pendiente.total }}</strong> filas:
+                    <strong>{{ csv_pendiente.validas }}</strong> se pueden importar y
+                    <strong>{{ csv_pendiente.rechazos|length }}</strong> se rechazarían por
+                    duplicados o inconsistencias. <strong>Todavía no se guardó nada.</strong>
+                </p>
+                {% if csv_pendiente.rechazos %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered bg-white">
+                            <thead><tr><th>Fila</th><th>DNI</th><th>Motivo del rechazo</th></tr></thead>
+                            <tbody>
+                                {% for rechazo in csv_pendiente.rechazos %}
+                                    <tr><td>{{ rechazo.fila }}</td><td>{{ rechazo.dni }}</td><td>{{ rechazo.motivo }}</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+                {% if csv_pendiente.filas %}
+                    <h4 class="h6 mt-3">Filas aceptadas (muestra)</h4>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered bg-white">
+                            <thead><tr><th>Fila</th><th>DNI</th><th>Nombre y Apellido</th><th>Resultado</th><th>Cargo</th><th>Espacio curricular</th></tr></thead>
+                            <tbody>
+                                {% for fila in csv_pendiente.filas %}
+                                    <tr>
+                                        <td>{{ fila.fila }}</td>
+                                        <td>{{ fila.dni }}</td>
+                                        <td>{{ fila.nombre }}</td>
+                                        <td>{{ fila.resultado }}</td>
+                                        <td>{{ fila.cargo|default:"—" }}</td>
+                                        <td>{{ fila.espacio|default:"—" }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% if csv_pendiente.validas > csv_pendiente.filas_mostradas %}
+                        <p class="small text-secondary">
+                            Se muestran {{ csv_pendiente.filas_mostradas }} de {{ csv_pendiente.validas }} filas aceptadas.
+                        </p>
+                    {% endif %}
+                {% endif %}
+                <form method="post" action="{% url 'personal:gestion_legajos' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="accion" value="confirmar_csv">
+                    <button type="submit" class="btn btn-primary" {% if not csv_pendiente.validas %}disabled{% endif %}>
+                        Confirmar e importar {{ csv_pendiente.validas }} fila{{ csv_pendiente.validas|pluralize }}
+                    </button>
+                </form>
+                <form method="post" action="{% url 'personal:gestion_legajos' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="accion" value="cancelar_csv">
+                    <button type="submit" class="btn btn-outline-secondary">Cancelar</button>
+                </form>
+            </div>
+        {% endif %}
         {% if puede_importar_csv %}
+        <p>
+            <a class="btn btn-sm btn-outline-secondary"
+               href="{% url 'personal:plantilla_importacion_csv' %}">
+                Descargar columnas CSV para Excel
+            </a>
+        </p>
         <form method="post" action="{% url 'personal:gestion_legajos' %}" enctype="multipart/form-data" class="row g-3 align-items-end">
             {% csrf_token %}
             <input type="hidden" name="accion" value="importar_csv">
@@ -316,7 +493,7 @@
                 <input id="archivoCsv" class="form-control" type="file" name="archivo" accept=".csv,text/csv" required>
             </div>
             <div class="col-md-4">
-                <button type="submit" class="btn btn-primary">Procesar archivo</button>
+                <button type="submit" class="btn btn-primary">Validar archivo</button>
             </div>
         </form>
         {% endif %}
@@ -379,6 +556,28 @@
             );
         });
     });
+})();
+
+(() => {
+    /* Control de horas: el horario semanal tiene que sumar las horas cátedra
+       nombradas (el servidor no deja guardar si no coinciden). */
+    const nombradas = document.querySelector('[name="hs_catedra"]');
+    const control = document.getElementById('controlHoras');
+    if (!nombradas || !control) return;
+    const dias = ['horas_lun', 'horas_mar', 'horas_mie', 'horas_jue', 'horas_vie']
+        .map(nombre => document.querySelector(`[name="${nombre}"]`))
+        .filter(Boolean);
+    const entero = campo => parseInt(campo.value || '0', 10) || 0;
+    const mostrar = () => {
+        const horas = entero(nombradas);
+        const suma = dias.reduce((total, campo) => total + entero(campo), 0);
+        control.textContent = horas
+            ? `Horario: ${suma} de ${horas} horas cátedra nombradas.`
+            : `Horario: ${suma} horas. Falta indicar las horas cátedra nombradas.`;
+        control.className = `small mb-3 fw-semibold ${horas && suma === horas ? 'text-success' : 'text-danger'}`;
+    };
+    [nombradas, ...dias].forEach(campo => campo.addEventListener('input', mostrar));
+    mostrar();
 })();
 </script>
 {% endblock %}

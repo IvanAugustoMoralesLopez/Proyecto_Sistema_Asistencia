@@ -10,16 +10,21 @@ PLANILLA_IL01 = 'IL-01'
 PLANILLA_IL02 = 'IL-02'
 
 CATEGORIAS_POR_PLANILLA = {
-    # RN-04: licencias médicas, afecciones de salud, corto y largo tratamiento
-    # y enfermedad familiar.
+    # RN-04: licencias médicas y afecciones de salud. Con el nomenclador
+    # oficial: todo lo de la Agrupación 1 («Licencias por razones de salud»).
     PLANILLA_IL01: (
         'Enfermedad común',
         'Corto tratamiento',
         'Largo tratamiento',
         'Enfermedad familiar',
+        # Nomenclador, Agrupación 1
+        'Accidente de trabajo',
+        'Maternidad',
+        'Tareas pasivas',
+        'Traslado por salud',
     ),
-    # RN-05: razones particulares, exámenes, duelo, matrimonio,
-    # compensatorios y comisiones de servicio.
+    # RN-05: el resto de las licencias y los permisos. Con el nomenclador
+    # oficial: Agrupación 2 («Otras licencias») y Agrupación 3 («Permisos»).
     PLANILLA_IL02: (
         'Razones particulares',
         'Examen',
@@ -27,6 +32,28 @@ CATEGORIAS_POR_PLANILLA = {
         'Matrimonio',
         'Compensatorio',
         'Comisión de servicio',
+        # Nomenclador, Agrupación 2
+        'Licencia anual',
+        'Adopción',
+        'Estudio',
+        'Representación gremial',
+        'Cargo político',
+        'Incompatibilidad',
+        'Ascenso',
+        'Inasistencia justificada',
+        'Cambio de funciones',
+        'Donación',
+        'Estudios médicos',
+        'Licencia especial',
+        'Deportiva',
+        'Violencia de género',
+        'Jubilación',
+        # Nomenclador, Agrupación 3
+        'Nacimiento',
+        'Credo',
+        'Lactancia',
+        'Natalicio',
+        'Citación judicial',
     ),
 }
 

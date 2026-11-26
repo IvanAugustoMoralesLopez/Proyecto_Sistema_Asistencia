@@ -21,7 +21,23 @@ from .reglas import (
     _validar_periodo_abierto,
     validar_dia_laborable,
 )
+from .pendientes import iniciar_seguimiento
 from .sesiones import _validar_sesion_edicion
+
+
+def _aplicar_formulario(registro, recibido, nro_formulario, usuario):
+    """La inasistencia con el papel ya recibido queda justificada."""
+    from django.utils import timezone
+
+    if not recibido or registro.marca.codigo != "I":
+        return
+
+    registro.estado_justificacion = (
+        RegistroAsistencia.EstadoJustificacion.JUSTIFICADA
+    )
+    registro.nro_formulario = nro_formulario
+    registro.fecha_recepcion = registro.fecha_recepcion or timezone.localdate()
+    registro.recepcionado_por = usuario
 
 
 @transaction.atomic
@@ -59,7 +75,9 @@ def guardar_asistencia(
     _validar_periodo_abierto(fecha)
     _validar_jornada_abierta(usuario, fecha, motivo)
     validar_dia_laborable(fecha)
-    _validar_designacion_vigente(designacion, fecha)
+
+    if registro_id is None:
+        _validar_designacion_vigente(designacion, fecha)
 
     marca = datos["marca"]
     observaciones = datos.get("observaciones", "")
@@ -70,6 +88,10 @@ def guardar_asistencia(
         )
 
     licencia = datos.get("licencia")
+    # Apartado de inasistencia de la carga diaria: si ya se recibió el
+    # formulario en papel, la falta nace justificada (el número es opcional).
+    formulario_recibido = datos.get("formulario_recibido", False)
+    nro_formulario = (datos.get("nro_formulario") or "").strip()[:30]
     horas_inasistidas = _validar_marca_requisitos(
         marca, datos.get("horas_inasistidas"), licencia
     )
@@ -87,6 +109,7 @@ def guardar_asistencia(
             actualizado_por=usuario,
         )
         _ajustar_justificacion(registro)
+        _aplicar_formulario(registro, formulario_recibido, nro_formulario, usuario)
         registro.full_clean()
         _validar_licencia(registro)
 
@@ -117,6 +140,15 @@ def guardar_asistencia(
         if registro.fecha != fecha:
             _validar_jornada_abierta(usuario, registro.fecha, motivo)
 
+        # RF-11: un registro ya cargado se corrige aunque después se haya dado
+        # de baja la designación o el legajo, si la fecha está dentro de su
+        # vigencia. Pasarlo a otra designación sí exige que esa esté activa.
+        _validar_designacion_vigente(
+            designacion,
+            fecha,
+            corrigiendo=designacion.pk == registro.designacion_id,
+        )
+
         antes = _datos_registro(registro)
 
         # Un registro validado solo se corrige con motivo y vuelve a
@@ -138,6 +170,7 @@ def guardar_asistencia(
         registro.observaciones = observaciones
         registro.actualizado_por = usuario
         _ajustar_justificacion(registro)
+        _aplicar_formulario(registro, formulario_recibido, nro_formulario, usuario)
 
         registro.full_clean()
         _validar_licencia(registro)
@@ -154,7 +187,63 @@ def guardar_asistencia(
         despues=_datos_registro(registro),
     )
 
+    # Una falta sin formulario o una LIC sin licencia quedan en seguimiento.
+    iniciar_seguimiento(registro)
+
     return registro
+
+
+@transaction.atomic
+def aplicar_al_agente(*, usuario, token, registro, motivo=""):
+    """
+    RF-07 / RF-11: la novedad diaria es una sola por agente y jornada. Al
+    corregir la marca de una materia, la misma marca se lleva a las demás
+    materias que el docente ya tiene cargadas ese día, cada una con las
+    horas de su horario. Devuelve los registros que cambiaron.
+    """
+    from .agenda import horas_del_dia
+
+    otros = (
+        RegistroAsistencia.objects.select_related(
+            "designacion__persona", "marca"
+        )
+        .prefetch_related("designacion__horarios")
+        .filter(
+            fecha=registro.fecha,
+            designacion__persona_id=registro.designacion.persona_id,
+        )
+        .exclude(pk=registro.pk)
+    )
+    marca = registro.marca
+    cambiados = []
+
+    for otro in otros:
+        if otro.marca_id == marca.pk:
+            continue
+
+        horas = horas_del_dia(otro.designacion, registro.fecha)
+
+        if marca.requiere_horas and horas <= 0:
+            horas = otro.horas_inasistidas or registro.horas_inasistidas
+
+        cambiados.append(
+            guardar_asistencia(
+                usuario=usuario,
+                token=token,
+                datos={
+                    "designacion": otro.designacion,
+                    "fecha": registro.fecha,
+                    "marca": marca,
+                    "horas_inasistidas": horas,
+                    "licencia": None,
+                    "observaciones": registro.observaciones,
+                },
+                registro_id=otro.pk,
+                motivo=motivo,
+            )
+        )
+
+    return cambiados
 
 
 class PlanillaConErrores(Exception):

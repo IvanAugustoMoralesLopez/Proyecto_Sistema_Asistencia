@@ -17,6 +17,7 @@
     <li class="nav-item"><a class="nav-link {% if seccion == 'cargos' %}active{% endif %}" href="?seccion=cargos">Cargos</a></li>
     <li class="nav-item"><a class="nav-link {% if seccion == 'carreras' %}active{% endif %}" href="?seccion=carreras">Carreras</a></li>
     <li class="nav-item"><a class="nav-link {% if seccion == 'espacios' %}active{% endif %}" href="?seccion=espacios">Espacios curriculares</a></li>
+    <li class="nav-item"><a class="nav-link {% if seccion == 'instrumentos' %}active{% endif %}" href="?seccion=instrumentos">Instrumentos legales</a></li>
     <li class="nav-item"><a class="nav-link {% if seccion == 'licencias' %}active{% endif %}" href="?seccion=licencias">Tipos de licencia</a></li>
 </ul>
 
@@ -58,7 +59,7 @@
                     <tbody>
                         {% for registro in registros %}
                         <tr>
-                            <td>{{ registro }}</td>
+                            <td>{{ registro }}{% if seccion == 'instrumentos' and not registro.activo %} <span class="badge text-bg-secondary">inactivo</span>{% endif %}{% if seccion == 'espacios' %}{% if not registro.activo %} <span class="badge text-bg-secondary">inactiva</span>{% endif %}<div class="small text-secondary">{% for carrera in registro.carreras.all %}{{ carrera.nombre }}{% if not forloop.last %} · {% endif %}{% empty %}Sin carrera{% endfor %}</div>{% endif %}</td>
                             <td class="text-end text-nowrap">
                                 <a class="btn btn-sm btn-outline-primary" href="?seccion={{ seccion }}&editar={{ registro.pk }}">Editar</a>
                                 <form method="post" class="d-inline">

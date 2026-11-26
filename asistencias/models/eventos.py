@@ -17,6 +17,10 @@ class EventoAsistencia(models.Model):
         PARAMETROS = "PARAMETROS", "Modificar parámetros"
         USUARIO_ALTA = "USUARIO_ALTA", "Alta de usuario"
         USUARIO_EDITAR = "USUARIO_EDITAR", "Modificar usuario"
+        # RF-20: cambios del calendario escolar (RF-10).
+        CALENDARIO_ALTA = "CALENDARIO_ALTA", "Alta en el calendario"
+        CALENDARIO_EDITAR = "CALENDARIO_EDITAR", "Modificar el calendario"
+        CALENDARIO_BAJA = "CALENDARIO_BAJA", "Baja del calendario"
 
     asistencia = models.ForeignKey(
         RegistroAsistencia,

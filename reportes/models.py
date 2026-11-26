@@ -31,6 +31,26 @@ class ParametroSistema(models.Model):
         default=anio_actual,
         validators=[MinValueValidator(2000), MaxValueValidator(2100)],
     )
+    # RF-18: límite anual reglamentario de inasistencias y permisos por
+    # agente. El Documento de Requerimientos no fija el número: el valor por
+    # defecto es provisorio y lo define el área administrativa desde la
+    # pantalla de parámetros.
+    limite_inasistencias_anual = models.PositiveSmallIntegerField(
+        "Límite anual de inasistencias y permisos (días por agente)",
+        default=6,
+        db_default=6,
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
+    )
+    # RN-08: el tope de días de cada artículo se cuenta por ciclo, que
+    # empieza el primer día de este mes. 1 = año calendario (lo que dice el
+    # nomenclador: «X días por año»); 4 = de abril a marzo.
+    mes_inicio_ciclo = models.PositiveSmallIntegerField(
+        "Mes en que empieza el ciclo del tope de licencias",
+        default=1,
+        db_default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text="El tope anual de licencias se cuenta desde el día 1 de este mes.",
+    )
     actualizado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

@@ -5,11 +5,19 @@ Recepción del formulario en papel de las inasistencias (RF-09).
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from ..forms import FiltroRecepcionForm, RecepcionFormularioForm
 from ..models import RegistroAsistencia
 from ..services import recepcionar_formulario
-from ._comun import _aplicar_filtros, _asegurar_sesion_edicion, _mensaje_error, _paginar, vista_protegida
+from ._comun import (
+    _aplicar_filtros,
+    _asegurar_sesion_edicion,
+    _hay_filtros,
+    _mensaje_error,
+    _paginar,
+    vista_protegida,
+)
 
 
 @vista_protegida("asistencias.view_registroasistencia")
@@ -31,8 +39,13 @@ def recepcion_formularios(request):
     )
 
     estado = FiltroRecepcionForm.PENDIENTES
+    filtro_con_error = form.is_bound and not form.is_valid()
 
-    if form.is_valid():
+    if filtro_con_error:
+        # Como en el Historial: un filtro con error no se ignora en silencio
+        # (antes se descartaban todos y se veían todas las pendientes).
+        registros = registros.none()
+    elif form.is_valid():
         datos = form.cleaned_data
         registros = _aplicar_filtros(registros, datos)
         estado = (
@@ -70,6 +83,13 @@ def recepcion_formularios(request):
             "pagina": pagina,
             "querystring": querystring,
             "pendientes": pendientes,
+            # «Pendientes» es lo que la pantalla ya muestra por defecto:
+            # elegirlo (o buscar con todo vacío) no es un filtro activo.
+            "hay_filtros": _hay_filtros(
+                request,
+                {"estado_justificacion": FiltroRecepcionForm.PENDIENTES},
+            ),
+            "filtro_con_error": filtro_con_error,
         },
     )
 
@@ -102,6 +122,7 @@ def recepcionar_formulario_view(request, pk):
                     nro_formulario=datos["nro_formulario"],
                     fecha_recepcion=datos["fecha_recepcion"],
                     motivo=datos["motivo"],
+                    nueva_marca=datos.get("nueva_marca", ""),
                 )
             except (ValidationError, PermissionDenied) as exc:
                 messages.error(request, _mensaje_error(exc))
@@ -110,6 +131,13 @@ def recepcionar_formulario_view(request, pk):
                     request,
                     "El estado de la inasistencia se actualizó.",
                 )
+                # Si se llegó desde la planilla mensual, se vuelve ahí.
+                volver = request.POST.get("volver", "")
+                if volver and url_has_allowed_host_and_scheme(
+                    volver, allowed_hosts={request.get_host()},
+                    require_https=request.is_secure(),
+                ):
+                    return redirect(volver)
                 return redirect("asistencia:recepcion_formularios")
     else:
         form = RecepcionFormularioForm(registro=registro)
@@ -121,5 +149,6 @@ def recepcionar_formulario_view(request, pk):
             "form": form,
             "registro": registro,
             "puede_recepcionar": bool(form.fields["estado_justificacion"].choices),
+            "volver": request.POST.get("volver") or request.GET.get("volver", ""),
         },
     )

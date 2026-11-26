@@ -19,6 +19,7 @@ from .forms import (
     FiltroBitacoraForm,
     FiltroConsultaForm,
     FiltroDesignacionesForm,
+    FiltroInasistenciasForm,
     FiltroLicenciasVencimientoForm,
     ParametroSistemaForm,
     UsuarioForm,
@@ -27,11 +28,14 @@ from .models import ParametroSistema
 from .roles import ROLES
 from .selectors import (
     DIAS_ANTICIPACION_POR_DEFECTO,
+    calcular_designaciones_con_horas_sin_cuadrar,
     calcular_designaciones_por_vencer,
     calcular_licencias_por_vencer,
+    calcular_licencias_sin_fin,
     UMBRAL_POR_DEFECTO,
     buscar_eventos,
     calcular_alertas,
+    calcular_acumulado_inasistencias,
     buscar_consulta,
     describir_objetivo,
     resumir_cambios,
@@ -74,7 +78,12 @@ def bitacora(request):
 @login_required
 @permission_required("reportes.gestionar_parametros", raise_exception=True)
 def parametros(request):
-    campos = ("codigo_oficina", "nombre_oficina", "ciclo_lectivo")
+    campos = (
+        "codigo_oficina",
+        "nombre_oficina",
+        "ciclo_lectivo",
+        "limite_inasistencias_anual",
+    )
     instancia = ParametroSistema.obtener()
     # Foto previa: is_valid() ya modifica la instancia en memoria.
     antes = {c: getattr(instancia, c) for c in campos}
@@ -231,6 +240,41 @@ def alertas(request):
     return render(request, "reportes/alertas.html", {"form": form, "alertas": lista})
 
 
+# ───────────── Contador de inasistencias por agente (RF-18) ─────────────
+
+@login_required
+@permission_required("reportes.consultar_licencias", raise_exception=True)
+def alertas_inasistencias(request):
+    """
+    RF-18: total acumulado de inasistencias y permisos de cada agente en el
+    ciclo lectivo, con alerta visual antes de que se agote el límite anual.
+    """
+    parametros = ParametroSistema.obtener()
+    datos = request.GET or {
+        "anio": parametros.ciclo_lectivo,
+        "umbral": UMBRAL_POR_DEFECTO,
+    }
+    form = FiltroInasistenciasForm(datos)
+    lista = []
+    if form.is_valid():
+        lista = calcular_acumulado_inasistencias(
+            form.cleaned_data["anio"],
+            form.cleaned_data["umbral"],
+            solo_alertas=form.cleaned_data["solo_alertas"],
+        )
+
+    return render(
+        request,
+        "reportes/alertas_inasistencias.html",
+        {
+            "form": form,
+            "agentes": lista,
+            "limite": parametros.limite_inasistencias_anual,
+            "cant_alertas": sum(1 for a in lista if a["estado"] != "normal"),
+        },
+    )
+
+
 # ───────────── Alertas de vencimiento de designaciones ─────────────
 
 @login_required
@@ -259,18 +303,47 @@ def alertas_designaciones(request):
     )
 
 
+# ───────────── Alertas de horas cátedra ─────────────
+
+@login_required
+@permission_required("reportes.consultar_licencias", raise_exception=True)
+def alertas_horas(request):
+    """Designaciones activas cuyo horario no suma las horas cátedra nombradas."""
+    return render(
+        request,
+        "reportes/alertas_horas.html",
+        {"alertas": calcular_designaciones_con_horas_sin_cuadrar()},
+    )
+
+
 # ───────────── Alertas de vencimiento de licencias ─────────────
 
 @login_required
 @permission_required("reportes.consultar_licencias", raise_exception=True)
 def alertas_licencias_vencimiento(request):
-    datos = request.GET or {"dias": DIAS_ANTICIPACION_POR_DEFECTO}
+    datos = request.GET.copy() if request.GET else {}
+    datos.setdefault("dias", DIAS_ANTICIPACION_POR_DEFECTO)
     form = FiltroLicenciasVencimientoForm(datos)
-    lista = []
+    lista, mostrar = [], FiltroLicenciasVencimientoForm.POR_VENCER
+    por_vencer, sin_fin = [], []
     if form.is_valid():
-        lista = calcular_licencias_por_vencer(form.cleaned_data["dias"])
+        mostrar = form.cleaned_data["mostrar"]
+        por_vencer = calcular_licencias_por_vencer(form.cleaned_data["dias"])
+        sin_fin = calcular_licencias_sin_fin()
+        if mostrar == FiltroLicenciasVencimientoForm.SIN_FIN:
+            lista = sin_fin
+        elif mostrar == FiltroLicenciasVencimientoForm.TODAS:
+            lista = por_vencer + sin_fin
+        else:
+            lista = por_vencer
     return render(
         request,
         "reportes/alertas_licencias_vencimiento.html",
-        {"form": form, "alertas": lista},
+        {
+            "form": form,
+            "alertas": lista,
+            "mostrar": mostrar,
+            "cantidad_por_vencer": len(por_vencer),
+            "cantidad_sin_fin": len(sin_fin),
+        },
     )

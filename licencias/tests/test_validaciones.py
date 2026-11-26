@@ -194,7 +194,8 @@ class SituacionRevistaTests(TestCase):
         self.assertIn('suplente', mensaje) 
 
 class CruceDeAnioTests(TestCase):
-    """RN-08: una licencia que cruza de año se reparte entre los dos años."""
+    """RN-08: el tope es por ciclo lectivo (marzo a febrero): una licencia que
+    cruza de ciclo se reparte entre los dos ciclos."""
 
     @classmethod
     def setUpTestData(cls):
@@ -209,6 +210,12 @@ class CruceDeAnioTests(TestCase):
             goce_haberes='Con goce de haberes', autoridad='Dirección',
             plazo='Según artículo', tope_dias_anual=5,
         )
+        # Estos casos prueban un ciclo de marzo a febrero.
+        from reportes.models import ParametroSistema
+
+        parametros = ParametroSistema.obtener()
+        parametros.mes_inicio_ciclo = 3
+        parametros.save()
 
     def _licencia(self, desde, hasta):
         return LicenciaOtorgada(
@@ -216,31 +223,46 @@ class CruceDeAnioTests(TestCase):
             desde=desde, hasta=hasta,
         )
 
-    def test_cruce_de_anio_se_reparte_y_cada_parte_entra_en_su_tope(self):
-        # Lun 28/12/2026 a mar 05/01/2027: 4 días hábiles en 2026 y 3 en 2027.
-        # Total 7 (> tope 5), pero cada año por separado entra en el tope.
-        self._licencia(date(2026, 12, 28), date(2027, 1, 5)).full_clean()
+    def test_cruce_de_ciclo_se_reparte_y_cada_parte_entra_en_su_tope(self):
+        # Mar 23/02/2027 a vie 05/03/2027: 4 días hábiles en el ciclo 2026 y 5
+        # en el 2027. Total 9 (> tope 5), pero cada ciclo por separado entra.
+        self._licencia(date(2027, 2, 23), date(2027, 3, 5)).full_clean()
 
-    def test_cruce_de_anio_rechaza_si_se_pasa_el_tope_del_primer_anio(self):
-        # Ya usó 2 días en 2026 (21 y 22/12); sumados a los 4 de diciembre = 6 > 5.
+    def test_diciembre_y_enero_son_del_mismo_ciclo(self):
+        # Lun 28/12/2026 a mar 05/01/2027: 4 + 3 = 7 días del ciclo 2026 > 5.
+        with self.assertRaises(ValidationError) as ctx:
+            self._licencia(date(2026, 12, 28), date(2027, 1, 5)).full_clean()
+        self.assertIn('ciclo lectivo 2026', ' '.join(ctx.exception.message_dict['hasta']))
+
+    def test_cruce_de_ciclo_rechaza_si_se_pasa_el_tope_del_primer_ciclo(self):
+        # Ya usó 2 días en el ciclo 2026 (21 y 22/12); sumados a los 4 de febrero = 6 > 5.
         LicenciaOtorgada.objects.create(
             designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
             desde=date(2026, 12, 21), hasta=date(2026, 12, 22),
         )
         with self.assertRaises(ValidationError) as ctx:
-            self._licencia(date(2026, 12, 28), date(2027, 1, 5)).full_clean()
+            self._licencia(date(2027, 2, 23), date(2027, 3, 5)).full_clean()
         self.assertIn('hasta', ctx.exception.message_dict)
 
-    def test_cruce_de_anio_rechaza_si_se_pasa_el_tope_del_segundo_anio(self):
-        # Ya usó 4 días en 2027 (11 al 14/01); sumados a los 3 de enero = 7 > 5.
+    def test_cruce_de_ciclo_rechaza_si_se_pasa_el_tope_del_segundo_ciclo(self):
+        # Ya usó 4 días en el ciclo 2027 (8 al 11/03); sumados a los 5 de marzo = 9 > 5.
         LicenciaOtorgada.objects.create(
             designacion=self.designacion, articulo=self.articulo, sit_rev='Titular',
-            desde=date(2027, 1, 11), hasta=date(2027, 1, 14),
+            desde=date(2027, 3, 8), hasta=date(2027, 3, 11),
         )
         with self.assertRaises(ValidationError) as ctx:
-            self._licencia(date(2026, 12, 28), date(2027, 1, 5)).full_clean()
+            self._licencia(date(2027, 2, 23), date(2027, 3, 5)).full_clean()
         mensaje = ' '.join(ctx.exception.message_dict['hasta'])
-        self.assertIn('2027', mensaje)  # el mensaje dice qué año se pasó 
+        self.assertIn('ciclo lectivo 2027', mensaje)  # dice qué ciclo se pasó
+
+    def test_con_el_ciclo_en_enero_vuelve_a_ser_el_anio_calendario(self):
+        from reportes.models import ParametroSistema
+
+        parametros = ParametroSistema.obtener()
+        parametros.mes_inicio_ciclo = 1
+        parametros.save()
+        # Dic 2026 y ene 2027 quedan en ciclos distintos: 4 y 3 días, cada uno <= 5.
+        self._licencia(date(2026, 12, 28), date(2027, 1, 5)).full_clean()
 
 class DesignacionDeBajaEdicionTests(TestCase):
     """N2: se puede editar una licencia cuya designación fue dada de baja."""

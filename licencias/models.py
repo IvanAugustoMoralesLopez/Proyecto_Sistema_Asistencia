@@ -1,11 +1,19 @@
 from datetime import date
 
+from django.conf import settings
 from django.core.exceptions import ValidationError 
 from django.core.validators import FileExtensionValidator
 from django.db import models
 
 from .clasificacion import CATEGORIA_CHOICES
-from .dias import contar_dias_habiles, fecha_de_hoy, rango_en_anio
+from .dias import (
+    ciclo_de,
+    contar_dias_habiles,
+    fecha_de_hoy,
+    mes_inicio_ciclo,
+    rango_en_anio,
+    rango_en_ciclo,
+)
 
 
 class LicenciaArticulo(models.Model):
@@ -86,6 +94,11 @@ class LicenciaOtorgada(models.Model):
     hasta = models.DateField(null=True, blank=True)
     observaciones = models.TextField(null=True, blank=True)
 
+    # La licencia es del docente: se carga una vez y el sistema crea una
+    # LicenciaOtorgada por cada materia o cargo afectado. Todas las de un
+    # mismo pedido comparten el grupo (y la disposición).
+    grupo = models.UUIDField(null=True, blank=True, db_index=True, editable=False)
+
     class Meta:
         db_table = 'licencia_otorgada'
         verbose_name = 'Licencia Otorgada'
@@ -156,16 +169,18 @@ class LicenciaOtorgada(models.Model):
             return
 
         # Import local: services importa models, así que no puede ir arriba.
-        from .services import dias_usados_en_anio
+        from .services import dias_usados_en_ciclo
 
-        # El tope es anual: una licencia que cruza de año se reparte y cada
-        # parte se controla contra el tope de su propio año.
+        # RN-08: el tope es por ciclo lectivo (de marzo a febrero, según los
+        # parámetros del sistema): una licencia que cruza de ciclo se reparte
+        # y cada parte se controla contra el tope de su propio ciclo.
         hoy = fecha_de_hoy()
         fin_calculo = self.hasta or hoy  # licencia abierta: hasta hoy
-        anios = range(self.desde.year, fin_calculo.year + 1)
+        mes = mes_inicio_ciclo()
+        ciclos = range(ciclo_de(self.desde, mes), ciclo_de(fin_calculo, mes) + 1)
 
-        for anio in anios:
-            rango = rango_en_anio(self.desde, self.hasta, anio, hoy)
+        for ciclo in ciclos:
+            rango = rango_en_ciclo(self.desde, self.hasta, ciclo, hoy, mes)
             if rango is None:
                 continue
             inicio, fin = rango
@@ -173,11 +188,13 @@ class LicenciaOtorgada(models.Model):
 
             # Al editar (self.pk existe) se excluye esta misma licencia del
             # conteo, para que no se cuente contra sí misma. En un alta es None.
-            dias_ya_usados = dias_usados_en_anio(
+            # Se cuenta por código del nomenclador: cada código tiene su tope.
+            dias_ya_usados = dias_usados_en_ciclo(
                 self.designacion.persona.dni,
-                self.articulo.articulo,
-                anio,
+                self.articulo,
+                ciclo,
                 excluir_id=self.pk,
+                excluir_grupo=self.grupo,
             )
 
             if dias_ya_usados + dias_pedidos > tope:
@@ -185,15 +202,14 @@ class LicenciaOtorgada(models.Model):
                 # de donde viene el tope (titular, interino, suplente: arts. 3xx).
                 situacion = (self.articulo.sit_rev or '').strip().lower()
                 para = f" para el personal {situacion}" if situacion else ""
-                # Solo se nombra el año cuando la licencia cruza de año.
-                en_anio = f" en {anio}" if len(anios) > 1 else ""
+                en_ciclo = f" en el ciclo lectivo {ciclo}"
                 raise ValidationError({
                     'hasta': (
                         f"Tope excedido. El límite del artículo {self.articulo.articulo} "
                         f"según el Estatuto Docente de la provincia del Chaco{para} "
-                        f"es {tope} días. "
-                        f"El docente ya usó {dias_ya_usados} días{en_anio} y ahora "
-                        f"solicita {dias_pedidos} más{en_anio}."
+                        f"es {tope} días por ciclo lectivo. "
+                        f"El docente ya usó {dias_ya_usados} días{en_ciclo} y ahora "
+                        f"solicita {dias_pedidos} más."
                     )
                 })
 
@@ -245,3 +261,112 @@ class ResolucionAdjunta(models.Model):
 
     def __str__(self):
         return self.descripcion
+
+
+class RenglonMensual(models.Model):
+    """
+    Renglón de la planilla mensual (cuadros IL-01 / IL-02), generado desde la
+    asistencia diaria por `licencias.planilla_mensual.procesar_mes`.
+
+    - RF-12 / RN-10: hay un renglón por cada materia o cargo que el agente
+      tenía en los días del bloque, sin excepciones.
+    - RF-13: `horas` son las horas cátedra de esa designación en los días
+      afectados, tomadas de su horario semanal.
+    - RF-14: `desde` y `hasta` son el inicio y el fin del período continuo
+      cargado en la diaria (iguales si fue una sola jornada).
+    - RF-15: al elegir el `articulo` se completan `cod_licencia` y `planilla`.
+    - RF-16 / RN-11: todas las materias del bloque comparten `disp_numero`.
+    - RN-07 / RN-08: `oficina` y `anio_planilla` nacen precargados.
+    - RF-20: guarda quién lo generó o modificó y cuándo.
+    """
+
+    PLANILLA_CHOICES = [('IL-01', 'IL-01'), ('IL-02', 'IL-02')]
+
+    anio = models.PositiveSmallIntegerField()
+    mes = models.PositiveSmallIntegerField()
+    designacion = models.ForeignKey(
+        'personal.Designacion', on_delete=models.PROTECT,
+        related_name='renglones_mensuales',
+    )
+    # Marca de la diaria que originó el renglón: LIC, LT, P o I.
+    marca = models.CharField(max_length=12)
+    desde = models.DateField()
+    hasta = models.DateField()
+    dias = models.PositiveSmallIntegerField(default=0)
+    horas = models.DecimalField(max_digits=7, decimal_places=2, default=0)
+
+    articulo = models.ForeignKey(
+        LicenciaArticulo, on_delete=models.RESTRICT, null=True, blank=True,
+        related_name='renglones_mensuales',
+    )
+    cod_licencia = models.CharField(max_length=12, blank=True)
+    planilla = models.CharField(max_length=10, blank=True, choices=PLANILLA_CHOICES)
+
+    oficina = models.CharField(max_length=10, default='1452')
+    anio_planilla = models.PositiveSmallIntegerField()
+
+    disp_tipo = models.CharField(max_length=30, blank=True)
+    disp_numero = models.CharField(max_length=20, blank=True)
+    disp_anio = models.SmallIntegerField(null=True, blank=True)
+    # Resolución del M.E.C.C.yT.: dato externo (RF-16).
+    resolucion = models.CharField(max_length=100, blank=True)
+
+    nro_formulario = models.CharField(max_length=30, blank=True)
+    # Inasistencia sin papel confirmada como injustificada («No llegó»): no se
+    # encuadra en ningún artículo ni lleva disposición; queda para el descuento.
+    injustificada = models.BooleanField(default=False, db_default=False)
+    licencia = models.ForeignKey(
+        LicenciaOtorgada, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='renglones_mensuales',
+    )
+    # La diaria cambió después de emitida la disposición: se conserva el
+    # renglón y se avisa para corregirlo a mano (INC-02).
+    desactualizado = models.BooleanField(default=False)
+
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
+        related_name='renglones_mensuales_creados',
+    )
+    actualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
+        related_name='renglones_mensuales_actualizados',
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'licencia_renglon_mensual'
+        verbose_name = 'Renglón de planilla mensual'
+        verbose_name_plural = 'Renglones de planilla mensual'
+        ordering = ['designacion__persona__apellido_nombre', 'desde', 'designacion_id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['anio', 'mes', 'designacion', 'marca', 'desde', 'hasta'],
+                name='uq_renglon_mensual_bloque',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['anio', 'mes'], name='ix_renglon_periodo'),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.anio}-{self.mes:02d} · designación {self.designacion_id} · "
+            f"{self.marca} {self.desde:%d/%m} al {self.hasta:%d/%m}"
+        )
+
+    @property
+    def clave_de_bloque(self):
+        """Renglones del mismo agente y período: comparten la disposición (RN-11)."""
+        return (self.designacion.persona_id, self.desde, self.hasta)
+
+    def imputar(self, articulo):
+        """
+        RF-15: al elegir el artículo se autocompleta el código de licencia y
+        el renglón se deriva al cuadro que corresponde.
+        """
+        from .planilla_mensual import planilla_del_renglon
+
+        self.articulo = articulo
+        self.cod_licencia = articulo.cod_licencia if articulo else ''
+        self.planilla = planilla_del_renglon(self.marca, articulo)

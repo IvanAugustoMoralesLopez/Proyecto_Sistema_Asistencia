@@ -1,0 +1,34 @@
+{# Filtros Desde / Hasta del Historial y de Recepción de formularios.
+   Si se elige una fecha con la otra vacía, la otra toma la misma: una sola
+   fecha busca ese día (antes, «Hasta 25/11» sola mostraba todo hasta ese
+   día). Mientras la completada no se toque a mano sigue a la elegida,
+   porque el navegador va cambiando el valor mientras se tipea el año.
+   Para un rango alcanza con cambiar cualquiera de las dos. #}
+<script>
+(function () {
+    var desde = document.getElementById("id_desde");
+    var hasta = document.getElementById("id_hasta");
+    if (!desde || !hasta) { return; }
+
+    function enlazar(elegida, otra) {
+        // Lo que se escribe a mano en un campo deja de seguir al otro.
+        elegida.addEventListener("input", function () {
+            delete elegida.dataset.completada;
+        });
+
+        elegida.addEventListener("change", function () {
+            if (otra.value === "" || otra.dataset.completada === "1") {
+                otra.value = elegida.value;
+                if (elegida.value) {
+                    otra.dataset.completada = "1";
+                } else {
+                    delete otra.dataset.completada;
+                }
+            }
+        });
+    }
+
+    enlazar(desde, hasta);
+    enlazar(hasta, desde);
+})();
+</script>

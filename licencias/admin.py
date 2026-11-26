@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from .clasificacion import CategoriaSinPlanillaError, planilla_para_categoria
-from .models import LicenciaArticulo, LicenciaOtorgada, RegistroBitacora
+from .models import LicenciaArticulo, LicenciaOtorgada, RegistroBitacora, RenglonMensual
 
 
 @admin.register(LicenciaArticulo)
@@ -21,6 +21,19 @@ class LicenciaArticuloAdmin(admin.ModelAdmin):
             return planilla_para_categoria(obj.categoria_informe)
         except CategoriaSinPlanillaError:
             return '⚠ Sin clasificar'
+
+
+@admin.register(RenglonMensual)
+class RenglonMensualAdmin(admin.ModelAdmin):
+    """Consulta de la planilla mensual. Se edita desde su pantalla."""
+    list_display = ('anio', 'mes', 'designacion', 'marca', 'desde', 'hasta',
+                    'horas', 'planilla', 'cod_licencia', 'disp_numero')
+    list_filter = ('anio', 'mes', 'planilla', 'marca')
+    search_fields = ('designacion__persona__apellido_nombre', 'designacion__persona__dni')
+    readonly_fields = ('creado_por', 'creado_en', 'actualizado_por', 'actualizado_en')
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(LicenciaOtorgada)

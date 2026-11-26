@@ -1,0 +1,101 @@
+{% comment %}
+Pendientes: faltas sin resolver y licencias sin completar.
+Recibe `lista_pendientes` (de asistencias.services.pendientes) y `volver`
+(la URL a la que se vuelve después de responder). Lo usan la carga diaria
+y Licencias › Pendientes.
+{% endcomment %}
+{% for p in lista_pendientes %}
+    <div class="alert {% if p.estado == 'vencido' %}alert-danger border-2{% elif p.estado == 'aviso' %}alert-warning{% else %}alert-light border{% endif %} mb-2" {% if p.estado == 'vencido' %}role="alert"{% endif %}>
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+                <div class="fw-bold">
+                    {% if p.tipo == "falta" %}Falta sin resolver{% else %}Licencia sin completar{% endif %}
+                    ·
+                    {% if p.estado == "vencido" %}venció: hay que responder hoy
+                    {% elif p.estado == "aviso" %}vence el {{ p.vence|date:"l d/m" }}
+                    {% else %}en plazo, vence el {{ p.vence|date:"l d/m" }}{% endif %}
+                </div>
+                <div>
+                    <strong>{{ p.persona.apellido_nombre }}</strong>
+                    · {{ p.fecha|date:"l d/m/Y" }}
+                    · {{ p.materias|join:", " }}
+                    · {{ p.horas|floatformat:"-2" }} hs
+                    {% if p.tipo == "falta" %}· formulario no recibido{% else %}· sin artículo ni código{% endif %}
+                </div>
+                {% if p.pospuesto %}
+                    <div class="small">Ya se pospuso una vez ({{ p.pospuesto_en|date:"d/m" }}{% if p.pospuesto_por %}, {{ p.pospuesto_por.get_username }}{% endif %}).</div>
+                {% endif %}
+            </div>
+            {% if p.estado == "aviso" and not p.pospuesto and perms.asistencias.change_registroasistencia %}
+                <form method="post" action="{% url 'asistencia:resolver_pendiente' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="clave" value="{{ p.clave }}">
+                    <input type="hidden" name="accion" value="posponer">
+                    <input type="hidden" name="volver" value="{{ volver }}">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">Completar mañana</button>
+                </form>
+            {% endif %}
+        </div>
+
+        {% if perms.asistencias.change_registroasistencia %}
+        <details class="mt-2" {% if p.estado == "vencido" %}open{% endif %}>
+            <summary class="fw-semibold">Resolver ahora</summary>
+            <div class="mt-2">
+                {% if p.tipo == "falta" %}
+                    <form method="post" action="{% url 'asistencia:resolver_pendiente' %}" class="d-flex flex-wrap align-items-end gap-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="clave" value="{{ p.clave }}">
+                        <input type="hidden" name="accion" value="resolver">
+                        <input type="hidden" name="volver" value="{{ volver }}">
+                        <div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="respuesta" value="formulario" id="r-f-{{ forloop.counter }}" required>
+                                <label class="form-check-label" for="r-f-{{ forloop.counter }}">Llegó el formulario</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="respuesta" value="no_llego" id="r-n-{{ forloop.counter }}">
+                                <label class="form-check-label" for="r-n-{{ forloop.counter }}">No llegó (queda injustificada)</label>
+                            </div>
+                        </div>
+                        {# RF-09: al recibir el papel la I pasa a la marca del formulario, como en Recepción. #}
+                        <div>
+                            <label class="form-label small mb-0" for="marca-{{ forloop.counter }}">Si llegó, ¿qué formulario es?</label>
+                            <select class="form-select form-select-sm" id="marca-{{ forloop.counter }}" name="nueva_marca">
+                                <option value="">Inasistencia justificada (no cambiar la marca)</option>
+                                <option value="LIC">Licencia médica o especial (LIC)</option>
+                                <option value="LT">Largo tratamiento (LT)</option>
+                                <option value="P">Permiso (P)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label small mb-0" for="nro-{{ forloop.counter }}">N° de formulario (opcional)</label>
+                            <input class="form-control form-control-sm" id="nro-{{ forloop.counter }}" name="nro_formulario" maxlength="30" placeholder="F-2026-____">
+                        </div>
+                        <button class="btn btn-sm btn-primary" type="submit">Confirmar respuesta</button>
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'licencias:nueva_licencia' %}?persona={{ p.persona.pk }}&amp;desde={{ p.fecha|date:'Y-m-d' }}&amp;volver={{ volver|urlencode }}">Era una licencia →</a>
+                    </form>
+                {% else %}
+                    <div class="d-flex flex-wrap align-items-end gap-2">
+                        <a class="btn btn-sm btn-primary" href="{% url 'licencias:nueva_licencia' %}?persona={{ p.persona.pk }}&amp;desde={{ p.fecha|date:'Y-m-d' }}&amp;volver={{ volver|urlencode }}">Completar la licencia →</a>
+                        <form method="post" action="{% url 'asistencia:resolver_pendiente' %}" class="d-flex flex-wrap align-items-end gap-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="clave" value="{{ p.clave }}">
+                            <input type="hidden" name="accion" value="resolver">
+                            <input type="hidden" name="respuesta" value="no_corresponde">
+                            <input type="hidden" name="volver" value="{{ volver }}">
+                            <div>
+                                <label class="form-label small mb-0" for="motivo-{{ forloop.counter }}">Si no corresponde licencia, ¿por qué?</label>
+                                <input class="form-control form-control-sm" id="motivo-{{ forloop.counter }}" name="motivo" minlength="10" maxlength="300" required style="min-width: 18rem;">
+                            </div>
+                            <button class="btn btn-sm btn-outline-danger" type="submit">No corresponde: pasar a inasistencia</button>
+                        </form>
+                    </div>
+                {% endif %}
+            </div>
+        </details>
+        {% endif %}
+    </div>
+{% endfor %}
+{% if lista_pendientes and hay_vencidos %}
+    <p class="small text-danger mb-3">No se puede cerrar la jornada ni el mes mientras haya pendientes vencidos sin respuesta.</p>
+{% endif %}

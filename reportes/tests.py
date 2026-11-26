@@ -91,19 +91,18 @@ class RolesTests(TestCase):
             {BEDELIA, SECRETARIA, SUBSECRETARIA},
         )
 
-#    def test_bedelia_no_valida_ni_administra(self):
-#        permisos = self.codenames(BEDELIA)
-#        self.assertIn("cerrar_jornada", permisos)
-#        for prohibido in ("validar_registro", "cerrar_periodo", "ver_bitacora", "gestionar_parametros"):
-#            self.assertNotIn(prohibido, permisos)
-
-#    def test_jerarquia(self):
-#        bedelia, secretaria, sub = (self.codenames(n) for n in (BEDELIA, SECRETARIA, SUBSECRETARIA))
-#        self.assertLess(bedelia, secretaria)
-#        self.assertLess(secretaria, sub)
-#        self.assertIn("modificar_jornada_cerrada", secretaria)
-#        self.assertIn("gestionar_parametros", sub)
-#        self.assertNotIn("gestionar_parametros", secretaria)
+    def test_los_tres_roles_tienen_los_mismos_permisos(self):
+        # RF-19: las tres operadoras comparten el mismo nivel de acceso.
+        bedelia, secretaria, sub = (
+            self.codenames(n) for n in (BEDELIA, SECRETARIA, SUBSECRETARIA)
+        )
+        self.assertEqual(bedelia, secretaria)
+        self.assertEqual(secretaria, sub)
+        for permiso in (
+            "modificar_jornada_cerrada", "validar_registro", "cerrar_periodo",
+            "ver_bitacora", "gestionar_parametros", "gestionar_usuarios",
+        ):
+            self.assertIn(permiso, bedelia)
 
 
 class BitacoraTests(TestCase):
@@ -281,7 +280,7 @@ from personal.models import Cargo, Carrera, Designacion, EspacioCurricular, Pers
 class ConsultasTests(TestCase):
     def setUp(self):
         self.url = reverse("reportes:consultas")
-        cargo = Cargo.objects.create(codigo="166", descripcion="Hs cátedra")
+        cargo = Cargo.objects.get(codigo="166")
         self.sistemas = Carrera.objects.create(nombre="Desarrollo de Software")
         self.redes = Carrera.objects.create(nombre="Redes")
         art_salud = LicenciaArticulo.objects.create(
@@ -295,7 +294,8 @@ class ConsultasTests(TestCase):
 
         def designar(dni, nombre, carrera):
             persona = Persona.objects.create(dni=dni, apellido_nombre=nombre)
-            espacio = EspacioCurricular.objects.create(nombre=f"Mat {dni}", carrera=carrera)
+            espacio = EspacioCurricular.objects.create(nombre=f"Mat {dni}")
+            espacio.carreras.add(carrera)
             return Designacion.objects.create(
                 persona=persona, cargo=cargo, espacio_curricular=espacio, desde=date(2026, 3, 1)
             )
@@ -350,6 +350,28 @@ class ConsultasTests(TestCase):
         respuesta = self.client.get(self.url, {"desde": "2026-02-01", "hasta": "2026-01-01"})
         self.assertTrue(respuesta.context["form"].non_field_errors())
 
+    # ── RF-17: filtro por mes ──
+    def test_el_mes_filtra_por_su_primer_y_ultimo_dia(self):
+        self.assertEqual(self.ids(mes="2026-06"), {self.l1.pk})
+        # La licencia abierta (desde agosto, sin hasta) aparece en los meses siguientes.
+        self.assertEqual(self.ids(mes="2026-12"), {self.l2.pk})
+        self.assertEqual(self.ids(mes="2026-07"), set())
+
+    def test_el_mes_manda_sobre_un_rango_escrito_a_mano(self):
+        self.assertEqual(
+            self.ids(mes="2026-06", desde="2026-12-01", hasta="2026-12-31"), {self.l1.pk}
+        )
+
+    def test_el_mes_tambien_filtra_la_exportacion(self):
+        respuesta = self.client.get(self.url, {"mes": "2026-06", "exportar": "csv"})
+        texto = respuesta.content.decode("utf-8-sig")
+        self.assertIn("ACOSTA", texto)
+        self.assertNotIn("BENITEZ", texto)
+
+    def test_un_mes_invalido_se_informa(self):
+        respuesta = self.client.get(self.url, {"mes": "2026-13"})
+        self.assertIn("mes", respuesta.context["form"].errors)
+
     def test_exportar_csv_respeta_filtros(self):
         respuesta = self.client.get(self.url, {"dni": "1111", "exportar": "csv"})
         self.assertEqual(respuesta["Content-Type"], "text/csv; charset=utf-8")
@@ -390,8 +412,8 @@ class ConsultaUnificadaTests(TestCase):
     def setUp(self):
         ConsultasTests.setUp(self)  # mismos datos base: 2 docentes, 2 licencias
         inasistencia = MarcaAsistencia.objects.get(codigo="I")
-        retirado = MarcaAsistencia.objects.get(codigo="PR")
-        presente = MarcaAsistencia.objects.get(codigo="P")
+        retirado = MarcaAsistencia.objects.get(codigo="P")
+        presente = MarcaAsistencia.objects.get(codigo="PR")
         licencia = MarcaAsistencia.objects.get(codigo="LIC")
 
         def registro(designacion, fecha, marca, **extra):
@@ -562,9 +584,10 @@ from .selectors import calcular_alertas
 
 class AlertasTests(TestCase):
     def setUp(self):
-        cargo = Cargo.objects.create(codigo="166", descripcion="Hs cátedra")
+        cargo = Cargo.objects.get(codigo="166")
         carrera = Carrera.objects.create(nombre="Software")
-        espacio = EspacioCurricular.objects.create(nombre="Prog", carrera=carrera)
+        espacio = EspacioCurricular.objects.create(nombre="Prog")
+        espacio.carreras.add(carrera)
         persona = Persona.objects.create(dni="33333333", apellido_nombre="CABRAL, ANA")
         self.designacion = Designacion.objects.create(
             persona=persona, cargo=cargo, espacio_curricular=espacio, desde=date(2026, 3, 1)
@@ -642,7 +665,7 @@ class AlertasDesignacionesTests(TestCase):
     HOY = date(2026, 11, 6)
 
     def setUp(self):
-        self.cargo = Cargo.objects.create(codigo="166", descripcion="Hs cátedra")
+        self.cargo = Cargo.objects.get(codigo="166")
         self.persona = Persona.objects.create(dni="44444444", apellido_nombre="LOPEZ, LEO")
         self.url = reverse("reportes:alertas_designaciones")
         self.client.force_login(crear_usuario("bedel", "consultar_licencias"))
@@ -691,6 +714,54 @@ class AlertasDesignacionesTests(TestCase):
         self.assertEqual(respuesta.context["alertas"], [])
 
 
+# ───────────── Alertas de horas cátedra ─────────────
+
+from .selectors import calcular_designaciones_con_horas_sin_cuadrar
+
+
+class AlertasHorasCatedraTests(TestCase):
+    """Designaciones activas cuyo horario no suma las horas cátedra nombradas."""
+
+    def setUp(self):
+        from personal.models import Horario
+
+        self.cargo = Cargo.objects.get(codigo="166")
+        self.persona = Persona.objects.create(dni="44444445", apellido_nombre="GOMEZ, ANA")
+        self.url = reverse("reportes:alertas_horas")
+        self.client.force_login(crear_usuario("bedel-horas", "consultar_licencias"))
+
+        def designacion(nombradas, horas, **extra):
+            d = Designacion.objects.create(
+                persona=self.persona, cargo=self.cargo, desde=date(2026, 3, 1),
+                hs_catedra=nombradas, **extra,
+            )
+            for dia, cantidad in zip(("LUN", "MIE", "VIE"), horas):
+                Horario.objects.create(designacion=d, dia=dia, horas_catedra=cantidad)
+            return d
+
+        self.bien = designacion(4, (2, 2))
+        self.de_mas = designacion(4, (3, 3))
+        self.sin_nombradas = designacion(None, (2,))
+        self.inactiva = designacion(6, (2,), activo=False)
+
+    def test_lista_solo_las_activas_que_no_cuadran(self):
+        filas = {f["pk"]: f for f in calcular_designaciones_con_horas_sin_cuadrar()}
+        self.assertEqual(set(filas), {self.de_mas.pk, self.sin_nombradas.pk})
+        self.assertEqual(filas[self.de_mas.pk]["diferencia"], 2)
+        self.assertEqual(filas[self.sin_nombradas.pk]["nombradas"], None)
+
+    def test_vista_y_pestana(self):
+        respuesta = self.client.get(self.url)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Horas cátedra")
+        self.assertContains(respuesta, "+2")
+        self.assertContains(self.client.get(reverse("reportes:alertas_designaciones")), self.url)
+
+    def test_vista_requiere_permiso(self):
+        self.client.force_login(crear_usuario("sin-horas"))
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+
 # ───────────── Alertas de vencimiento de licencias ─────────────
 
 from .selectors import calcular_licencias_por_vencer
@@ -700,7 +771,7 @@ class AlertasLicenciasVencimientoTests(TestCase):
     HOY = date(2026, 11, 6)
 
     def setUp(self):
-        cargo = Cargo.objects.create(codigo="166", descripcion="Hs cátedra")
+        cargo = Cargo.objects.get(codigo="166")
         persona = Persona.objects.create(dni="55555555", apellido_nombre="PEREZ, PAULA")
         self.designacion = Designacion.objects.create(
             persona=persona, cargo=cargo, desde=date(2026, 3, 1)
@@ -738,6 +809,36 @@ class AlertasLicenciasVencimientoTests(TestCase):
         self.licencia(date(2026, 11, 2), None)
         self.assertEqual(calcular_licencias_por_vencer(30, hoy=self.HOY), [])
 
+    def test_las_licencias_sin_fecha_de_fin_tienen_su_filtro(self):
+        from .selectors import calcular_licencias_sin_fin
+
+        vieja = self.licencia(date(2026, 9, 14), None)
+        self.licencia(date(2026, 11, 2), None)
+        self.licencia(date(2026, 11, 2), date(2026, 11, 13))   # esta sí vence
+        filas = calcular_licencias_sin_fin(hoy=self.HOY)
+        self.assertEqual([f["pk"] for f in filas][0], vieja.pk)   # la más vieja primero
+        self.assertEqual(len(filas), 2)
+        self.assertEqual(filas[0]["dias_abierta"], 53)
+        self.assertEqual(filas[0]["instrumento"], "Pendiente de numerar")
+
+    def test_la_vista_filtra_por_vencer_sin_fin_y_todas(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        hoy = timezone.localdate()
+        self.licencia(hoy, hoy + timedelta(days=5))
+        self.licencia(hoy, None)
+        por_vencer = self.client.get(self.url)
+        sin_fin = self.client.get(self.url, {"mostrar": "sin_fin", "dias": 30})
+        todas = self.client.get(self.url, {"mostrar": "todas", "dias": 30})
+        self.assertEqual(len(por_vencer.context["alertas"]), 1)
+        self.assertEqual(por_vencer.context["cantidad_sin_fin"], 1)
+        self.assertEqual(len(sin_fin.context["alertas"]), 1)
+        self.assertContains(sin_fin, "Sin fecha de fin")
+        self.assertContains(sin_fin, "Poner fecha de fin")
+        self.assertEqual(len(todas.context["alertas"]), 2)
+
     def test_vista_requiere_permiso(self):
         self.client.force_login(crear_usuario("sin"))
         self.assertEqual(self.client.get(self.url).status_code, 403)
@@ -746,6 +847,36 @@ class AlertasLicenciasVencimientoTests(TestCase):
         respuesta = self.client.get(self.url)
         self.assertEqual(respuesta.status_code, 200)
         self.assertIn("alertas", respuesta.context)
+
+    def test_una_fila_por_licencia_aunque_abarque_varias_materias(self):
+        import uuid
+
+        otra = Designacion.objects.create(
+            persona=self.designacion.persona, cargo=self.designacion.cargo, desde=date(2026, 3, 1)
+        )
+        grupo = uuid.uuid4()
+        for designacion in (self.designacion, otra):
+            LicenciaOtorgada.objects.create(
+                designacion=designacion, articulo=self.articulo, sit_rev="TIT",
+                desde=date(2026, 11, 2), hasta=date(2026, 11, 13), grupo=grupo,
+            )
+        (fila,) = calcular_licencias_por_vencer(30, hoy=self.HOY)
+        self.assertEqual(fila["cantidad_materias"], 2)
+
+    def test_boton_para_prorrogar_si_puede_ver_licencias(self):
+        from django.utils import timezone
+
+        hoy = timezone.localdate()
+        lic = self.licencia(hoy, hoy)
+        detalle = reverse("licencias:detalle_licencia", args=[lic.pk])
+        self.assertNotContains(self.client.get(self.url), detalle)  # sin permiso de licencias
+
+        self.client.force_login(
+            crear_usuario("secre", "consultar_licencias", "view_licenciaotorgada")
+        )
+        respuesta = self.client.get(self.url)
+        self.assertContains(respuesta, f"{detalle}?volver=")
+        self.assertContains(respuesta, "#prorrogar")
 
 
 # ───────────── Correcciones de la revisión técnica (A2, M11, B5, B6) ─────────────
@@ -770,25 +901,20 @@ class RolesPersonalLicenciasTests(TestCase):
     def codenames(self, nombre):
         return set(Group.objects.get(name=nombre).permissions.values_list("codename", flat=True))
 
-#    def test_matriz_por_rol(self):
-#        bedelia, secretaria, sub = (self.codenames(n) for n in (BEDELIA, SECRETARIA, SUBSECRETARIA))
-#        self.assertIn("add_licenciaotorgada", bedelia)
-#        self.assertNotIn("change_persona", bedelia)
-#        self.assertIn("change_designacion", secretaria)
-#        self.assertNotIn("change_cargo", secretaria)
-#        self.assertIn("change_licenciaarticulo", sub)
-
-#    def test_bedelia_opera_licencias_pero_no_personal(self):
-#        self.usuario_con_rol(BEDELIA)
-#        self.assertEqual(self.client.get(reverse("licencias:listado_licencias_otorgadas")).status_code, 200)
-#        self.assertEqual(self.client.get(reverse("licencias:nueva_licencia_otorgada")).status_code, 200)
-#        self.assertEqual(self.client.get(reverse("personal:gestion_legajos")).status_code, 403)
-
-#    def test_secretaria_opera_legajos_y_designaciones(self):
-#        self.usuario_con_rol(SECRETARIA)
-#        self.assertEqual(self.client.get(reverse("personal:gestion_legajos")).status_code, 200)
-#        self.assertEqual(self.client.get(reverse("inicio_personal")).status_code, 200)
-#        self.assertEqual(self.client.get(reverse("personal:catalogos")).status_code, 403)
+    def test_los_tres_roles_operan_personal_licencias_y_catalogos(self):
+        # RF-19: mismo acceso para las tres; ninguna pantalla queda vedada.
+        pantallas = (
+            "licencias:listado_licencias_otorgadas",
+            "licencias:nueva_licencia",
+            "personal:gestion_legajos",
+            "inicio_personal",
+            "personal:catalogos",
+        )
+        for rol in (BEDELIA, SECRETARIA, SUBSECRETARIA):
+            self.usuario_con_rol(rol)
+            for pantalla in pantallas:
+                with self.subTest(rol=rol, pantalla=pantalla):
+                    self.assertEqual(self.client.get(reverse(pantalla)).status_code, 200)
 
     def test_subsecretaria_opera_catalogos(self):
         self.usuario_con_rol(SUBSECRETARIA)

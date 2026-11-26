@@ -70,6 +70,7 @@ _OBJETIVO_FIJO = {
     _A.CATALOGO_EDITAR: "Catálogo",
     _A.CATALOGO_BAJA: "Catálogo",
     _A.IMPORTACION: "Importación de personal",
+    _A.PLANILLA_MENSUAL: "Planilla mensual IL-01 / IL-02",
 }
 
 
@@ -117,7 +118,8 @@ def buscar_licencias(filtros=None):
     licencias = LicenciaOtorgada.objects.select_related(
         "designacion__persona",
         "designacion__cargo",
-        "designacion__espacio_curricular__carrera",
+        "designacion__espacio_curricular",
+        "designacion__carrera",
         "articulo",
     ).order_by("-desde", "designacion__persona__apellido_nombre", "pk")
 
@@ -130,7 +132,7 @@ def buscar_licencias(filtros=None):
         )
     if filtros.get("carrera"):
         licencias = licencias.filter(
-            designacion__espacio_curricular__carrera=filtros["carrera"]
+            designacion__carrera=filtros["carrera"]
         )
     if filtros.get("espacio_curricular"):
         licencias = licencias.filter(
@@ -223,7 +225,7 @@ def _fila_de_licencia(lic):
         dni=designacion.persona.dni,
         docente=designacion.persona.apellido_nombre,
         cargo=str(designacion.cargo),
-        carrera=str(espacio.carrera) if espacio else "",
+        carrera=str(designacion.carrera) if designacion.carrera_id else "",
         materia=espacio.nombre if espacio else "",
         codigo=lic.articulo.cod_licencia,
         articulo=lic.articulo.articulo,
@@ -246,7 +248,7 @@ def _fila_de_ausencia(registro):
         dni=designacion.persona.dni,
         docente=designacion.persona.apellido_nombre,
         cargo=str(designacion.cargo),
-        carrera=str(espacio.carrera) if espacio else "",
+        carrera=str(designacion.carrera) if designacion.carrera_id else "",
         materia=espacio.nombre if espacio else "",
         codigo="",
         articulo="",
@@ -262,8 +264,8 @@ def _fila_de_ausencia(registro):
 def buscar_ausencias(filtros=None):
     """
     Ausencias y permisos simples: registros diarios que computan inasistencia
-    (Inasistencia, Presente retirado) y que no están amparados por una
-    licencia otorgada. Las licencias ya se consultan como licencias.
+    (I, P, LIC y LT del catálogo v2.0) y que no están amparados por una
+    licencia otorgada. Las licencias otorgadas se consultan como licencias.
     """
     filtros = filtros or {}
     registros = RegistroAsistencia.objects.filter(
@@ -272,7 +274,8 @@ def buscar_ausencias(filtros=None):
     ).select_related(
         "designacion__persona",
         "designacion__cargo",
-        "designacion__espacio_curricular__carrera",
+        "designacion__espacio_curricular",
+        "designacion__carrera",
         "marca",
     ).order_by("-fecha", "designacion__persona__apellido_nombre", "pk")
 
@@ -285,7 +288,7 @@ def buscar_ausencias(filtros=None):
         )
     if filtros.get("carrera"):
         registros = registros.filter(
-            designacion__espacio_curricular__carrera=filtros["carrera"]
+            designacion__carrera=filtros["carrera"]
         )
     if filtros.get("espacio_curricular"):
         registros = registros.filter(
@@ -403,14 +406,20 @@ def calcular_alertas(anio, umbral=UMBRAL_POR_DEFECTO):
     Los días se calculan con licencias.services.dias_usados_en_anio, la misma
     regla de conteo del módulo de licencias. Un docente se evalúa por
     artículo, sumando todas las licencias de ese artículo en el año.
+
+    RN-08: el «año» del tope es el ciclo lectivo que empieza en `anio`; el
+    mes de inicio sale de los parámetros del sistema (1 = año calendario).
     """
+    from licencias.dias import limites_del_ciclo
+
+    inicio_ciclo, fin_ciclo = limites_del_ciclo(anio)
     licencias = (
         LicenciaOtorgada.objects.filter(
             articulo__tope_dias_anual__isnull=False,
             articulo__tope_dias_anual__gt=0,
-            desde__year__lte=anio,
+            desde__lte=fin_ciclo,
         )
-        .filter(Q(hasta__isnull=True) | Q(hasta__year__gte=anio))
+        .filter(Q(hasta__isnull=True) | Q(hasta__gte=inicio_ciclo))
         .select_related("designacion__persona", "articulo")
         .order_by("-desde", "-pk")
     )
@@ -444,6 +453,107 @@ def calcular_alertas(anio, umbral=UMBRAL_POR_DEFECTO):
     return alertas
 
 
+# ───────────── Contador de inasistencias por agente (RF-18) ─────────────
+
+# Marcas de la diaria que cuentan para el límite anual: inasistencias (I) y
+# permisos (P). Las licencias (LIC, LT) tienen su propio tope por artículo.
+MARCAS_QUE_CUENTAN = ("I", "P")
+
+
+def calcular_acumulado_inasistencias(anio, umbral=UMBRAL_POR_DEFECTO,
+                                     solo_alertas=False, limite=None):
+    """
+    RF-18: por cada agente, total acumulado de inasistencias y permisos
+    tomados en el ciclo lectivo `anio`, comparado con el límite anual
+    reglamentario (parámetro del sistema).
+
+    Se cuenta por AGENTE y por DÍA: un docente que faltó un día a sus tres
+    materias suma una inasistencia, no tres. `estado` es:
+      - "agotado":  alcanzó o superó el límite;
+      - "proximo":  consumió al menos `umbral` % del límite (alerta previa);
+      - "normal":   por debajo del umbral.
+    Orden: primero los más cercanos al límite.
+    """
+    # Import local: evita el ciclo reportes.models <-> selectors en la carga.
+    from .models import ParametroSistema
+
+    if limite is None:
+        limite = ParametroSistema.obtener().limite_inasistencias_anual
+
+    registros = (
+        RegistroAsistencia.objects.filter(
+            fecha__range=(date(anio, 1, 1), date(anio, 12, 31)),
+            marca__codigo__in=MARCAS_QUE_CUENTAN,
+        )
+        .values_list(
+            "designacion__persona_id",
+            "designacion__persona__apellido_nombre",
+            "fecha",
+            "marca__codigo",
+            "horas_inasistidas",
+        )
+    )
+
+    agentes = {}
+    for dni, nombre, fecha, codigo, horas in registros:
+        agente = agentes.setdefault(dni, {
+            "dni": dni,
+            "docente": nombre,
+            "dias_inasistencia": set(),
+            "dias_permiso": set(),
+            "horas": 0,
+        })
+        clave = "dias_inasistencia" if codigo == "I" else "dias_permiso"
+        agente[clave].add(fecha)
+        agente["horas"] += horas or 0
+
+    filas = []
+    for agente in agentes.values():
+        inasistencias = len(agente["dias_inasistencia"])
+        permisos = len(agente["dias_permiso"] - agente["dias_inasistencia"])
+        total = inasistencias + permisos
+        porcentaje = round(total * 100 / limite) if limite else 0
+
+        if total >= limite:
+            estado = "agotado"
+        elif porcentaje >= umbral:
+            estado = "proximo"
+        else:
+            estado = "normal"
+
+        if solo_alertas and estado == "normal":
+            continue
+
+        filas.append({
+            "dni": agente["dni"],
+            "docente": agente["docente"],
+            "inasistencias": inasistencias,
+            "permisos": permisos,
+            "total": total,
+            "horas": agente["horas"],
+            "limite": limite,
+            "restantes": max(limite - total, 0),
+            "porcentaje": porcentaje,
+            "estado": estado,
+        })
+
+    filas.sort(key=lambda fila: (-fila["total"], fila["docente"]))
+    return filas
+
+
+def estados_de_inasistencias(anio, dnis=None):
+    """
+    {dni: fila} solo de los agentes en alerta ("proximo" o "agotado"), para
+    mostrar el aviso en la carga diaria (RF-18: alerta visual al personal
+    administrativo antes de que se agote el límite).
+    """
+    return {
+        fila["dni"]: fila
+        for fila in calcular_acumulado_inasistencias(anio, solo_alertas=True)
+        if dnis is None or fila["dni"] in dnis
+    }
+
+
 # ───────────── Alertas de vencimiento de designaciones ─────────────
 
 DIAS_ANTICIPACION_POR_DEFECTO = 30  # ventana para avisar antes del "hasta"
@@ -475,7 +585,7 @@ def calcular_designaciones_por_vencer(dias=DIAS_ANTICIPACION_POR_DEFECTO,
         activo=True,
         plazo_indeterminado=False,
         hasta__isnull=False,
-    ).select_related("persona", "cargo", "espacio_curricular__carrera")
+    ).select_related("persona", "cargo", "espacio_curricular", "carrera")
 
     if incluir_vencidas:
         designaciones = designaciones.filter(hasta__lte=limite)
@@ -492,7 +602,7 @@ def calcular_designaciones_por_vencer(dias=DIAS_ANTICIPACION_POR_DEFECTO,
             "docente": d.persona.apellido_nombre,
             "cargo": str(d.cargo),
             "materia": espacio.nombre if espacio else "",
-            "carrera": str(espacio.carrera) if espacio and espacio.carrera_id else "",
+            "carrera": str(d.carrera) if d.carrera_id else "",
             "situacion": d.get_situacion_revista_display() if d.situacion_revista else "",
             "es_suplencia": d.es_suplencia,
             "norma": _texto_norma(d),
@@ -501,6 +611,43 @@ def calcular_designaciones_por_vencer(dias=DIAS_ANTICIPACION_POR_DEFECTO,
             "dias_restantes": restantes,
             "vencida": restantes < 0,
             "vence_hoy": restantes == 0,
+        })
+    return filas
+
+
+# ───────────── Alertas de horas cátedra ─────────────
+
+def calcular_designaciones_con_horas_sin_cuadrar():
+    """
+    Designaciones activas cuyo horario semanal no suma las horas cátedra
+    nombradas, o que no tienen horas nombradas. La regla es la de personal
+    (`Designacion.problema_de_horas`): acá solo se listan para avisar.
+    """
+    designaciones = (
+        Designacion.objects.filter(activo=True)
+        .select_related("persona", "cargo", "espacio_curricular", "carrera")
+        .prefetch_related("horarios")
+        .order_by("persona__apellido_nombre", "pk")
+    )
+    filas = []
+    for d in designaciones:
+        problema = d.problema_de_horas()
+        if not problema:
+            continue
+        horario = sum(h.horas_catedra for h in d.horarios.all())
+        espacio = d.espacio_curricular
+        filas.append({
+            "pk": d.pk,
+            "dni": d.persona.dni,
+            "docente": d.persona.apellido_nombre,
+            "cargo": str(d.cargo),
+            "materia": espacio.nombre if espacio else "",
+            "carrera": str(d.carrera) if d.carrera_id else "",
+            "situacion": d.get_situacion_revista_display() if d.situacion_revista else "",
+            "nombradas": d.hs_catedra,
+            "horario": horario,
+            "diferencia": horario - (d.hs_catedra or 0),
+            "problema": problema,
         })
     return filas
 
@@ -515,31 +662,111 @@ def calcular_licencias_por_vencer(dias=DIAS_ANTICIPACION_POR_DEFECTO, hoy=None):
     el docente vuelva o la licencia caduque. Las licencias sin «hasta»
     (abiertas) no tienen vencimiento y no se listan; las ya finalizadas
     tampoco. Orden: las que vencen antes, primero.
+
+    Una fila por licencia del docente: si abarca varias materias (mismo
+    `grupo`), van juntas, con la cantidad y los nombres en `materias`. `pk`
+    es el de una de ellas y lleva al detalle, donde se prorrogan todas.
     """
     hoy = hoy or fecha_de_hoy()
     limite = hoy + timedelta(days=dias)
 
     licencias = (
         LicenciaOtorgada.objects.filter(hasta__gte=hoy, hasta__lte=limite)
-        .select_related("designacion__persona", "designacion__cargo", "articulo")
+        .select_related(
+            "designacion__persona", "designacion__cargo",
+            "designacion__espacio_curricular", "articulo",
+        )
         .order_by("hasta", "designacion__persona__apellido_nombre", "pk")
     )
 
-    filas = []
+    filas, por_pedido = [], {}
     for lic in licencias:
-        restantes = (lic.hasta - hoy).days
         designacion = lic.designacion
-        filas.append({
+        materia = (
+            designacion.espacio_curricular.nombre
+            if designacion.espacio_curricular_id else str(designacion.cargo)
+        )
+        clave = lic.grupo or f"pk-{lic.pk}"
+        if clave in por_pedido:
+            fila = por_pedido[clave]
+            fila["materias"].append(materia)
+            fila["cantidad_materias"] += 1
+            fila["desde"] = min(fila["desde"], lic.desde)
+            continue
+
+        restantes = (lic.hasta - hoy).days
+        fila = {
             "pk": lic.pk,
             "dni": designacion.persona.dni,
             "docente": designacion.persona.apellido_nombre,
             "cargo": str(designacion.cargo),
             "articulo": lic.articulo.articulo,
+            "cod_licencia": lic.articulo.cod_licencia,
             "tipo_licencia": lic.articulo.tipo_licencia,
             "instrumento": texto_instrumento(lic),
             "desde": lic.desde,
             "hasta": lic.hasta,
             "dias_restantes": restantes,
             "vence_hoy": restantes == 0,
-        })
+            "materias": [materia],
+            "cantidad_materias": 1,
+        }
+        por_pedido[clave] = fila
+        filas.append(fila)
+    return filas
+
+
+def calcular_licencias_sin_fin(hoy=None):
+    """
+    Licencias otorgadas que todavía no tienen fecha de fin («hasta» vacío).
+
+    En la asistencia diaria se marcan solo hasta hoy, hasta que se les carga
+    la fecha de fin (Prorrogar). Se listan para que
+    ninguna quede olvidada, sin importar el mes en que empezaron: las más
+    viejas, primero. Una fila por licencia del docente (mismo `grupo`), con
+    las mismas claves que calcular_licencias_por_vencer, `hasta` en None y
+    `dias_abierta`: los días desde que empezó.
+    """
+    hoy = hoy or fecha_de_hoy()
+    licencias = (
+        LicenciaOtorgada.objects.filter(hasta__isnull=True)
+        .select_related(
+            "designacion__persona", "designacion__cargo",
+            "designacion__espacio_curricular", "articulo",
+        )
+        .order_by("desde", "designacion__persona__apellido_nombre", "pk")
+    )
+
+    filas, por_pedido = [], {}
+    for lic in licencias:
+        designacion = lic.designacion
+        materia = (
+            designacion.espacio_curricular.nombre
+            if designacion.espacio_curricular_id else str(designacion.cargo)
+        )
+        clave = lic.grupo or f"pk-{lic.pk}"
+        if clave in por_pedido:
+            por_pedido[clave]["materias"].append(materia)
+            por_pedido[clave]["cantidad_materias"] += 1
+            continue
+        fila = {
+            "pk": lic.pk,
+            "dni": designacion.persona.dni,
+            "docente": designacion.persona.apellido_nombre,
+            "cargo": str(designacion.cargo),
+            "articulo": lic.articulo.articulo,
+            "cod_licencia": lic.articulo.cod_licencia,
+            "tipo_licencia": lic.articulo.tipo_licencia,
+            "instrumento": texto_instrumento(lic) if lic.disp_numero else "Pendiente de numerar",
+            "desde": lic.desde,
+            "hasta": None,
+            "sin_fin": True,
+            "dias_abierta": max((hoy - lic.desde).days, 0),
+            "dias_restantes": None,
+            "vence_hoy": False,
+            "materias": [materia],
+            "cantidad_materias": 1,
+        }
+        por_pedido[clave] = fila
+        filas.append(fila)
     return filas

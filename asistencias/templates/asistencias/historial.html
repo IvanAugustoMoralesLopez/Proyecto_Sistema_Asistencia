@@ -10,8 +10,12 @@
             <p class="ruta">Asistencia › Historial</p>
             <h1 class="encabezado-planilla__titulo">Buscar asistencias cargadas</h1>
             <p class="encabezado-planilla__subtitulo">
-                {{ pagina.paginator.count }} resultado{{ pagina.paginator.count|pluralize:"s" }}
-                {% if hay_filtros %}con los filtros elegidos{% else %}en total{% endif %}.
+                {% if filtro_con_error %}
+                    Sin resultados: hay un filtro con un error.
+                {% else %}
+                    {{ pagina.paginator.count }} resultado{{ pagina.paginator.count|pluralize:"s" }}
+                    {% if hay_filtros %}con los filtros elegidos{% else %}en total{% endif %}.
+                {% endif %}
             </p>
         </div>
 
@@ -29,7 +33,14 @@
     </div>
 </div>
 
-<details class="asis-filtros mb-3"{% if hay_filtros %} open{% endif %}>
+{% if filtro_con_error %}
+    <div class="alert alert-danger" role="alert">
+        Hay un filtro con un error (marcado en rojo). Corregilo para ver los
+        resultados: mientras tanto no se muestra ni se exporta nada.
+    </div>
+{% endif %}
+
+<details class="asis-filtros mb-3"{% if hay_filtros or filtro_con_error %} open{% endif %}>
     <summary class="btn btn-filtro px-0">
         Filtros de búsqueda{% if hay_filtros %} (activos){% endif %}
     </summary>
@@ -112,7 +123,7 @@
 
                     <td data-rotulo="Estado">
                         {% if registro.estado_registro == "VALIDADO" %}
-                            <span class="badge text-bg-success">Revisado por Secretaría</span>
+                            <span class="badge text-bg-success">Validado</span>
                         {% else %}
                             <span class="badge text-bg-secondary">Guardado</span>
                         {% endif %}
@@ -150,7 +161,11 @@
                 <tr>
                     <td colspan="{% if perms.asistencias.validar_registro %}6{% else %}5{% endif %}"
                         class="text-center py-5 text-secondary">
-                        No se encontraron asistencias con esos filtros.
+                        {% if filtro_con_error %}
+                            Corregí el filtro marcado en rojo para ver las asistencias.
+                        {% else %}
+                            No se encontraron asistencias con esos filtros.
+                        {% endif %}
                     </td>
                 </tr>
             {% endfor %}
@@ -174,6 +189,7 @@
 {% block extra_js %}
 {{ block.super }}
 {% include "asistencias/includes/ux_mejoras.html" %}
+{% include "asistencias/includes/completar_fechas.html" %}
 <script>
 (function () {
     var maestro = document.getElementById("seleccionar-todos");

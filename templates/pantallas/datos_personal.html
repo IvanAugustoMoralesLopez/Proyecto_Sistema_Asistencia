@@ -56,15 +56,18 @@
                     <td class="centro">{{ designacion.horas_por_dia.MIE|default:"—" }}</td>
                     <td class="centro">{{ designacion.horas_por_dia.JUE|default:"—" }}</td>
                     <td class="centro">{{ designacion.horas_por_dia.VIE|default:"—" }}</td>
-                    <td>{{ designacion.get_norma_tipo_display|default:"—" }}</td>
+                    <td>{{ designacion.norma_tipo|default:"—" }}</td>
                     <td class="centro">{{ designacion.norma_numero|default:"—" }}</td>
                     <td class="centro">{{ designacion.norma_anio|default:"—" }}</td>
                     <td>{{ designacion.organismo_emisor|default:"—" }}</td>
-                    <td>{{ designacion.espacio_curricular|default:"—" }}</td>
                     <td>
-                        {{ designacion.desde|date:"d/m/Y" }}
+                        {{ designacion.espacio_curricular|default:"—" }}
+                        {% if designacion.carrera %}<div class="small text-secondary">{{ designacion.carrera.nombre }}</div>{% endif %}
+                    </td>
+                    <td>
+                        {{ designacion.desde_texto }}
                         –
-                        {{ designacion.hasta|date:"d/m/Y"|default:"Sin término" }}
+                        {{ designacion.hasta_texto }}
                     </td>
                     <td class="text-nowrap">
                         <a class="btn btn-sm btn-outline-primary"
@@ -113,7 +116,9 @@
                             var boton = document.createElement('button');
                             boton.type = 'button';
                             boton.className = 'list-group-item list-group-item-action';
-                            boton.textContent = item.texto + (item.espacio ? ' - ' + item.espacio : '');
+                            boton.textContent = item.texto
+                                + (item.espacio ? ' - ' + item.espacio : '')
+                                + (item.carrera ? ' (' + item.carrera + ')' : '');
                             boton.addEventListener('click', function () {
                                 buscador.value = item.dni;
                                 contenedor.innerHTML = '';

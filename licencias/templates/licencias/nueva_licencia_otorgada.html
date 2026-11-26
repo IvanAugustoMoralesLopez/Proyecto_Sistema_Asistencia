@@ -23,6 +23,7 @@
     <div class="card-body">
         <form method="post">
             {% csrf_token %}
+            {% if volver %}<input type="hidden" name="volver" value="{{ volver }}">{% endif %}
 
             <h3 class="h6 border-bottom pb-2">Datos de la licencia</h3>
             <div class="row g-3 mb-4">
